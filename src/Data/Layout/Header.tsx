@@ -62,21 +62,21 @@ export const userProfileData = [
         title: "Account",
         link: "/app/users/user_profile",
     },
-    {
-        icon: <Mail />,
-        title: "Inbox",
-        link: "/app/email/letter_box",
-    },
-    {
-        icon: <FileText />,
-        title: "Taskboard",
-        link: "/app/tasks",
-    },
-    {
-        icon: <Settings />,
-        title: "Settings",
-        link: "/app/users/edit_profile",
-    },
+    // {
+    //     icon: <Mail />,
+    //     title: "Inbox",
+    //     link: "/app/email/letter_box",
+    // },
+    // {
+    //     icon: <FileText />,
+    //     title: "Taskboard",
+    //     link: "/app/tasks",
+    // },
+    // {
+    //     icon: <Settings />,
+    //     title: "Settings",
+    //     link: "/app/users/edit_profile",
+    // },
 ];
 
 export const bookMarkData = [

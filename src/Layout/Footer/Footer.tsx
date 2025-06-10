@@ -1,6 +1,6 @@
 import React from "react";
 import { Col, Container, Row } from "reactstrap";
-import SVG from "@/CommonComponent/SVG";
+// import SVG from "@/CommonComponent/SVG";
 
 const Footer = () => {
   return (
@@ -8,12 +8,20 @@ const Footer = () => {
       <Container fluid>
         <Row>
           <Col md={6} className="p-0 footer-copyright">
-            <p className="mb-0">Copyright 2024 © Crocs theme by pixelstrap.</p>
+            <p className="mb-0">© 2025 Apex Water Pollution Control</p>
           </Col>
           <Col md={6} className="p-0">
-            <p className="heart mb-0">Hand crafted &amp; made with
-              <SVG className="footer-icon" iconId="heart" />
-            </p>
+            <div className="social-links mb-0 d-flex align-items-center justify-content-end">
+              <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="social-link me-3">
+                <i className="fab fa-facebook-f footer-icon"></i>
+              </a>
+              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="social-link me-3">
+                <i className="fab fa-twitter footer-icon"></i>
+              </a>
+              <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="social-link">
+                <i className="fab fa-linkedin-in footer-icon"></i>
+              </a>
+            </div>
           </Col>
         </Row>
       </Container>

@@ -3,7 +3,8 @@ import { pagesOptions } from "./app/api/auth/[...nextauth]/pages-options";
 
 export default withAuth(
   function middleware(req) {
-    // Middleware logic if needed
+    // Middleware logic if needed - only runs for protected routes now
+    console.log("Middleware running for protected route:", req.nextUrl.pathname);
   },
   {
     pages: {
@@ -11,15 +12,12 @@ export default withAuth(
     },
     callbacks: {
       authorized: ({ token, req }) => {
-        // Allow access to register page without authentication
-        if (req.nextUrl.pathname === "/auth/register") {
-          return true;
-        }
-        // Allow access to login page without authentication
-        if (req.nextUrl.pathname === "/auth/login") {
-          return true;
-        }
-        // For other routes, check if user has a token
+        const { pathname } = req.nextUrl;
+
+        // Log for debugging
+        console.log("Authorized callback for:", pathname, "Token exists:", !!token);
+
+        // For protected routes (dashboard, etc.), require token
         return !!token;
       },
     },
@@ -27,11 +25,14 @@ export default withAuth(
 );
 
 export const config = {
-  // Exclude public routes and static files
+  // ONLY apply middleware to protected routes - completely exclude auth pages
   matcher: [
-    // Include all routes except these:
-    '/((?!api|_next/static|_next/image|favicon.ico|auth/login|auth/register).*)',
-    // Include protected auth routes (but login and register are excluded above)
-    '/auth/((?!login|register).*)',
+    // Only protect dashboard and other admin routes
+    '/dashboard/:path*',
+    '/admin/:path*',
+    '/profile/:path*',
+    '/settings/:path*',
+    // Add other protected routes as needed
+    '/((?!api|_next/static|_next/image|favicon.ico|auth).*)',
   ],
 };

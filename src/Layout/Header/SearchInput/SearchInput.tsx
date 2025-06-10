@@ -37,7 +37,7 @@ const SearchInput = () => {
     setSearchedArray(result);
   };
   return (
-    <Col xxl={5} xl={4} md={4} className="left-header col-auto box-col-6 horizontal-wrapper p-0" >
+    <Col xxl={5} xl={4} md={4} className="left-header col-auto box-col-8 horizontal-wrapper p-0" >
       <div className="left-menu-header">
         <ul className="header-left">
           <li>

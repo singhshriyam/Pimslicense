@@ -1,13 +1,13 @@
 import { Col } from 'reactstrap'
 import ResponsiveSearchInput from './ResponsiveSearchInput/ResponsiveSearchInput'
 import ZoomInOut from './ZoomInOut/ZoomInOut'
-import Notifications from './Notifications/Notifications'
+// import Notifications from './Notifications/Notifications'
 import DarkMode from './DarkMode/DarkMode'
-import HeaderMessage from './HeaderMessage/HeaderMessage'
-import HeaderCart from './HeaderCart/HeaderCart'
+// import HeaderMessage from './HeaderMessage/HeaderMessage'
+// import HeaderCart from './HeaderCart/HeaderCart'
 import UserProfile from './UserProfile/UserProfile'
 import Language from './Language/Language'
-import HeaderBookmark from './HeaderBookmark'
+// import HeaderBookmark from './HeaderBookmark'
 
 const RightHeaderIcon = () => {
   return (
@@ -16,11 +16,11 @@ const RightHeaderIcon = () => {
         <ResponsiveSearchInput />
         <Language />
         <ZoomInOut />
-        <Notifications />
-        <HeaderBookmark />
+        {/* <Notifications /> */}
+        {/* <HeaderBookmark /> */}
         <DarkMode />
-        <HeaderMessage />
-        <HeaderCart />
+        {/* <HeaderMessage />
+        <HeaderCart /> */}
         <UserProfile />
       </ul>
     </Col>

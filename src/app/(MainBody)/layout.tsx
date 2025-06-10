@@ -2,7 +2,7 @@
 import React, { useEffect } from "react";
 import { ToastContainer } from "react-toastify";
 import { RootLayoutProps } from "@/Types/Layout.type";
-import TapTop from "@/Layout/TapTop";
+// import TapTop from "@/Layout/TapTop";
 import Footer from "@/Layout/Footer/Footer";
 import { SideBar } from "@/Layout/Sidebar/Sidebar";
 import Header from "@/Layout/Header/Header";
@@ -10,6 +10,7 @@ import ThemeCustomizer from "@/Layout/ThemeCustomizer/ThemeCustomizer";
 import { useAppDispatch, useAppSelector } from "@/Redux/Hooks";
 import { setToggleSidebar } from "@/Redux/Reducers/Layout/LayoutSlice";
 import { setLayout } from "@/Redux/Reducers/ThemeCustomizerSlice";
+import '@fortawesome/fontawesome-free/css/all.min.css'
 
 const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
   const { layout } = useAppSelector((state) => state.themeCustomizer);
@@ -19,7 +20,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
     if (layout === "compact-wrapper") {
       if (windowWidth < 1200 ) {
         dispatch(setToggleSidebar(true))
-      } 
+      }
       else {
         dispatch(setToggleSidebar(false))
       }
@@ -27,13 +28,13 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
       if (windowWidth < 992 ) {
         dispatch(setToggleSidebar(true))
         dispatch(setLayout("compact-wrapper"))
-      } 
+      }
       else {
         dispatch(setToggleSidebar(false))
         dispatch(setLayout(localStorage.getItem("layout")))
       }
     }
-  }; 
+  };
 
   useEffect(() => {
     compactSidebar();
@@ -41,7 +42,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
       compactSidebar();
     });
   }, [layout]);
-  
+
   return (
     <>
       <div className={`page-wrapper ${layout}`} id='pageWrapper'>
@@ -54,7 +55,7 @@ const RootLayout: React.FC<RootLayoutProps> = ({ children }) => {
       </div>
       <ThemeCustomizer />
       <ToastContainer />
-      <TapTop />
+      {/* <TapTop /> */}
     </>
   );
 };

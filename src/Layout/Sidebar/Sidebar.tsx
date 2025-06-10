@@ -26,7 +26,7 @@ export const SideBar = () => {
             <ul className="sidebar-links custom-scrollbar" id="simple-bar">
               <SimpleBar style={{ width: "100%", height: "350px" }}>
                 <li className="back-btn">
-                  <Link href={`/dashboard/default`}> 
+                  <Link href={`/dashboard/default`}>
                     <Image className="img-fluid" src={`${ImagePath}/logo/logo-icon.png`} width={32} height={32} alt="" />
                   </Link>
                   <div className="mobile-back text-end ">
