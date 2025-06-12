@@ -10,7 +10,7 @@ import {
   RememberPassword,
   SignIn
 } from "@/Constant";
-import { signIn, getSession } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useCallback, memo } from "react";
@@ -18,8 +18,6 @@ import { toast } from "react-toastify";
 import { Button, Form, FormGroup, Input, Label, Alert } from "reactstrap";
 import Image from "next/image";
 import ApexLogo from "../../../public/assets/images/logo/apex-logo.png";
-import { loginUser, setStoredToken, refreshSession } from "../../app/(MainBody)/services/userService";
-import { RoleUtils } from "@/Data/Layout/Menu";
 
 const UserForm = memo(() => {
   const [show, setShow] = useState(false);
@@ -64,145 +62,56 @@ const UserForm = memo(() => {
     return true;
   };
 
-  // Handle redirection after successful login
-  const handleRedirection = useCallback(async (userRole?: string) => {
-    try {
-      // Wait for session to be established
-      await new Promise(resolve => setTimeout(resolve, 1000));
+  // Team to dashboard mapping
+  const getTeamDashboard = (team: string): string => {
+    const teamLower = team.toLowerCase().trim();
 
-      // Refresh session to ensure it's valid
-      const sessionValid = await refreshSession();
-      if (!sessionValid) {
-        console.warn('Session validation failed after login');
-      }
+    if (teamLower.includes('admin')) return '/dashboard/admin';
+    if (teamLower.includes('incident') && teamLower.includes('handler')) return '/dashboard/incident_handler';
+    if (teamLower.includes('incident') && teamLower.includes('manager')) return '/dashboard/incident_manager';
+    if (teamLower.includes('developer') || teamLower.includes('dev')) return '/dashboard/developer';
+    if (teamLower.includes('sla')) return '/dashboard/developer';
 
-      // Get session for role-based routing
-      const session = await getSession();
-      console.log('Session after login:', session);
+    return '/dashboard/enduser';
+  };
 
-      // Determine redirect route based on role
-      let redirectRoute = '/dashboard/enduser'; // Default fallback
-
-      if (userRole) {
-        // Map user role to dashboard route
-        const roleRoutes: Record<string, string> = {
-          'ADMINISTRATOR': '/dashboard/admin',
-          'INCIDENT_HANDLER': '/dashboard/incident_handler',
-          'INCIDENT_MANAGER': '/dashboard/incident_manager',
-          'SLA_MANAGER': '/dashboard/sla_manager',
-          'DEVELOPER': '/dashboard/developer',
-          'USER': '/dashboard/enduser'
-        };
-
-        const normalizedRole = userRole.toUpperCase().replace(/\s+/g, '_');
-        redirectRoute = roleRoutes[normalizedRole] || '/dashboard/enduser';
-      } else if (session?.user) {
-        // Fallback to using RoleUtils if we have session
-        try {
-          const user = session.user as any;
-          const role = user.team || 'USER';
-          redirectRoute = RoleUtils.getDefaultDashboard(role);
-        } catch (error) {
-          console.warn('Error determining role from session:', error);
-        }
-      }
-
-      console.log('Redirecting to:', redirectRoute);
-      router.push(redirectRoute);
-
-    } catch (error) {
-      console.error('Redirection error:', error);
-      // Fallback redirect
-      router.push("/dashboard/enduser");
-    }
-  }, [router]);
-
-  // Handle form submission with comprehensive error handling
+  // Handle form submission
   const formSubmitHandle = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (loading || googleLoading) return;
-
     if (!validateForm()) return;
 
     setLoading(true);
     setFormError(null);
 
     try {
-      console.log('Attempting login...');
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password: password,
+        redirect: false,
+      });
 
-      // First, login via API
-      const loginResponse = await loginUser(email.trim(), password);
-
-      if (loginResponse.success && loginResponse.data.token) {
-        console.log('API Login successful');
-
-        // Extract user data
-        const userData = {
-          token: loginResponse.data.token,
-          userId: loginResponse.data.userId || loginResponse.data.user_id,
-          email: email.trim(),
-          name: loginResponse.data.user?.name || email.split('@')[0],
-          team: loginResponse.data.user?.team || 'USER'
-        };
-
-        // Validate required data
-        if (!userData.userId) {
-          throw new Error('User ID not received from server');
-        }
-
-        console.log('User data:', {
-          userId: userData.userId,
-          email: userData.email,
-          name: userData.name,
-          team: userData.team
-        });
-
-        // Now authenticate with NextAuth
-        const nextAuthResult = await signIn("credentials", {
-          email: email.trim(),
-          password: password,
-          redirect: false,
-        });
-
-        if (nextAuthResult?.ok) {
-          toast.success("Login successful! Redirecting...");
-          await handleRedirection(userData.team);
-        } else if (nextAuthResult?.error) {
-          // NextAuth failed but API succeeded - still proceed
-          console.warn('NextAuth failed:', nextAuthResult.error);
-          toast.success("Login successful! Redirecting...");
-          await handleRedirection(userData.team);
-        } else {
-          throw new Error('Authentication failed');
-        }
-
+      if (result?.ok) {
+        toast.success("Login successful! Redirecting...");
+        // The login page will handle the redirect based on session
+        router.refresh();
       } else {
-        throw new Error(loginResponse.message || 'Login failed');
+        throw new Error(result?.error || 'Invalid credentials');
       }
 
     } catch (error: any) {
       console.error('Login error:', error);
-
-      let errorMessage = 'Login failed. Please try again.';
-
-      if (error.message.includes('credentials')) {
-        errorMessage = 'Invalid email or password. Please check your credentials.';
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (error.message.includes('server') || error.message.includes('500')) {
-        errorMessage = 'Server error. Please try again later.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error.message.includes('credentials')
+        ? 'Invalid email or password. Please check your credentials.'
+        : 'Login failed. Please try again.';
 
       setFormError(errorMessage);
       toast.error(errorMessage);
-
     } finally {
       setLoading(false);
     }
-  }, [email, password, loading, googleLoading, handleRedirection]);
+  }, [email, password, loading, googleLoading, router]);
 
   // Handle Google sign in
   const handleGoogleSignIn = useCallback(async () => {
@@ -218,50 +127,28 @@ const UserForm = memo(() => {
 
       if (result?.ok) {
         toast.success("Google login successful! Redirecting...");
-        await handleRedirection('USER'); // Default to USER for Google login
-      } else if (result?.error) {
-        throw new Error(result.error);
+        router.refresh();
       } else {
-        throw new Error('Google authentication failed');
+        throw new Error(result?.error || 'Google authentication failed');
       }
 
     } catch (error: any) {
       console.error('Google login error:', error);
-
-      let errorMessage = 'Google login failed. Please try again.';
-      if (error.message.includes('popup')) {
-        errorMessage = 'Google login popup was blocked. Please allow popups and try again.';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      setFormError(errorMessage);
-      toast.error(errorMessage);
-
+      setFormError('Google login failed. Please try again.');
+      toast.error('Google login failed. Please try again.');
     } finally {
       setGoogleLoading(false);
     }
-  }, [googleLoading, loading, handleRedirection]);
+  }, [googleLoading, loading, router]);
 
-  // Input change handlers with validation
   const handleEmailChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-    setEmail(value);
-
-    // Clear form error when user starts typing
-    if (formError) {
-      setFormError(null);
-    }
+    setEmail(event.target.value);
+    if (formError) setFormError(null);
   }, [formError]);
 
   const handlePasswordChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-    setPassword(value);
-
-    // Clear form error when user starts typing
-    if (formError) {
-      setFormError(null);
-    }
+    setPassword(event.target.value);
+    if (formError) setFormError(null);
   }, [formError]);
 
   const togglePasswordVisibility = useCallback(() => {
@@ -296,7 +183,6 @@ const UserForm = memo(() => {
             Please enter your login credentials
           </h5>
 
-          {/* Error Alert */}
           {formError && (
             <Alert color="danger" className="mb-3">
               {formError}

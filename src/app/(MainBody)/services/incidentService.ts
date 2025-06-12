@@ -145,8 +145,6 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
     reported_by: getStoredUserName() || 'User'
   };
 
-  console.log('🔍 Creating incident with data:', requestBody);
-
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -159,7 +157,6 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
     });
 
     const responseText = await response.text();
-    console.log('📝 Create incident response:', responseText);
 
     if (!response.ok) {
       let errorMessage = `Failed to create incident: ${response.status}`;
@@ -205,13 +202,11 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
         updatedAt: new Date().toISOString()
       };
 
-      console.log('✅ Incident created successfully:', createdIncident);
       return createdIncident;
     } else {
       throw new Error(result.message || 'Failed to create incident');
     }
   } catch (error: any) {
-    console.error('❌ Create incident error:', error);
     throw error;
   }
 };
@@ -221,11 +216,6 @@ export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): 
   const token = getStoredToken();
   const userId = getStoredUserId() || localStorage.getItem('userId') || '13';
 
-  console.log('🔍 Fetching incidents:', { endpoint, userId, hasToken: !!token, userEmail, userTeam });
-
-  if (!token) {
-    console.warn('⚠️ No token found, but continuing with request');
-  }
 
   try {
     const formData = new FormData();
@@ -237,8 +227,6 @@ export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): 
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log('📤 Making request with headers:', headers);
-
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: headers,
@@ -246,8 +234,6 @@ export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): 
     });
 
     const responseText = await response.text();
-    console.log('📝 Fetch incidents response status:', response.status);
-    console.log('📝 Fetch incidents response:', responseText.substring(0, 500) + '...');
 
     if (!response.ok) {
       let errorMessage = `API Error: ${response.status}`;
@@ -259,12 +245,10 @@ export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): 
         errorMessage += ` - ${responseText}`;
       }
 
-      console.error('❌ Fetch error:', errorMessage);
       throw new Error(errorMessage);
     }
 
     const result = JSON.parse(responseText);
-    console.log('📊 Parsed result:', result);
 
     if (result.success && result.data) {
       const transformedIncidents = result.data.map((item: any) => {
@@ -306,29 +290,20 @@ export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): 
         return transformedIncident;
       });
 
-      console.log('✅ Transformed incidents:', transformedIncidents.length, 'incidents');
-      if (transformedIncidents.length > 0) {
-        console.log('📝 Sample incident:', transformedIncidents[0]);
-      }
-
       return transformedIncidents;
     } else {
-      console.error('❌ Unexpected response format:', result);
 
       // If no incidents or unexpected format, return empty array instead of throwing
       if (!result.success && result.message === 'No incidents found') {
-        console.log('ℹ️ No incidents found for user');
         return [];
       }
 
       throw new Error(result.message || 'Unexpected response format');
     }
   } catch (error: any) {
-    console.error('❌ Fetch incidents error:', error);
 
     // For certain errors, return empty array instead of throwing
     if (error.message.includes('No incidents found') || error.message.includes('404')) {
-      console.log('ℹ️ Returning empty array due to no incidents found');
       return [];
     }
 

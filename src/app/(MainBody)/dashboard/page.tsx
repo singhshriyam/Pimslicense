@@ -3,140 +3,127 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import { Container, Row, Col, Button } from "reactstrap";
-import { useUserRole, RoleUtils } from "@/Data/Layout/Menu";
+import IncidentCreationForm from "../../../Components/Forms/IncidentCreationForm";
 import AllIncidents from '../../../Components/all-incidents';
 
-// Import the new form component
-import IncidentCreationForm from "../../../Components/Forms/IncidentCreationForm";
+// Team to dashboard mapping - EXACT MATCHES ONLY
+const getTeamDashboard = (team: string): string => {
+  if (!team) return '/dashboard/enduser';
 
-// Import existing components and services
-import {
-  Incident,
-  fetchIncidentsAPI,
-  updateIncidentAPI,
-  deleteIncidentAPI,
-  getStatusBadge,
-  getPriorityBadge,
-  formatDate
-} from '../services/incidentService';
+  const teamLower = team.toLowerCase().trim();
 
-// All Incidents Component (keeping your existing one)
+  // Exact matches only
+  if (teamLower === 'incident manager' || teamLower === 'incident_manager') {
+    return '/dashboard/incident_manager';
+  }
+
+  if (teamLower === 'incident handler' || teamLower === 'incident_handler') {
+    return '/dashboard/incident_handler';
+  }
+
+  if (teamLower === 'administrator' || teamLower === 'admin') {
+    return '/dashboard/admin';
+  }
+
+  if (teamLower === 'developer' || teamLower === 'dev') {
+    return '/dashboard/developer';
+  }
+
+  return '/dashboard/enduser';
+};
+
+// All Incidents Component
 const AllIncidentsView = ({
   onBack,
-  globalIncidents,
   userEmail,
-  userRole
+  userTeam
 }: {
   onBack: () => void;
-  globalIncidents: Incident[];
   userEmail: string;
-  userRole: string;
+  userTeam: string;
 }) => {
-  // Your existing AllIncidentsView implementation here
-  // ... (keeping the same as in your original file)
-
   return (
     <Container fluid className="p-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <div>
-          <h4 className="mb-1">All Incidents</h4>
-          <p className="text-muted mb-0">Manage and track all incidents</p>
-        </div>
-        <Button color="secondary" size="sm" onClick={onBack}>
-          ← Back to Dashboard
-        </Button>
-      </div>
-      {/* Your existing incident table implementation */}
-      <div className="alert alert-info">
-        <p>All Incidents View - Implementation from your existing component</p>
-      </div>
+      <AllIncidents />
     </Container>
   );
 };
 
-// Main Dashboard Content Component
 const DashboardPageContent = () => {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get('tab');
 
-  // Use the role-based system
-  const { currentRole, isLoading, isAuthenticated } = useUserRole();
-
-  // Global incidents state
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-
-  const handleIncidentCreated = (newIncident: Incident) => {
-    setIncidents(prev => [newIncident, ...prev]);
-    console.log('New incident added to list:', newIncident);
-  };
-
-  const handleIncidentFormSuccess = () => {
-    // Optionally redirect back to dashboard after successful creation
-    setTimeout(() => {
-      const dashboardRoute = RoleUtils.getDefaultDashboard(currentRole);
-      router.push(dashboardRoute);
-    }, 2000);
-  };
-
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
       const user = session.user as any;
-      const userTeam = user.team?.toUpperCase();
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 
-      console.log("Dashboard redirect - User team:", userTeam);
-      console.log("Mapped role:", currentRole);
-
-      // Check if we should show the form or all incidents instead of redirecting
+      // If we have a tab parameter, don't redirect - show the tab content
       if (activeTab === 'create-incident' || activeTab === 'all-incidents') {
-        // Stay on this page to show the form/list
         return;
       }
 
-      // Use the role-based redirect
-      const redirectRoute = RoleUtils.getDefaultDashboard(currentRole);
+      // Only redirect if we're on the EXACT '/dashboard' path (not sub-routes)
+      if (currentPath === '/dashboard') {
+        const dashboardRoute = getTeamDashboard(user.team);
+        router.replace(dashboardRoute);
+        return;
+      }
 
-      console.log("Redirecting to:", redirectRoute);
-
-      // Use replace instead of push to avoid back button issues
-      router.replace(redirectRoute);
+      // If we're on a specific dashboard route (like /dashboard/enduser), do nothing
+      if (currentPath.startsWith('/dashboard/')) {
+        return;
+      }
     } else if (status === "unauthenticated") {
-      // Redirect to login if not authenticated
       router.replace("/auth/login");
     }
-  }, [session, status, router, activeTab, currentRole]);
+  }, [session, status, router, activeTab]);
+
+  // Show loading while checking authentication
+  if (status === "loading") {
+    return (
+      <Container fluid className="p-0">
+        <Row className="m-0">
+          <Col xs={12} className="p-0">
+            <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "100vh" }}>
+              <div className="text-center">
+                <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                <h5 className="mt-3 text-muted">Checking authentication...</h5>
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </Container>
+    );
+  }
 
   // Show Create Incident Form if tab is active
   if (status === "authenticated" && session?.user && activeTab === 'create-incident') {
     const user = session.user as any;
     const userEmail = user.email || '';
     const userName = user.name || '';
-
-    const roleDisplayNames = {
-      'USER': 'End User',
-      'ADMINISTRATOR': 'Administrator',
-      'INCIDENT_HANDLER': 'Incident Handler',
-      'INCIDENT_MANAGER': 'Incident Manager',
-      'SLA_MANAGER': 'SLA Manager',
-      'DEVELOPER': 'Developer'
-    };
-
-    const displayRole = roleDisplayNames[currentRole as keyof typeof roleDisplayNames] || 'User';
+    const userTeam = user.team || 'user';
 
     const handleFormCancel = () => {
-      const dashboardRoute = RoleUtils.getDefaultDashboard(currentRole);
+      const dashboardRoute = getTeamDashboard(userTeam);
       router.push(dashboardRoute);
     };
 
     return (
       <IncidentCreationForm
-        userRole={displayRole}
+        userRole={userTeam}
         userEmail={userEmail}
         userName={userName}
         onCancel={handleFormCancel}
-        onIncidentCreated={handleIncidentCreated}
-        onSuccess={handleIncidentFormSuccess}
+        onIncidentCreated={() => {}}
+        onSuccess={() => {
+          const dashboardRoute = getTeamDashboard(userTeam);
+          router.push(dashboardRoute);
+        }}
         showBackButton={true}
         compactMode={false}
       />
@@ -147,23 +134,23 @@ const DashboardPageContent = () => {
   if (status === "authenticated" && session?.user && activeTab === 'all-incidents') {
     const user = session.user as any;
     const userEmail = user.email || '';
+    const userTeam = user.team || 'user';
 
     const handleAllIncidentsBack = () => {
-      const dashboardRoute = RoleUtils.getDefaultDashboard(currentRole);
+      const dashboardRoute = getTeamDashboard(userTeam);
       router.push(dashboardRoute);
     };
 
     return (
       <AllIncidentsView
         onBack={handleAllIncidentsBack}
-        globalIncidents={incidents}
         userEmail={userEmail}
-        userRole={currentRole}
+        userTeam={userTeam}
       />
     );
   }
 
-  // Show loading spinner while determining where to redirect
+  // If we reach here, we're redirecting
   return (
     <Container fluid className="p-0">
       <Row className="m-0">
@@ -173,7 +160,12 @@ const DashboardPageContent = () => {
               <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
                 <span className="visually-hidden">Loading...</span>
               </div>
-              <h5 className="mt-3 text-muted">Loading your dashboard...</h5>
+              <h5 className="mt-3 text-muted">Redirecting to your dashboard...</h5>
+              {session?.user && (
+                <p className="text-muted mt-2">
+                  User: {(session.user as any).name} | Team: {(session.user as any).team}
+                </p>
+              )}
             </div>
           </div>
         </Col>
@@ -182,7 +174,6 @@ const DashboardPageContent = () => {
   );
 };
 
-// Main Dashboard Page with Suspense
 const DashboardPage = () => {
   return (
     <Suspense fallback={
@@ -194,7 +185,7 @@ const DashboardPage = () => {
                 <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
                   <span className="visually-hidden">Loading...</span>
                 </div>
-                <h5 className="mt-3 text-muted">Loading your dashboard...</h5>
+                <h5 className="mt-3 text-muted">Loading dashboard...</h5>
               </div>
             </div>
           </Col>

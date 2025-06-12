@@ -4,24 +4,14 @@ import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactst
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-
-// Import centralized service - using relative paths that should work
 import {
-  Incident,
   fetchIncidentsAPI,
-  getPriorityColor,
-  getStatusColor,
+  getIncidentStats,
   formatDate,
-  getIncidentStats
+  getStatusColor,
+  getPriorityColor,
+  Incident
 } from '../../services/incidentService';
-
-import {
-  getStoredUserTeam,
-  getStoredUserName,
-  getStoredUserId,
-  mapTeamToRole,
-  isAuthenticated
-} from '../../services/userService';
 
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
@@ -48,17 +38,12 @@ const EndUserDashboard = () => {
     userId: ''
   });
 
-  // Modal states
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [showViewModal, setShowViewModal] = useState(false);
-
   useEffect(() => {
     const fetchData = async () => {
       try {
         setDashboardData(prev => ({ ...prev, loading: true, error: null }));
 
-        // Check if user is authenticated
-        if (!isAuthenticated()) {
+        if (!session?.user?.email) {
           setDashboardData(prev => ({
             ...prev,
             loading: false,
@@ -67,24 +52,17 @@ const EndUserDashboard = () => {
           return;
         }
 
-        // Get user info from stored data or session
-        const storedName = getStoredUserName();
-        const storedTeam = getStoredUserTeam();
-        const storedUserId = getStoredUserId();
-        const userEmail = session?.user?.email || 'user@example.com';
-
+        // Get user info from session
+        const user = session.user as any;
         setUserInfo({
-          name: storedName || session?.user?.name || 'User',
-          team: storedTeam || 'End User',
-          email: userEmail,
-          userId: storedUserId || '13'
+          name: user.name || 'User',
+          team: user.team || 'End User',
+          email: user.email || '',
+          userId: user.id || ''
         });
 
-        // Fetch user's incidents using centralized service
-        const userRole = mapTeamToRole(storedTeam || 'user');
-        const userIncidents = await fetchIncidentsAPI(userEmail, userRole);
-
-        // Calculate statistics using centralized function
+        // Fetch user's incidents using API
+        const userIncidents = await fetchIncidentsAPI(user.email, 'USER');
         const stats = getIncidentStats(userIncidents);
 
         setDashboardData({
@@ -98,9 +76,8 @@ const EndUserDashboard = () => {
           error: null
         });
 
-
       } catch (error: any) {
-        console.error('❌ Dashboard fetch error:', error);
+        console.error('Dashboard fetch error:', error);
         setDashboardData(prev => ({
           ...prev,
           loading: false,
@@ -109,20 +86,19 @@ const EndUserDashboard = () => {
       }
     };
 
-    fetchData();
-  }, [session?.user?.email]);
+    if (session?.user) {
+      fetchData();
+    } else {
+      router.replace('/auth/login');
+    }
+  }, [session, router]);
 
-  // Takes a date string and converts it into a human-readable date format
+  // Format date for display
   const formatDateLocal = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  // This function saves the clicked incident to the state and opens a modal window
-  const handleViewIncident = (incident: Incident) => {
-    setSelectedIncident(incident);
-    setShowViewModal(true);
-  };
-
+  // Pie chart configuration
   const pieChartSeries = [
     dashboardData.solvedIncidents,
     dashboardData.inProgressIncidents,
@@ -130,7 +106,7 @@ const EndUserDashboard = () => {
     dashboardData.closedIncidents
   ];
 
-  // Only show non-zero values and their corresponding labels
+  // Only show non-zero values
   const nonZeroData: number[] = [];
   const nonZeroLabels: string[] = [];
   const allLabels = ['Resolved', 'In Progress', 'Pending', 'Closed'];
@@ -145,7 +121,6 @@ const EndUserDashboard = () => {
     }
   });
 
-  // ApexCharts configuration for pie chart
   const pieChartOptions = {
     chart: {
       type: 'pie' as const,
@@ -169,11 +144,10 @@ const EndUserDashboard = () => {
     }]
   };
 
-  // Monthly trends (calculated from actual data)
+  // Monthly trends calculation
   const getMonthlyTrends = () => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
-    // Calculate actual monthly data from incidents
     const monthlyData = months.map((month, index) => {
       const monthIncidents = dashboardData.myIncidents.filter(incident => {
         const incidentMonth = new Date(incident.createdAt).getMonth();
@@ -181,13 +155,11 @@ const EndUserDashboard = () => {
       });
 
       return {
-        reported: monthIncidents.length, // Total incidents reported this month
-        resolved: monthIncidents.filter(i => i.status === 'resolved').length, // Only resolved ones
-        inProgress: monthIncidents.filter(i => i.status === 'in_progress').length // Only in progress ones
+        reported: monthIncidents.length,
+        resolved: monthIncidents.filter(i => i.status === 'resolved').length,
+        inProgress: monthIncidents.filter(i => i.status === 'in_progress').length
       };
     });
-
-    console.log('📊 Monthly trends data:', monthlyData); // Debug log
 
     return {
       months,
@@ -243,7 +215,7 @@ const EndUserDashboard = () => {
     data: inProgress
   }];
 
-  // Handle navigation
+  // Navigation handlers
   const handleCreateIncident = () => {
     router.push('/dashboard?tab=create-incident');
   };
@@ -253,31 +225,30 @@ const EndUserDashboard = () => {
   };
 
   const handleRefreshData = async () => {
-    try {
-      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+    if (session?.user?.email) {
+      const user = session.user as any;
+      try {
+        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+        const userIncidents = await fetchIncidentsAPI(user.email, 'USER');
+        const stats = getIncidentStats(userIncidents);
 
-      const storedTeam = getStoredUserTeam();
-      const userEmail = session?.user?.email || 'user@example.com';
-      const userRole = mapTeamToRole(storedTeam || 'user');
-      const userIncidents = await fetchIncidentsAPI(userEmail, userRole);
-      const stats = getIncidentStats(userIncidents);
-
-      setDashboardData({
-        myIncidents: userIncidents,
-        totalIncidents: stats.total,
-        solvedIncidents: stats.resolved,
-        inProgressIncidents: stats.inProgress,
-        pendingIncidents: stats.pending,
-        closedIncidents: stats.closed,
-        loading: false,
-        error: null
-      });
-    } catch (error: any) {
-      setDashboardData(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message || 'Failed to refresh data'
-      }));
+        setDashboardData({
+          myIncidents: userIncidents,
+          totalIncidents: stats.total,
+          solvedIncidents: stats.resolved,
+          inProgressIncidents: stats.inProgress,
+          pendingIncidents: stats.pending,
+          closedIncidents: stats.closed,
+          loading: false,
+          error: null
+        });
+      } catch (error: any) {
+        setDashboardData(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message || 'Failed to refresh data'
+        }));
+      }
     }
   };
 
@@ -288,7 +259,6 @@ const EndUserDashboard = () => {
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading your dashboard...</span>
           </div>
-          <p className="mt-3 text-muted">Fetching your incidents...</p>
         </div>
       </Container>
     );
@@ -455,15 +425,6 @@ const EndUserDashboard = () => {
                               </span>
                             </td>
                             <td>{formatDateLocal(incident.createdAt)}</td>
-                            {/* <td>
-                              <Button
-                                color="outline-primary"
-                                size="sm"
-                                onClick={() => handleViewIncident(incident)}
-                              >
-                                👁 View
-                              </Button>
-                            </td> */}
                           </tr>
                         ))}
                       </tbody>
@@ -524,130 +485,6 @@ const EndUserDashboard = () => {
           </Col>
         </Row>
       </Container>
-
-      {/* View Modal
-      {showViewModal && selectedIncident && (
-        <div className="modal show d-block" tabIndex={-1} style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Incident Details - {selectedIncident.number}</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowViewModal(false)}
-                  aria-label="Close"
-                ></button>
-              </div>
-              <div className="modal-body">
-                <Row>
-                  <Col md={6}>
-                    <div className="mb-3">
-                      <strong>Caller:</strong>
-                      <span className="ms-2">{selectedIncident.caller}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Contact Type:</strong>
-                      <span className="ms-2">{selectedIncident.contactType}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Category:</strong>
-                      <span className="ms-2">{selectedIncident.category}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Sub Category:</strong>
-                      <span className="ms-2">{selectedIncident.subCategory}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Impact:</strong>
-                      <span className="ms-2">{selectedIncident.impact}</span>
-                    </div>
-                  </Col>
-                  <Col md={6}>
-                    <div className="mb-3">
-                      <strong>Priority:</strong>
-                      <span
-                        className="badge ms-2"
-                        style={{ backgroundColor: getPriorityColor(selectedIncident.priority), color: 'white' }}
-                      >
-                        {selectedIncident.priority}
-                      </span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Status:</strong>
-                      <span
-                        className="badge ms-2"
-                        style={{ backgroundColor: getStatusColor(selectedIncident.status || 'pending'), color: 'white' }}
-                      >
-                        {(selectedIncident.status || 'pending').replace('_', ' ')}
-                      </span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Urgency:</strong>
-                      <span className="ms-2">{selectedIncident.urgency}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Assigned To:</strong>
-                      <span className="ms-2">{selectedIncident.assignedTo || 'Unassigned'}</span>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Reported By:</strong>
-                      <span className="ms-2">{selectedIncident.reportedByName}</span>
-                    </div>
-                  </Col>
-                  <Col xs={12}>
-                    <hr />
-                    <div className="mb-3">
-                      <strong>Short Description:</strong>
-                      <p className="mt-2 p-3 bg-light rounded">{selectedIncident.shortDescription}</p>
-                    </div>
-                    <div className="mb-3">
-                      <strong>Detailed Description:</strong>
-                      <p className="mt-2 p-3 bg-light rounded">{selectedIncident.description}</p>
-                    </div>
-                    <hr />
-                    <Row>
-                      <Col md={6}>
-                        <div className="mb-3">
-                          <strong>Created:</strong>
-                          <span className="ms-2">{formatDate(selectedIncident.createdAt)}</span>
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        {selectedIncident.updatedAt && (
-                          <div className="mb-3">
-                            <strong>Last Updated:</strong>
-                            <span className="ms-2">{formatDate(selectedIncident.updatedAt)}</span>
-                          </div>
-                        )}
-                      </Col>
-                    </Row>
-                  </Col>
-                </Row>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowViewModal(false)}
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setShowViewModal(false);
-                    handleViewAllIncidents();
-                  }}
-                >
-                  View All My Incidents
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )} */}
     </>
   )
 }

@@ -5,20 +5,66 @@ import { useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Col, Container, Row } from "reactstrap";
 
+// Enhanced team to dashboard mapping with exact matching
+const getTeamDashboard = (team: string): string => {
+  if (!team) return '/dashboard/enduser';
+
+  const teamLower = team.toLowerCase().trim();
+
+  // Exact matches first
+  if (teamLower === 'user') {
+    return '/dashboard/enduser';
+  }
+
+  if (teamLower === 'incident manager' || teamLower === 'incident_manager') {
+    return '/dashboard/incident_manager';
+  }
+
+  if (teamLower === 'incident handler' || teamLower === 'incident_handler') {
+    return '/dashboard/incident_handler';
+  }
+
+  if (teamLower === 'administrator' || teamLower === 'admin') {
+    return '/dashboard/admin';
+  }
+
+  if (teamLower === 'developer' || teamLower === 'dev') {
+    return '/dashboard/developer';
+  }
+
+  // // Partial matches
+  // if (teamLower.includes('manager')) {
+  //   return '/dashboard/incident_manager';
+  // }
+
+  // if (teamLower.includes('handler')) {
+  //   return '/dashboard/incident_handler';
+  // }
+
+  // if (teamLower.includes('admin')) {
+  //   return '/dashboard/admin';
+  // }
+
+  // if (teamLower.includes('dev')) {
+  //   return '/dashboard/developer';
+  // }
+
+  return '/dashboard/enduser';
+};
+
 const UserLogin = memo(() => {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    // SIMPLIFIED: Only redirect if user is authenticated
-    // Let UserForm handle the specific dashboard routing based on role
-    if (status === "authenticated" && session) {
-      console.log("User is authenticated, but letting UserForm handle redirection");
-      // Don't redirect here - let UserForm.tsx handle the role-based redirection
+    if (status === "authenticated" && session?.user) {
+      const user = session.user as any;
+      const dashboardRoute = getTeamDashboard(user.team);
+
+      router.replace(dashboardRoute);
     }
   }, [session, status, router]);
 
-  // Show loading while checking session
   if (status === "loading") {
     return (
       <Container fluid className="p-0">
@@ -38,8 +84,10 @@ const UserLogin = memo(() => {
     );
   }
 
-  // Don't render login form if user is already authenticated
   if (status === "authenticated" && session) {
+    const user = session.user as any;
+    const dashboardRoute = getTeamDashboard(user.team);
+
     return (
       <Container fluid className="p-0">
         <Row className="m-0">
@@ -49,7 +97,6 @@ const UserLogin = memo(() => {
                 <div className="spinner-border text-success" role="status">
                   <span className="visually-hidden">Redirecting...</span>
                 </div>
-                <p className="mt-3 text-success">Redirecting to dashboard...</p>
               </div>
             </div>
           </Col>
@@ -58,7 +105,6 @@ const UserLogin = memo(() => {
     );
   }
 
-  // Show login form for unauthenticated users
   return (
     <Container fluid className="p-0">
       <Row className="m-0">
@@ -72,7 +118,6 @@ const UserLogin = memo(() => {
   );
 });
 
-// Add display name for debugging
 UserLogin.displayName = 'UserLogin';
 
 export default UserLogin;

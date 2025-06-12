@@ -12,28 +12,23 @@ import {
   getPriorityBadge,
   getPriorityColor,
   getStatusColor,
-  Incident,
-  getCategoryStats
+  Incident
 } from '../../services/incidentService';
 
 import {
-  fetchAllUsers,
   getStoredToken,
   getStoredUserTeam,
   getStoredUserName,
-  mapTeamToRole,
-  getUserStats as getAPIUserStats,
-  User
+  mapTeamToRole
 } from '../../services/userService';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
-const SLAManagerDashboard = () => {
+const DeveloperDashboard = () => {
   const { data: session } = useSession();
   const router = useRouter();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState({
@@ -54,20 +49,15 @@ const SLAManagerDashboard = () => {
         const userEmail = session?.user?.email || '';
 
         setUserInfo({
-          name: storedName || session?.user?.name || 'SLA Manager',
-          team: storedTeam || 'SLA Manager',
+          name: storedName || session?.user?.name || 'Developer',
+          team: storedTeam || 'Developer',
           email: userEmail
         });
 
-        // Fetch all incidents (SLA managers can see all)
-        const userRole = mapTeamToRole(storedTeam || 'sla_manager');
+        // Fetch incidents related to development/technical issues
+        const userRole = mapTeamToRole(storedTeam || 'developer');
         const incidentsData = await fetchIncidentsAPI(userEmail, userRole);
         setIncidents(incidentsData);
-
-        // Fetch all users
-        const token = getStoredToken();
-        const usersData = await fetchAllUsers(token || undefined);
-        setUsers(usersData);
 
       } catch (err: any) {
         console.error('Error loading dashboard data:', err);
@@ -83,133 +73,66 @@ const SLAManagerDashboard = () => {
   }, [session?.user?.email]);
 
   const stats = getIncidentStats(incidents);
-  const categoryStats = getCategoryStats(incidents);
-  const userStats = getAPIUserStats(users);
 
-  // Calculate SLA metrics
-  const getSLAMetrics = () => {
-    const now = new Date();
-    const oneDay = 24 * 60 * 60 * 1000;
-    const threeDays = 3 * oneDay;
-
-    let withinSLA = 0;
-    let breachedSLA = 0;
-    let nearBreach = 0;
-
-    incidents.forEach(incident => {
-      const createdDate = new Date(incident.createdAt);
-      const timeDiff = now.getTime() - createdDate.getTime();
-
-      if (incident.status === 'resolved') {
-        // For resolved incidents, check if they were resolved within SLA
-        const resolvedDate = incident.updatedAt ? new Date(incident.updatedAt) : now;
-        const resolutionTime = resolvedDate.getTime() - createdDate.getTime();
-
-        if (incident.priority === '1 - Critical' && resolutionTime <= oneDay) {
-          withinSLA++;
-        } else if (incident.priority === '2 - High' && resolutionTime <= threeDays) {
-          withinSLA++;
-        } else if (resolutionTime <= 7 * oneDay) {
-          withinSLA++;
-        } else {
-          breachedSLA++;
-        }
-      } else {
-        // For active incidents, check if they're approaching SLA breach
-        if (incident.priority === '1 - Critical' && timeDiff > oneDay) {
-          breachedSLA++;
-        } else if (incident.priority === '2 - High' && timeDiff > threeDays) {
-          breachedSLA++;
-        } else if (timeDiff > 7 * oneDay) {
-          breachedSLA++;
-        } else if (incident.priority === '1 - Critical' && timeDiff > oneDay * 0.8) {
-          nearBreach++;
-        } else if (incident.priority === '2 - High' && timeDiff > threeDays * 0.8) {
-          nearBreach++;
-        } else {
-          withinSLA++;
-        }
-      }
-    });
-
-    const slaCompliance = stats.total > 0 ? Math.round((withinSLA / stats.total) * 100) : 100;
-
-    return { withinSLA, breachedSLA, nearBreach, slaCompliance };
+  // System health metrics (mock data for demonstration)
+  const systemMetrics = {
+    apiResponseTime: 245,
+    serverUptime: 99.8,
+    databaseConnections: 85,
+    errorRate: 0.2,
+    activeUsers: 1247,
+    memoryUsage: 78
   };
 
-  const slaMetrics = getSLAMetrics();
-
-  // SLA Performance Chart
-  const slaChartOptions = {
+  // Performance chart options
+  const performanceChartOptions = {
     chart: {
-      type: 'donut' as const,
+      type: 'area' as const,
       height: 350
     },
-    labels: ['Within SLA', 'SLA Breached', 'Near Breach'],
-    colors: ['#10b981', '#ef4444', '#f59e0b'],
-    legend: {
-      position: 'bottom' as const
-    },
-    plotOptions: {
-      pie: {
-        donut: {
-          size: '70%',
-          labels: {
-            show: true,
-            total: {
-              show: true,
-              label: 'SLA Compliance',
-              formatter: () => `${slaMetrics.slaCompliance}%`
-            }
-          }
-        }
-      }
-    }
-  };
-
-  const slaChartSeries = [slaMetrics.withinSLA, slaMetrics.breachedSLA, slaMetrics.nearBreach];
-
-  // Monthly SLA Trend
-  const trendChartOptions = {
-    chart: {
-      type: 'line' as const,
-      height: 350
+    dataLabels: {
+      enabled: false
     },
     stroke: {
-      curve: 'smooth' as const,
-      width: 3
+      curve: 'smooth' as const
     },
     title: {
-      text: 'SLA Compliance Trend',
+      text: 'System Performance Metrics',
       align: 'left' as const
     },
     xaxis: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+      categories: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'],
     },
-    yaxis: {
-      title: {
-        text: 'Compliance %'
-      },
-      min: 0,
-      max: 100
-    },
-    colors: ['#10b981', '#ef4444'],
-    markers: {
-      size: 6
-    }
+    colors: ['#10b981', '#3b82f6', '#f59e0b']
   };
 
-  const trendChartSeries = [{
-    name: 'SLA Compliance',
-    data: [85, 88, 92, 87, 90, slaMetrics.slaCompliance]
+  const performanceChartSeries = [{
+    name: 'Response Time (ms)',
+    data: [180, 240, 200, 300, 250, 245]
   }, {
-    name: 'Target (95%)',
-    data: [95, 95, 95, 95, 95, 95]
+    name: 'CPU Usage (%)',
+    data: [45, 55, 48, 65, 58, 52]
+  }, {
+    name: 'Memory Usage (%)',
+    data: [30, 40, 35, 50, 45, 42]
   }];
 
   const handleViewAllIncidents = () => {
     router.push('/dashboard?tab=all-incidents');
   };
+
+  const handleCreateIncident = () => {
+    router.push('/dashboard?tab=create-incident');
+  };
+
+  // Technical incidents (filter for development-related issues)
+  const technicalIncidents = incidents.filter(incident =>
+    incident.category.toLowerCase().includes('technical') ||
+    incident.category.toLowerCase().includes('system') ||
+    incident.category.toLowerCase().includes('software') ||
+    incident.category.toLowerCase().includes('bug') ||
+    incident.category.toLowerCase().includes('api')
+  );
 
   if (loading) {
     return (
@@ -218,7 +141,7 @@ const SLAManagerDashboard = () => {
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
-          <p className="mt-2 text-muted">Loading SLA dashboard...</p>
+          <p className="mt-2 text-muted">Loading developer dashboard...</p>
         </div>
       </Container>
     );
@@ -240,74 +163,22 @@ const SLAManagerDashboard = () => {
         {/* Welcome Header */}
         <Row>
           <Col xs={12}>
-            <Card className="mb-4 mt-4">
-              <CardBody>
+            <Card className="mb-4 mt-4 border-info">
+              <CardBody className="bg-info bg-opacity-10">
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h4 className="mb-1">Welcome back, {userInfo.name}!</h4>
+                    <h4 className="mb-1 text-info">💻 Developer Dashboard</h4>
                     <p className="text-muted mb-0">
-                      As an <strong>SLA Manager</strong>, you monitor service level agreements and ensure compliance for water pollution incident response.
+                      Welcome back, <strong>{userInfo.name}</strong>! Monitor system health and handle technical incidents.
                     </p>
                   </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* SLA Metrics Cards */}
-        <Row>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{slaMetrics.slaCompliance}%</h5>
-                      <span className="f-light">SLA Compliance</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{slaMetrics.withinSLA}</h5>
-                      <span className="f-light">Within SLA</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-warning">{slaMetrics.nearBreach}</h5>
-                      <span className="f-light">Near Breach</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-danger">{slaMetrics.breachedSLA}</h5>
-                      <span className="f-light">SLA Breached</span>
-                    </div>
+                  <div>
+                    <Button color="info" onClick={handleCreateIncident} className="me-2">
+                      Report Technical Issue
+                    </Button>
+                    <Button color="outline-info" onClick={handleViewAllIncidents}>
+                      View Technical Issues
+                    </Button>
                   </div>
                 </div>
               </CardBody>
@@ -315,167 +186,229 @@ const SLAManagerDashboard = () => {
           </Col>
         </Row>
 
+        {/* System Metrics Cards */}
         <Row>
-          <Col lg={6}>
-            <Card>
-              <CardHeader className="pb-0">
-                <h5>SLA Performance Overview</h5>
-              </CardHeader>
-              <CardBody>
-                {stats.total > 0 ? (
-                  <Chart
-                    options={slaChartOptions}
-                    series={slaChartSeries}
-                    type="donut"
-                    height={350}
-                  />
-                ) : (
-                  <div className="text-center py-5">
-                    <p className="text-muted">No incident data available</p>
+          <Col xl={3} md={6} className="box-col-6">
+            <Card className="o-hidden border-info">
+              <CardBody className="b-r-4 card-body">
+                <div className="media static-top-widget">
+                  <div className="align-self-center text-center">
+                    <div className="d-inline-block">
+                      <h5 className="mb-0 counter text-info">{systemMetrics.apiResponseTime}ms</h5>
+                      <span className="f-light">API Response Time</span>
+                    </div>
                   </div>
-                )}
+                </div>
               </CardBody>
             </Card>
           </Col>
+          <Col xl={3} md={6} className="box-col-6">
+            <Card className="o-hidden border-success">
+              <CardBody className="b-r-4 card-body">
+                <div className="media static-top-widget">
+                  <div className="align-self-center text-center">
+                    <div className="d-inline-block">
+                      <h5 className="mb-0 counter text-success">{systemMetrics.serverUptime}%</h5>
+                      <span className="f-light">Server Uptime</span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+          <Col xl={3} md={6} className="box-col-6">
+            <Card className="o-hidden border-warning">
+              <CardBody className="b-r-4 card-body">
+                <div className="media static-top-widget">
+                  <div className="align-self-center text-center">
+                    <div className="d-inline-block">
+                      <h5 className="mb-0 counter text-warning">{technicalIncidents.length}</h5>
+                      <span className="f-light">Technical Incidents</span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+          <Col xl={3} md={6} className="box-col-6">
+            <Card className="o-hidden border-danger">
+              <CardBody className="b-r-4 card-body">
+                <div className="media static-top-widget">
+                  <div className="align-self-center text-center">
+                    <div className="d-inline-block">
+                      <h5 className="mb-0 counter text-danger">{systemMetrics.errorRate}%</h5>
+                      <span className="f-light">Error Rate</span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
 
-          <Col lg={6}>
+        <Row>
+          <Col lg={8}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>SLA Compliance Trend</h5>
+                <h5>📊 System Performance Monitoring</h5>
               </CardHeader>
               <CardBody>
                 <Chart
-                  options={trendChartOptions}
-                  series={trendChartSeries}
-                  type="line"
+                  options={performanceChartOptions}
+                  series={performanceChartSeries}
+                  type="area"
                   height={350}
                 />
               </CardBody>
             </Card>
           </Col>
+
+          <Col lg={4}>
+            <Card>
+              <CardHeader className="pb-0">
+                <h5>🔧 System Status</h5>
+              </CardHeader>
+              <CardBody>
+                <div className="mb-3 p-3 bg-success bg-opacity-10 rounded">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-success mb-1">🌐 Web Application</h6>
+                      <small className="text-muted">All services operational</small>
+                    </div>
+                    <div className="text-success">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20,6 9,17 4,12"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-3 p-3 bg-success bg-opacity-10 rounded">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-success mb-1">🗄️ Database</h6>
+                      <small className="text-muted">Connection stable ({systemMetrics.databaseConnections}%)</small>
+                    </div>
+                    <div className="text-success">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20,6 9,17 4,12"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-3 p-3 bg-warning bg-opacity-10 rounded">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-warning mb-1">⚡ API Gateway</h6>
+                      <small className="text-muted">Slight latency detected</small>
+                    </div>
+                    <div className="text-warning">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                        <path d="M12 9v4"/>
+                        <path d="m12 17 .01 0"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-info bg-opacity-10 rounded">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <h6 className="text-info mb-1">👥 Active Users</h6>
+                      <small className="text-muted">{systemMetrics.activeUsers} users online</small>
+                    </div>
+                    <div className="text-info">
+                      <span className="fw-bold">{systemMetrics.activeUsers}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
         </Row>
 
-        {/* SLA Breach Alerts */}
+        {/* Technical Incidents */}
         <Row>
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5>SLA Breach Alerts</h5>
-                  <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
-                    View All Incidents
+                  <h5>🐛 Recent Technical Incidents</h5>
+                  <Button color="outline-info" size="sm" onClick={handleViewAllIncidents}>
+                    View All
                   </Button>
                 </div>
               </CardHeader>
               <CardBody>
-                {incidents.filter(incident => {
-                  const now = new Date();
-                  const createdDate = new Date(incident.createdAt);
-                  const timeDiff = now.getTime() - createdDate.getTime();
-                  const oneDay = 24 * 60 * 60 * 1000;
-
-                  return (incident.status !== 'resolved' &&
-                         ((incident.priority === '1 - Critical' && timeDiff > oneDay * 0.8) ||
-                          (incident.priority === '2 - High' && timeDiff > 3 * oneDay * 0.8) ||
-                          timeDiff > 7 * oneDay * 0.8));
-                }).length > 0 ? (
+                {technicalIncidents.length > 0 ? (
                   <div className="table-responsive">
                     <table className="table table-hover">
-                      <thead>
+                      <thead className="table-light">
                         <tr>
                           <th>Incident #</th>
-                          <th>Description</th>
+                          <th>Issue Description</th>
                           <th>Priority</th>
-                          <th>Age</th>
                           <th>Status</th>
-                          <th>SLA Status</th>
+                          <th>Assigned To</th>
+                          <th>Created</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {incidents.filter(incident => {
-                          const now = new Date();
-                          const createdDate = new Date(incident.createdAt);
-                          const timeDiff = now.getTime() - createdDate.getTime();
-                          const oneDay = 24 * 60 * 60 * 1000;
-
-                          return (incident.status !== 'resolved' &&
-                                 ((incident.priority === '1 - Critical' && timeDiff > oneDay * 0.8) ||
-                                  (incident.priority === '2 - High' && timeDiff > 3 * oneDay * 0.8) ||
-                                  timeDiff > 7 * oneDay * 0.8));
-                        }).slice(0, 10).map((incident) => {
-                          const now = new Date();
-                          const createdDate = new Date(incident.createdAt);
-                          const timeDiff = now.getTime() - createdDate.getTime();
-                          const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-                          const days = Math.floor(hours / 24);
-
-                          const getSLAStatus = () => {
-                            const oneDay = 24 * 60 * 60 * 1000;
-                            if (incident.priority === '1 - Critical' && timeDiff > oneDay) {
-                              return { status: 'Breached', class: 'danger' };
-                            } else if (incident.priority === '2 - High' && timeDiff > 3 * oneDay) {
-                              return { status: 'Breached', class: 'danger' };
-                            } else if (timeDiff > 7 * oneDay) {
-                              return { status: 'Breached', class: 'danger' };
-                            } else {
-                              return { status: 'Near Breach', class: 'warning' };
-                            }
-                          };
-
-                          const slaStatus = getSLAStatus();
-
-                          return (
-                            <tr key={incident.id}>
-                              <td>
-                                <span className="fw-medium">{incident.number}</span>
-                              </td>
-                              <td>
-                                <div>
-                                  <div className="fw-medium">{incident.shortDescription}</div>
-                                  <small className="text-muted">{incident.category}</small>
-                                </div>
-                              </td>
-                              <td>
-                                <span className={`badge bg-${getPriorityBadge(incident.priority)}`}>
-                                  {incident.priority}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="text-muted">
-                                  {days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`}
-                                </span>
-                              </td>
-                              <td>
-                                <span className={`badge bg-${getStatusBadge(incident.status)}`}>
-                                  {incident.status.replace('_', ' ')}
-                                </span>
-                              </td>
-                              <td>
-                                <span className={`badge bg-${slaStatus.class}`}>
-                                  {slaStatus.status}
-                                </span>
-                              </td>
-                              <td>
-                                <Button color="outline-primary" size="sm">
-                                  Escalate
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {technicalIncidents.slice(0, 5).map((incident) => (
+                          <tr key={incident.id}>
+                            <td>
+                              <span className="fw-medium text-info">{incident.number}</span>
+                            </td>
+                            <td>
+                              <div>
+                                <div className="fw-medium">{incident.shortDescription}</div>
+                                <small className="text-muted">{incident.category}</small>
+                              </div>
+                            </td>
+                            <td>
+                              <span
+                                className="badge"
+                                style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}
+                              >
+                                {incident.priority}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className="badge"
+                                style={{ backgroundColor: getStatusColor(incident.status || 'pending'), color: 'white' }}
+                              >
+                                {(incident.status || 'pending').replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="text-muted">
+                                {incident.assignedTo || 'Unassigned'}
+                              </span>
+                            </td>
+                            <td>{formatDate(incident.createdAt)}</td>
+                            <td>
+                              <Button color="outline-info" size="sm">
+                                Debug
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 ) : (
-                  <div className="text-center py-3">
-                    <div className="text-success mb-2">
-                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20,6 9,17 4,12"/>
+                  <div className="text-center py-5">
+                    <div className="mb-3">
+                      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
                       </svg>
                     </div>
-                    <h6 className="text-success">All incidents within SLA!</h6>
-                    <p className="text-muted mb-0">No incidents are currently breaching or near breaching SLA.</p>
+                    <h6 className="text-muted">No technical incidents</h6>
+                    <p className="text-muted">All systems are running smoothly! No technical incidents to report.</p>
                   </div>
                 )}
               </CardBody>
@@ -483,68 +416,56 @@ const SLAManagerDashboard = () => {
           </Col>
         </Row>
 
-        {/* SLA Summary Report */}
+        {/* Development Tools */}
         <Row>
           <Col lg={8}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>SLA Performance by Priority</h5>
+                <h5>🛠️ Development Tools & Resources</h5>
               </CardHeader>
               <CardBody>
                 <div className="row">
-                  <div className="col-md-3 mb-3">
-                    <div className="p-3 bg-danger bg-opacity-10 rounded text-center">
-                      <h4 className="text-danger mb-1">
-                        {incidents.filter(i => i.priority === '1 - Critical').length}
-                      </h4>
-                      <small className="text-muted">Critical (24h SLA)</small>
-                      <div className="mt-2">
-                        <small className="text-success">
-                          {Math.round((incidents.filter(i => i.priority === '1 - Critical' && i.status === 'resolved').length /
-                          Math.max(incidents.filter(i => i.priority === '1 - Critical').length, 1)) * 100)}% resolved
-                        </small>
+                  <div className="col-md-6 mb-3">
+                    <div className="p-3 border rounded">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h6 className="mb-1">📊 Error Monitoring</h6>
+                          <small className="text-muted">Real-time error tracking and alerts</small>
+                        </div>
+                        <Button color="outline-info" size="sm">Access</Button>
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="p-3 bg-warning bg-opacity-10 rounded text-center">
-                      <h4 className="text-warning mb-1">
-                        {incidents.filter(i => i.priority === '2 - High').length}
-                      </h4>
-                      <small className="text-muted">High (72h SLA)</small>
-                      <div className="mt-2">
-                        <small className="text-success">
-                          {Math.round((incidents.filter(i => i.priority === '2 - High' && i.status === 'resolved').length /
-                          Math.max(incidents.filter(i => i.priority === '2 - High').length, 1)) * 100)}% resolved
-                        </small>
+                  <div className="col-md-6 mb-3">
+                    <div className="p-3 border rounded">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h6 className="mb-1">📈 Performance Analytics</h6>
+                          <small className="text-muted">System performance metrics dashboard</small>
+                        </div>
+                        <Button color="outline-info" size="sm">View</Button>
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="p-3 bg-info bg-opacity-10 rounded text-center">
-                      <h4 className="text-info mb-1">
-                        {incidents.filter(i => i.priority === '3 - Medium').length}
-                      </h4>
-                      <small className="text-muted">Medium (7d SLA)</small>
-                      <div className="mt-2">
-                        <small className="text-success">
-                          {Math.round((incidents.filter(i => i.priority === '3 - Medium' && i.status === 'resolved').length /
-                          Math.max(incidents.filter(i => i.priority === '3 - Medium').length, 1)) * 100)}% resolved
-                        </small>
+                  <div className="col-md-6 mb-3">
+                    <div className="p-3 border rounded">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h6 className="mb-1">📝 Log Analysis</h6>
+                          <small className="text-muted">Application logs viewer and analysis</small>
+                        </div>
+                        <Button color="outline-info" size="sm">Open</Button>
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="p-3 bg-success bg-opacity-10 rounded text-center">
-                      <h4 className="text-success mb-1">
-                        {incidents.filter(i => i.priority === '4 - Low').length}
-                      </h4>
-                      <small className="text-muted">Low (14d SLA)</small>
-                      <div className="mt-2">
-                        <small className="text-success">
-                          {Math.round((incidents.filter(i => i.priority === '4 - Low' && i.status === 'resolved').length /
-                          Math.max(incidents.filter(i => i.priority === '4 - Low').length, 1)) * 100)}% resolved
-                        </small>
+                  <div className="col-md-6 mb-3">
+                    <div className="p-3 border rounded">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <h6 className="mb-1">🗄️ Database Console</h6>
+                          <small className="text-muted">Direct database access and queries</small>
+                        </div>
+                        <Button color="outline-info" size="sm">Connect</Button>
                       </div>
                     </div>
                   </div>
@@ -556,85 +477,120 @@ const SLAManagerDashboard = () => {
           <Col lg={4}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>SLA Targets</h5>
+                <h5>💾 System Resources</h5>
               </CardHeader>
               <CardBody>
                 <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <span className="fw-medium">Overall Target</span>
-                    <span className="text-primary fw-bold">95%</span>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="fw-medium">Memory Usage</span>
+                    <span className="text-warning fw-bold">{systemMetrics.memoryUsage}%</span>
                   </div>
                   <div className="progress" style={{ height: '8px' }}>
-                    <div
-                      className={`progress-bar ${slaMetrics.slaCompliance >= 95 ? 'bg-success' : slaMetrics.slaCompliance >= 90 ? 'bg-warning' : 'bg-danger'}`}
-                      style={{ width: `${slaMetrics.slaCompliance}%` }}
-                    ></div>
+                    <div className="progress-bar bg-warning" style={{ width: `${systemMetrics.memoryUsage}%` }}></div>
                   </div>
-                  <small className="text-muted">Current: {slaMetrics.slaCompliance}%</small>
                 </div>
 
                 <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <span className="fw-medium">Critical Response</span>
-                    <span className="text-danger fw-bold">4h</span>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="fw-medium">CPU Usage</span>
+                    <span className="text-info fw-bold">52%</span>
                   </div>
-                  <small className="text-muted">Target response time for critical incidents</small>
+                  <div className="progress" style={{ height: '8px' }}>
+                    <div className="progress-bar bg-info" style={{ width: '52%' }}></div>
+                  </div>
                 </div>
 
                 <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <span className="fw-medium">High Priority</span>
-                    <span className="text-warning fw-bold">24h</span>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="fw-medium">Disk Usage</span>
+                    <span className="text-success fw-bold">34%</span>
                   </div>
-                  <small className="text-muted">Target response time for high priority</small>
+                  <div className="progress" style={{ height: '8px' }}>
+                    <div className="progress-bar bg-success" style={{ width: '34%' }}></div>
+                  </div>
                 </div>
 
                 <div className="mb-3">
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <span className="fw-medium">Customer Satisfaction</span>
-                    <span className="text-success fw-bold">4.2/5</span>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="fw-medium">Network I/O</span>
+                    <span className="text-primary fw-bold">67%</span>
                   </div>
-                  <small className="text-muted">Average satisfaction rating</small>
+                  <div className="progress" style={{ height: '8px' }}>
+                    <div className="progress-bar bg-primary" style={{ width: '67%' }}></div>
+                  </div>
+                </div>
+
+                <hr />
+                <div className="text-center">
+                  <small className="text-muted">Last updated: {new Date().toLocaleTimeString()}</small>
                 </div>
               </CardBody>
             </Card>
           </Col>
         </Row>
 
-        {/* Quick Actions */}
+        {/* Developer Actions */}
         <Row>
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>SLA Management Actions</h5>
+                <h5>🚀 Developer Actions</h5>
               </CardHeader>
               <CardBody>
                 <div className="row">
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-danger">
-                        🚨 View SLA Breaches
+                      <Button color="info" onClick={handleViewAllIncidents}>
+                        🐛 View Bug Reports
                       </Button>
                     </div>
                   </div>
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-warning">
-                        ⏰ Near Breach Alerts
+                      <Button color="success">
+                        📊 System Metrics
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Button color="warning">
+                        📝 Error Logs
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Button color="danger">
+                        🔧 System Maintenance
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Button color="primary" onClick={handleCreateIncident}>
+                        ➕ Report Issue
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Button color="secondary">
+                        🔄 Deploy Updates
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="col-md-3 mb-3">
+                    <div className="d-grid">
+                      <Button color="dark">
+                        💾 Backup System
                       </Button>
                     </div>
                   </div>
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
                       <Button color="outline-info">
-                        📊 Generate SLA Report
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="outline-primary" onClick={handleViewAllIncidents}>
-                        📋 All Incidents
+                        📋 API Documentation
                       </Button>
                     </div>
                   </div>
@@ -648,4 +604,4 @@ const SLAManagerDashboard = () => {
   )
 }
 
-export default SLAManagerDashboard
+export default DeveloperDashboard

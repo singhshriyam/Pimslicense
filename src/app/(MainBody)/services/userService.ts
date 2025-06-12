@@ -21,13 +21,12 @@ export interface LoginResponse {
 // API Configuration
 const API_BASE_URL = 'https://apexwpc.apextechno.co.uk/api';
 
-// Token management with better error handling
+// Token management
 export const getStoredToken = (): string | null => {
   if (typeof window !== 'undefined') {
     try {
       return localStorage.getItem('authToken');
     } catch (error) {
-      console.error('Error accessing localStorage for token:', error);
       return null;
     }
   }
@@ -39,7 +38,6 @@ export const getStoredUserTeam = (): string | null => {
     try {
       return localStorage.getItem('userTeam') || localStorage.getItem('userRole');
     } catch (error) {
-      console.error('Error accessing localStorage for team:', error);
       return null;
     }
   }
@@ -51,7 +49,6 @@ export const getStoredUserName = (): string | null => {
     try {
       return localStorage.getItem('userName');
     } catch (error) {
-      console.error('Error accessing localStorage for name:', error);
       return null;
     }
   }
@@ -63,7 +60,6 @@ export const getStoredUserId = (): string | null => {
     try {
       return localStorage.getItem('userId');
     } catch (error) {
-      console.error('Error accessing localStorage for userId:', error);
       return null;
     }
   }
@@ -75,7 +71,6 @@ export const getStoredUserEmail = (): string | null => {
     try {
       return localStorage.getItem('userEmail');
     } catch (error) {
-      console.error('Error accessing localStorage for email:', error);
       return null;
     }
   }
@@ -85,18 +80,8 @@ export const getStoredUserEmail = (): string | null => {
 export const setStoredToken = (token: string, team: string, name: string, email?: string, userId?: string): void => {
   if (typeof window !== 'undefined') {
     try {
-      console.log('💾 STORING SESSION DATA:', {
-        token: !!token,
-        team,
-        name,
-        email,
-        userId,
-        timestamp: new Date().toISOString()
-      });
-
       localStorage.setItem('authToken', token);
       localStorage.setItem('userTeam', team);
-      localStorage.setItem('userRole', team); // Store as both for compatibility
       localStorage.setItem('userName', name);
 
       if (email) {
@@ -107,23 +92,14 @@ export const setStoredToken = (token: string, team: string, name: string, email?
         localStorage.setItem('userId', userId);
       }
 
-      // Store login timestamp
       localStorage.setItem('loginTimestamp', new Date().toISOString());
-
-      // Verify storage worked
-      console.log('✅ VERIFICATION - Stored values:');
-      console.log('  Token stored:', !!localStorage.getItem('authToken'));
-      console.log('  UserId stored:', localStorage.getItem('userId'));
-      console.log('  Email stored:', localStorage.getItem('userEmail'));
-      console.log('  Team stored:', localStorage.getItem('userTeam'));
-      console.log('  Name stored:', localStorage.getItem('userName'));
     } catch (error) {
-      console.error('Error storing session data:', error);
+      // Silent error handling
     }
   }
 };
 
-// Auth headers with improved error handling
+// Auth headers
 const getAuthHeaders = (token?: string) => {
   const authToken = token || getStoredToken();
 
@@ -138,11 +114,9 @@ const getAuthHeaders = (token?: string) => {
   return headers;
 };
 
-// Enhanced login function with better error handling
+// Login function
 export const loginUser = async (email: string, password: string): Promise<LoginResponse> => {
   try {
-    console.log('🔑 Attempting login for:', email);
-
     const formData = new FormData();
     formData.append('email', email);
     formData.append('password', password);
@@ -156,8 +130,6 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
     });
 
     const responseText = await response.text();
-    console.log('📝 Login response status:', response.status);
-    console.log('📝 Login response:', responseText.substring(0, 500));
 
     if (!response.ok) {
       let errorMessage = `Login failed: ${response.status}`;
@@ -169,20 +141,17 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
         errorMessage += ` - ${responseText}`;
       }
 
-      console.error('❌ Login failed:', errorMessage);
       throw new Error(errorMessage);
     }
 
     const loginData = JSON.parse(responseText);
-    console.log('✅ Login successful:', loginData);
 
-    // Handle the response format: { success: true, data: { token: "..." }, message: "..." }
     if (loginData.success && loginData.data?.token) {
       let userId: string | undefined;
-      let userTeam = 'USER'; // Default team
-      let userName = email.split('@')[0]; // Default name
+      let userTeam = 'USER';
+      let userName = email.split('@')[0];
 
-      // Try to decode JWT to get user ID and other info
+      // Try to decode JWT to get user info
       try {
         const tokenParts = loginData.data.token.split('.');
         if (tokenParts.length === 3) {
@@ -190,11 +159,9 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
           userId = payload.sub || payload.user_id || payload.id;
           userTeam = payload.team || payload.role || 'USER';
           userName = payload.name || payload.username || userName;
-
-          console.log('🎫 JWT payload:', payload);
         }
       } catch (error) {
-        console.warn('⚠️ Could not decode JWT, using defaults:', error);
+        // Silent error handling
       }
 
       // Use data from API response if available
@@ -209,7 +176,7 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
         userId = loginData.data.user_id || loginData.data.userId;
       }
 
-      // Store all the session data
+      // Store session data
       setStoredToken(
         loginData.data.token,
         userTeam,
@@ -234,16 +201,14 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
       };
     } else {
       const errorMessage = loginData.message || 'Login failed - invalid response format';
-      console.error('❌ Login failed:', errorMessage);
       throw new Error(errorMessage);
     }
   } catch (error: any) {
-    console.error('❌ Login error:', error);
     throw error;
   }
 };
 
-// Fetch users with better error handling
+// Fetch users
 export const fetchAllUsers = async (token?: string): Promise<User[]> => {
   const authToken = token || getStoredToken();
 
@@ -260,7 +225,6 @@ export const fetchAllUsers = async (token?: string): Promise<User[]> => {
 
     if (!response.ok) {
       if (response.status === 401) {
-        // Clear stored data on auth failure
         logoutUser();
         throw new Error('Authentication token expired. Please log in again.');
       }
@@ -293,7 +257,6 @@ export const fetchAllUsers = async (token?: string): Promise<User[]> => {
 
     return transformedUsers;
   } catch (error: any) {
-    console.error('❌ Fetch users error:', error);
     throw error;
   }
 };
@@ -307,7 +270,8 @@ export const getUserStats = (users: User[]) => {
     handlers: 0,
     endUsers: 0,
     slaManagers: 0,
-    active: 0
+    active: 0,
+    admins: 0
   };
 
   users.forEach(user => {
@@ -315,6 +279,7 @@ export const getUserStats = (users: User[]) => {
 
     if (teamLower.includes('admin')) {
       stats.administrators++;
+      stats.admins++;
     } else if (teamLower.includes('manager') && !teamLower.includes('sla')) {
       stats.managers++;
     } else if (teamLower.includes('handler')) {
@@ -331,6 +296,49 @@ export const getUserStats = (users: User[]) => {
   });
 
   return stats;
+};
+
+// Team to dashboard mapping - SAME AS LOGIN AND MAIN DASHBOARD
+export const getTeamDashboard = (team: string): string => {
+  if (!team) return '/dashboard/enduser';
+
+  const teamLower = team.toLowerCase().trim();
+
+  // Exact matches first
+  if (teamLower === 'incident manager' || teamLower === 'incident_manager') {
+    return '/dashboard/incident_manager';
+  }
+
+  if (teamLower === 'incident handler' || teamLower === 'incident_handler') {
+    return '/dashboard/incident_handler';
+  }
+
+  if (teamLower === 'administrator' || teamLower === 'admin') {
+    return '/dashboard/admin';
+  }
+
+  if (teamLower === 'developer' || teamLower === 'dev') {
+    return '/dashboard/developer';
+  }
+
+  // Partial matches
+  if (teamLower.includes('manager')) {
+    return '/dashboard/incident_manager';
+  }
+
+  if (teamLower.includes('handler')) {
+    return '/dashboard/incident_handler';
+  }
+
+  if (teamLower.includes('admin')) {
+    return '/dashboard/admin';
+  }
+
+  if (teamLower.includes('dev')) {
+    return '/dashboard/developer';
+  }
+
+  return '/dashboard/enduser';
 };
 
 export const mapTeamToRole = (team: string): string => {
@@ -361,13 +369,10 @@ export const mapTeamToRole = (team: string): string => {
   }
 };
 
-// Enhanced authentication utilities
+// Authentication utilities
 export const logoutUser = (): void => {
   if (typeof window !== 'undefined') {
     try {
-      console.log('🚪 Logging out user...');
-
-      // Clear all stored data
       const keysToRemove = [
         'authToken',
         'userTeam',
@@ -381,10 +386,8 @@ export const logoutUser = (): void => {
       keysToRemove.forEach(key => {
         localStorage.removeItem(key);
       });
-
-      console.log('✅ User logged out successfully');
     } catch (error) {
-      console.error('Error during logout:', error);
+      // Silent error handling
     }
   }
 };
@@ -393,19 +396,8 @@ export const isAuthenticated = (): boolean => {
   try {
     const token = getStoredToken();
     const userId = getStoredUserId();
-
-    // Check if we have both token and user ID
-    const hasValidSession = !!(token && userId);
-
-    console.log('🔍 Authentication check:', {
-      hasToken: !!token,
-      hasUserId: !!userId,
-      isAuthenticated: hasValidSession
-    });
-
-    return hasValidSession;
+    return !!(token && userId);
   } catch (error) {
-    console.error('Error checking authentication:', error);
     return false;
   }
 };
@@ -414,27 +406,22 @@ export const validateToken = async (token?: string): Promise<boolean> => {
   try {
     const authToken = token || getStoredToken();
     if (!authToken) {
-      console.log('🚫 No token to validate');
       return false;
     }
 
-    // Simple validation - try to make a request
     const response = await fetch(`${API_BASE_URL}/users`, {
       method: 'HEAD',
       headers: getAuthHeaders(authToken)
     });
 
     const isValid = response.ok;
-    console.log('🎫 Token validation result:', isValid);
 
     if (!isValid && response.status === 401) {
-      // Token is invalid, clear it
       logoutUser();
     }
 
     return isValid;
   } catch (error) {
-    console.error('Error validating token:', error);
     return false;
   }
 };
@@ -457,30 +444,18 @@ export const refreshSession = async (): Promise<boolean> => {
     const sessionInfo = getSessionInfo();
 
     if (!sessionInfo.isAuthenticated) {
-      console.log('🚫 No valid session to refresh');
       return false;
     }
 
-    // Validate current token
     const isValid = await validateToken(sessionInfo.token || undefined);
 
     if (!isValid) {
-      console.log('🚫 Session is no longer valid');
       logoutUser();
       return false;
     }
 
-    console.log('✅ Session is still valid');
     return true;
   } catch (error) {
-    console.error('Error refreshing session:', error);
     return false;
   }
-};
-
-// Debug function
-export const debugSession = () => {
-  const sessionInfo = getSessionInfo();
-  console.log('🔍 Session Debug Info:', sessionInfo);
-  return sessionInfo;
 };

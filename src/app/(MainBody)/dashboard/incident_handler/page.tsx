@@ -75,7 +75,7 @@ const IncidentHandlerDashboard = () => {
   const stats = getIncidentStats(incidents);
 
   // Convert incidents to tasks for display
-  const assignedTasks = incidents.map((incident, index) => ({
+  const assignedTasks = incidents.map((incident) => ({
     id: incident.id,
     title: incident.shortDescription,
     priority: incident.priority === '1 - Critical' ? 'high' :
@@ -130,7 +130,7 @@ const IncidentHandlerDashboard = () => {
       width: 3
     },
     title: {
-      text: 'Task Completion Trend',
+      text: 'My Task Completion Trend',
       align: 'left' as const
     },
     grid: {
@@ -204,11 +204,19 @@ const IncidentHandlerDashboard = () => {
         {/* Welcome Header */}
         <Row>
           <Col xs={12}>
-            <Card className="mb-4 mt-4">
-              <CardBody>
+            <Card className="mb-4 mt-4 border-success">
+              <CardBody className="bg-success bg-opacity-10">
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h4 className="mb-1">Welcome back, {userInfo.name}!</h4>
+                    <h4 className="mb-1 text-success">🔧 Incident Handler Dashboard</h4>
+                    <p className="text-muted mb-0">
+                      Welcome back, <strong>{userInfo.name}</strong>! You are responsible for investigating and resolving incidents.
+                    </p>
+                  </div>
+                  <div>
+                    <Button color="success" onClick={handleViewAllIncidents}>
+                      View My Assignments
+                    </Button>
                   </div>
                 </div>
               </CardBody>
@@ -219,13 +227,13 @@ const IncidentHandlerDashboard = () => {
         {/* Statistics Cards */}
         <Row>
           <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
+            <Card className="o-hidden border-success">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.total}</h5>
-                      <span className="f-light">Total Assigned Incidents</span>
+                      <h5 className="mb-0 counter text-success">{stats.total}</h5>
+                      <span className="f-light">My Total Assignments</span>
                     </div>
                   </div>
                 </div>
@@ -233,12 +241,12 @@ const IncidentHandlerDashboard = () => {
             </Card>
           </Col>
           <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
+            <Card className="o-hidden border-primary">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.inProgress}</h5>
+                      <h5 className="mb-0 counter text-primary">{stats.inProgress}</h5>
                       <span className="f-light">Active Tasks</span>
                     </div>
                   </div>
@@ -247,12 +255,12 @@ const IncidentHandlerDashboard = () => {
             </Card>
           </Col>
           <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
+            <Card className="o-hidden border-success">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.resolved}</h5>
+                      <h5 className="mb-0 counter text-success">{stats.resolved}</h5>
                       <span className="f-light">Completed Tasks</span>
                     </div>
                   </div>
@@ -261,12 +269,12 @@ const IncidentHandlerDashboard = () => {
             </Card>
           </Col>
           <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden">
+            <Card className="o-hidden border-warning">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.pending}</h5>
+                      <h5 className="mb-0 counter text-warning">{stats.pending}</h5>
                       <span className="f-light">Pending Tasks</span>
                     </div>
                   </div>
@@ -281,8 +289,8 @@ const IncidentHandlerDashboard = () => {
             <Card>
               <CardHeader className="pb-0">
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5>My Assigned Water Pollution Incidents</h5>
-                  <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
+                  <h5>🚰 My Assigned Water Pollution Incidents</h5>
+                  <Button color="outline-success" size="sm" onClick={handleViewAllIncidents}>
                     View All
                   </Button>
                 </div>
@@ -300,12 +308,12 @@ const IncidentHandlerDashboard = () => {
                       </svg>
                     </div>
                     <h6 className="text-muted">No incidents assigned yet</h6>
-                    <p className="text-muted">You don't have any assigned incidents at the moment.</p>
+                    <p className="text-muted">You don't have any assigned incidents at the moment. Check back later for new assignments.</p>
                   </div>
                 ) : (
                   <div className="table-responsive">
-                    <table className="table table-bordernone">
-                      <thead>
+                    <table className="table table-hover">
+                      <thead className="table-light">
                         <tr>
                           <th scope="col">Incident Details</th>
                           <th scope="col">Priority Level</th>
@@ -315,7 +323,7 @@ const IncidentHandlerDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {assignedTasks.map((task, index) => (
+                        {assignedTasks.slice(0, 10).map((task, index) => (
                           <tr key={index}>
                             <td>
                               <div>
@@ -337,7 +345,10 @@ const IncidentHandlerDashboard = () => {
                               </span>
                             </td>
                             <td>
-                              <button className="btn btn-sm btn-primary">View Details</button>
+                              <div className="btn-group" role="group">
+                                <button className="btn btn-sm btn-outline-primary">View</button>
+                                <button className="btn btn-sm btn-primary">Work On</button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -352,7 +363,7 @@ const IncidentHandlerDashboard = () => {
           <Col lg={4}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>Task Distribution</h5>
+                <h5>📊 My Task Distribution</h5>
               </CardHeader>
               <CardBody>
                 {stats.total > 0 ? (
@@ -377,7 +388,7 @@ const IncidentHandlerDashboard = () => {
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>Performance Overview</h5>
+                <h5>📈 My Performance Overview</h5>
               </CardHeader>
               <CardBody>
                 <Chart
@@ -396,35 +407,35 @@ const IncidentHandlerDashboard = () => {
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>Quick Actions</h5>
+                <h5>🚀 Quick Actions</h5>
               </CardHeader>
               <CardBody>
                 <div className="row">
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-primary" onClick={handleViewAllIncidents}>
+                      <Button color="success" onClick={handleViewAllIncidents}>
                         📋 View All My Incidents
                       </Button>
                     </div>
                   </div>
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-success">
-                        📊 Generate Report
+                      <Button color="info">
+                        📊 Generate My Report
                       </Button>
                     </div>
                   </div>
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-warning">
+                      <Button color="warning">
                         🔔 View Notifications
                       </Button>
                     </div>
                   </div>
                   <div className="col-md-3 mb-3">
                     <div className="d-grid">
-                      <Button color="outline-info">
-                        ⚙️ Settings
+                      <Button color="secondary">
+                        ⚙️ Update Profile
                       </Button>
                     </div>
                   </div>

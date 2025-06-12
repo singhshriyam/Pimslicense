@@ -7,20 +7,24 @@ declare module "next-auth" {
       name?: string | null
       email?: string | null
       image?: string | null
-      role?: 'enduser' | 'incident_handler' | 'incident_manager' | 'admin' | 'developer'
+      team?: string
     }
     accessToken?: string
   }
 
   interface User {
-    role?: 'enduser' | 'incident_handler' | 'incident_manager' | 'admin' | 'developer'
-    token?: string
+    id: string
+    name?: string | null
+    email?: string | null
+    team?: string
+    accessToken?: string
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?: 'enduser' | 'incident_handler' | 'incident_manager' | 'admin' | 'developer'
+    team?: string
     accessToken?: string
+    userId?: string
   }
 }

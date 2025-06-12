@@ -1,5 +1,5 @@
 "use client";
-import { CreateAccount, EmailAddress, Password, SignIn, AlreadyHaveAccount, Name, Address, PostCode, Mobile, LastName } from "@/Constant";
+import { CreateAccount, EmailAddress, Password, SignIn, Name, Address } from "@/Constant";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -10,6 +10,7 @@ import { Button, Form, FormGroup, Input, Label, Container, Row, Col } from "reac
 declare global {
   interface Window {
     postcodeTimeout: NodeJS.Timeout;
+    emailCheckTimeout: NodeJS.Timeout;
   }
 }
 
@@ -55,6 +56,7 @@ const RegisterSimpleContainer = () => {
   });
   const [captchaInput, setCaptchaInput] = useState("");
   const [addressLoading, setAddressLoading] = useState(false);
+  const [emailChecking, setEmailChecking] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const router = useRouter();
@@ -71,6 +73,140 @@ const RegisterSimpleContainer = () => {
     { id: 2, title: "Contact & Verification", completed: currentStep > 2 },
     { id: 3, title: "Confirmation", completed: false },
   ];
+
+  // Check if email already exists using the users API
+  const checkEmailExists = async (email: string) => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return;
+    }
+
+    setEmailChecking(true);
+
+    try {
+      const response = await fetch('https://apexwpc.apextechno.co.uk/api/users', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+
+      if (response.ok) {
+        const users = await response.json();
+
+        let userList = [];
+        if (Array.isArray(users)) {
+          userList = users;
+        } else if (users.data && Array.isArray(users.data)) {
+          userList = users.data;
+        } else if (users.users && Array.isArray(users.users)) {
+          userList = users.users;
+        }
+
+        const emailExists = userList.some((user: any) =>
+          user.email && user.email.toLowerCase() === email.toLowerCase().trim()
+        );
+
+        if (emailExists) {
+          setErrors(prev => ({
+            ...prev,
+            email: "This email address is already registered"
+          }));
+        } else {
+          setErrors(prev => {
+            const { email, ...rest } = prev;
+            return rest;
+          });
+        }
+      } else if (response.status === 401) {
+        // API requires authentication - disable real-time checking
+        console.log('API requires authentication - email checking disabled');
+        setErrors(prev => {
+          const { email, ...rest } = prev;
+          return rest;
+        });
+      } else {
+        setErrors(prev => {
+          const { email, ...rest } = prev;
+          return rest;
+        });
+      }
+    } catch (error) {
+      console.log('Email check failed:', error);
+      setErrors(prev => {
+        const { email, ...rest } = prev;
+        return rest;
+      });
+    } finally {
+      setEmailChecking(false);
+    }
+  };
+
+  // Handle email input with debounced checking
+  const handleEmailChange = (value: string) => {
+    handleInputChange('email', value);
+
+    if (typeof window !== 'undefined') {
+      clearTimeout(window.emailCheckTimeout);
+
+      if (errors.email) {
+        setErrors(prev => ({ ...prev, email: "" }));
+      }
+
+      window.emailCheckTimeout = setTimeout(() => {
+        if (value.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+          checkEmailExists(value);
+        }
+      }, 1000);
+    }
+  };
+
+  // Validate password strength
+  const validatePassword = (password: string): string => {
+    if (!password) return "";
+    if (password.length < 6) return "Password must be at least 6 characters";
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return "Password must contain at least one letter and one number";
+    return "";
+  };
+
+  // Handle password change with validation
+  const handlePasswordChange = (value: string) => {
+    handleInputChange('password', value);
+
+    const passwordError = validatePassword(value);
+    if (passwordError) {
+      setErrors(prev => ({ ...prev, password: passwordError }));
+    } else {
+      setErrors(prev => {
+        const { password, ...rest } = prev;
+        return rest;
+      });
+    }
+
+    // Also check password confirmation if it exists
+    if (formData.password_confirmation && value !== formData.password_confirmation) {
+      setErrors(prev => ({ ...prev, password_confirmation: "Passwords do not match" }));
+    } else if (formData.password_confirmation) {
+      setErrors(prev => {
+        const { password_confirmation, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
+  // Handle password confirmation change
+  const handlePasswordConfirmationChange = (value: string) => {
+    handleInputChange('password_confirmation', value);
+
+    if (value && value !== formData.password) {
+      setErrors(prev => ({ ...prev, password_confirmation: "Passwords do not match" }));
+    } else {
+      setErrors(prev => {
+        const { password_confirmation, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
 
   // Generate random math captcha
   const generateCaptcha = () => {
@@ -164,7 +300,7 @@ const RegisterSimpleContainer = () => {
       const templateParams = {
         to_email: formData.email,
         user_name: formData.name || 'User',
-        otp: otp, // Changed from otp_code to otp to match your template
+        otp: otp,
         from_name: 'Registration Team',
         reply_to: 'noreply@yourapp.com'
       };
@@ -211,8 +347,8 @@ const RegisterSimpleContainer = () => {
       [field]: value
     }));
 
-    // Clear error when user starts typing
-    if (errors[field]) {
+    // Clear error when user starts typing (for non-special fields)
+    if (field !== 'email' && field !== 'password' && field !== 'password_confirmation' && errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
     }
   };
@@ -366,6 +502,7 @@ const RegisterSimpleContainer = () => {
     setErrors(prev => ({ ...prev, captcha: "" }));
   };
 
+  // FIXED handleSubmit - Uses FormData exactly like Postman
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -381,63 +518,36 @@ const RegisterSimpleContainer = () => {
       sessionStorage.removeItem('otp_timestamp');
       sessionStorage.removeItem('otp_email');
 
-      // Determine API endpoint
-      let apiUrl;
-      let useNextjsApi = false;
+      // Prepare FormData (exactly like your Postman request)
+      const apiFormData = new FormData();
+      apiFormData.append('name', formData.name.trim());
+      apiFormData.append('email', formData.email.toLowerCase().trim());
+      apiFormData.append('password', formData.password);
+      apiFormData.append('password_confirmation', formData.password_confirmation);
+      apiFormData.append('address', formData.address.trim());
+      apiFormData.append('postcode', formData.postcode.toUpperCase().trim());
+      apiFormData.append('mobile', formData.mobile.trim());
+      apiFormData.append('last_name', formData.last_name.trim());
 
-      try {
-        const testResponse = await fetch('/api/register', { method: 'HEAD' });
-        if (testResponse.status !== 404) {
-          apiUrl = '/api/register';
-          useNextjsApi = true;
-        }
-      } catch (e) {
-        // API route doesn't exist, use CORS proxy
+      console.log('Sending FormData to API (matching Postman):');
+      for (let [key, value] of apiFormData.entries()) {
+        console.log(`${key}: ${value}`);
       }
 
-      if (!useNextjsApi) {
-        apiUrl = process.env.NODE_ENV === 'development'
-          ? 'https://cors-anywhere.herokuapp.com/https://apexwpc.apextechno.co.uk/api/signup'
-          : 'https://apexwpc.apextechno.co.uk/api/signup';
-      }
-
-      let requestBody;
-      let requestHeaders = {
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      };
-
-      if (useNextjsApi) {
-        requestBody = JSON.stringify({
-          name: formData.name.trim(),
-          email: formData.email.toLowerCase().trim(),
-          password: formData.password,
-          password_confirmation: formData.password_confirmation,
-          address: formData.address.trim(),
-          postcode: formData.postcode.toUpperCase().trim(),
-          mobile: formData.mobile.trim(),
-          last_name: formData.last_name.trim()
-        });
-        requestHeaders['Content-Type'] = 'application/json';
-      } else {
-        const formDataToSend = new FormData();
-        formDataToSend.append('name', formData.name.trim());
-        formDataToSend.append('email', formData.email.toLowerCase().trim());
-        formDataToSend.append('password', formData.password);
-        formDataToSend.append('password_confirmation', formData.password_confirmation);
-        formDataToSend.append('address', formData.address.trim());
-        formDataToSend.append('postcode', formData.postcode.toUpperCase().trim());
-        formDataToSend.append('mobile', formData.mobile.trim());
-        formDataToSend.append('last_name', formData.last_name.trim());
-        requestBody = formDataToSend;
-      }
-
-      const response = await fetch(apiUrl, {
+      // Make the API call exactly like your Postman request
+      const response = await fetch('https://apexwpc.apextechno.co.uk/api/signup', {
         method: 'POST',
-        body: requestBody,
-        headers: requestHeaders
+        headers: {
+          // Don't set Content-Type - let browser set it for FormData
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: apiFormData // Use FormData, not JSON
       });
 
+      console.log('API Response Status:', response.status);
+
+      // Parse response
       let data;
       const contentType = response.headers.get('content-type');
 
@@ -446,23 +556,32 @@ const RegisterSimpleContainer = () => {
           data = await response.json();
         } else {
           const textResponse = await response.text();
+          console.log('Non-JSON response:', textResponse);
           try {
             data = JSON.parse(textResponse);
           } catch {
-            data = { message: textResponse, success: response.ok };
+            data = {
+              message: textResponse,
+              success: response.ok,
+              status: response.status
+            };
           }
         }
       } catch (parseError) {
+        console.log('Parse error:', parseError);
         data = { success: response.ok, message: 'Registration response could not be parsed' };
       }
 
-      const isSuccess = response.ok ||
-                       data?.success === true ||
+      console.log('API Response Data:', data);
+
+      // Check for success - API returns 200 even for validation errors, so check data.success
+      const isSuccess = (response.ok && data?.success === true) ||
                        data?.status === 'success' ||
-                       response.status === 200 ||
-                       response.status === 201;
+                       (response.status === 201) ||
+                       (data?.message && data.message.toLowerCase().includes('success') && data?.success !== false);
 
       if (isSuccess) {
+        console.log('✅ Registration successful!');
         toast.success("Account created successfully! Redirecting to login...");
 
         // Clear form data
@@ -487,47 +606,77 @@ const RegisterSimpleContainer = () => {
           router.push("/auth/login");
         }, 2000);
       } else {
-        // Handle specific error messages including email exists
-        if (data?.errors) {
+        console.log('❌ Registration failed');
+
+        // Handle specific error messages - API returns 200 with success: false for validation errors
+        if (data?.errors && typeof data.errors === 'object') {
+          console.log('API returned validation errors:', data.errors);
           const apiErrors: { [key: string]: string } = {};
 
-          if (typeof data.errors === 'object') {
-            Object.keys(data.errors).forEach(key => {
-              const errorMessages = Array.isArray(data.errors[key])
-                ? data.errors[key]
-                : [data.errors[key]];
-              apiErrors[key] = errorMessages.join(', ');
-            });
-          }
+          Object.keys(data.errors).forEach(key => {
+            const errorMessages = Array.isArray(data.errors[key])
+              ? data.errors[key]
+              : [data.errors[key]];
+            apiErrors[key] = errorMessages.join(', ');
+          });
 
           setErrors(apiErrors);
 
           // Show specific message for email exists
-          if (apiErrors.email && apiErrors.email.toLowerCase().includes('taken')) {
+          if (apiErrors.email && (
+            apiErrors.email.toLowerCase().includes('taken') ||
+            apiErrors.email.toLowerCase().includes('already') ||
+            apiErrors.email.toLowerCase().includes('exists')
+          )) {
             toast.error("This email address is already registered. Please use a different email or try logging in.");
           } else {
             toast.error("Please correct the errors below and try again.");
           }
-        } else if (data?.message) {
-          const message = Array.isArray(data.message) ? data.message.join(', ') : data.message;
+          return; // Exit early to prevent further error handling
+        }
 
-          if (message.toLowerCase().includes('email') && (message.toLowerCase().includes('taken') || message.toLowerCase().includes('exists'))) {
+        // Handle single error message
+        if (data?.message) {
+          const message = Array.isArray(data.message) ? data.message.join(', ') : data.message;
+          console.log('API message:', message);
+
+          if (message.toLowerCase().includes('validation error')) {
+            toast.error("Please check your information and correct any errors.");
+          } else if (message.toLowerCase().includes('email') && (
+            message.toLowerCase().includes('taken') ||
+            message.toLowerCase().includes('exists') ||
+            message.toLowerCase().includes('already')
+          )) {
             setErrors({ email: "This email address is already registered" });
             toast.error("This email address is already registered. Please use a different email or try logging in.");
           } else {
             toast.error(message);
           }
-        } else if (response.status === 422) {
+          return; // Exit early
+        }
+
+        // Handle other response codes
+        if (response.status === 422) {
           toast.error("Validation failed. Please check your information and try again.");
         } else if (response.status === 409) {
           setErrors({ email: "This email address is already registered" });
           toast.error("This email address is already registered. Please use a different email or try logging in.");
+        } else if (response.status === 404) {
+          toast.error("Registration service not found. Please contact support.");
         } else {
-          toast.error("Registration failed. Please try again.");
+          toast.error(`Registration failed. Please check your information and try again.`);
         }
       }
     } catch (error) {
-      toast.error("Registration failed. Please check your connection and try again.");
+      console.error('Registration error:', error);
+
+      if (error.message.includes('CORS')) {
+        toast.error("Unable to connect to registration server due to security restrictions. Please contact support.");
+      } else if (errorMessage.includes('fetch')) {
+        toast.error("Unable to connect to registration server. Please check your internet connection.");
+      } else {
+        toast.error("Network error: Please check your connection and try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -541,8 +690,13 @@ const RegisterSimpleContainer = () => {
 
   useEffect(() => {
     return () => {
-      if (typeof window !== 'undefined' && window.postcodeTimeout) {
-        clearTimeout(window.postcodeTimeout);
+      if (typeof window !== 'undefined') {
+        if (window.postcodeTimeout) {
+          clearTimeout(window.postcodeTimeout);
+        }
+        if (window.emailCheckTimeout) {
+          clearTimeout(window.emailCheckTimeout);
+        }
       }
     };
   }, []);
@@ -623,7 +777,7 @@ const RegisterSimpleContainer = () => {
                       </FormGroup>
 
                       <FormGroup>
-                        <Label className="col-form-label text-dark">{PostCode || "Post Code"} *</Label>
+                        <Label className="col-form-label text-dark">Post Code *</Label>
                         <Input
                           type="text"
                           value={formData.postcode}
@@ -638,7 +792,7 @@ const RegisterSimpleContainer = () => {
                       </FormGroup>
 
                       <FormGroup>
-                        <Label className="col-form-label text-dark">{Address || "Address"} *</Label>
+                        <Label className="col-form-label text-dark">Address *</Label>
                         <Input
                           type="text"
                           value={formData.address}
@@ -670,7 +824,7 @@ const RegisterSimpleContainer = () => {
                       <p className="text-muted">Enter your contact details and verify your email</p>
 
                       <FormGroup>
-                        <Label className="col-form-label text-dark">{Mobile || "Mobile"} *</Label>
+                        <Label className="col-form-label text-dark">Mobile *</Label>
                         <Input
                           type="tel"
                           value={formData.mobile}
@@ -685,26 +839,35 @@ const RegisterSimpleContainer = () => {
                       <FormGroup>
                         <Label className="col-form-label text-dark">{EmailAddress} *</Label>
                         <div className="d-flex">
-                          <Input
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
-                            placeholder="Enter your email address"
-                            invalid={!!errors.email}
-                            className="me-2"
-                            autoComplete="email"
-                          />
+                          <div className="position-relative flex-grow-1 me-2">
+                            <Input
+                              type="email"
+                              value={formData.email}
+                              onChange={(e) => handleEmailChange(e.target.value)}
+                              placeholder="Enter your email address"
+                              invalid={!!errors.email}
+                              autoComplete="email"
+                            />
+                            {emailChecking && (
+                              <div className="position-absolute" style={{ right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                                <div className="spinner-border spinner-border-sm text-primary" role="status">
+                                  <span className="visually-hidden">Checking...</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           <Button
                             type="button"
                             color="success"
                             onClick={sendOtp}
-                            disabled={!formData.email.trim() || loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)}
+                            disabled={!formData.email.trim() || loading || emailChecking || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) || !!errors.email}
                             style={{ minWidth: '100px' }}
                           >
                             {loading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
                           </Button>
                         </div>
                         {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
+                        {emailChecking && <small className="text-info">Checking email availability...</small>}
                       </FormGroup>
 
                       {otpSent && (
@@ -780,7 +943,7 @@ const RegisterSimpleContainer = () => {
                           <Input
                             type={showPassword ? "text" : "password"}
                             value={formData.password}
-                            onChange={(e) => handleInputChange('password', e.target.value)}
+                            onChange={(e) => handlePasswordChange(e.target.value)}
                             placeholder="Enter your password (min 6 characters)"
                             invalid={!!errors.password}
                             autoComplete="new-password"
@@ -801,7 +964,7 @@ const RegisterSimpleContainer = () => {
                           <Input
                             type={showConfirmPassword ? "text" : "password"}
                             value={formData.password_confirmation}
-                            onChange={(e) => handleInputChange('password_confirmation', e.target.value)}
+                            onChange={(e) => handlePasswordConfirmationChange(e.target.value)}
                             placeholder="Confirm your password"
                             invalid={!!errors.password_confirmation}
                             autoComplete="new-password"
@@ -857,7 +1020,7 @@ const RegisterSimpleContainer = () => {
                   )}
 
                   <p className="mt-4 mb-0 text-center">
-                    <span className="text-dark">{AlreadyHaveAccount || "Already have an account?"}</span>
+                    <span className="text-dark">Already have an account?</span>
                     <Link className="ms-2" href="/auth/login">
                       {SignIn}
                     </Link>
