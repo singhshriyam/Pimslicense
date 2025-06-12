@@ -1,7 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -16,16 +15,15 @@ import {
 } from '../../services/incidentService';
 
 import {
-  getStoredToken,
-  getStoredUserTeam,
-  getStoredUserName,
+  getCurrentUser,
+  isAuthenticated,
+  clearUserData,
   mapTeamToRole
 } from '../../services/userService';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const DeveloperDashboard = () => {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -34,7 +32,8 @@ const DeveloperDashboard = () => {
   const [userInfo, setUserInfo] = useState({
     name: '',
     team: '',
-    email: ''
+    email: '',
+    userId: ''
   });
 
   useEffect(() => {
@@ -43,20 +42,24 @@ const DeveloperDashboard = () => {
         setLoading(true);
         setError(null);
 
-        // Get user info from stored data or session
-        const storedName = getStoredUserName();
-        const storedTeam = getStoredUserTeam();
-        const userEmail = session?.user?.email || '';
+        // Check authentication
+        if (!isAuthenticated()) {
+          router.replace('/auth/login');
+          return;
+        }
 
+        // Get current user
+        const currentUser = getCurrentUser();
         setUserInfo({
-          name: storedName || session?.user?.name || 'Developer',
-          team: storedTeam || 'Developer',
-          email: userEmail
+          name: currentUser.name || 'Developer',
+          team: currentUser.team || 'Developer',
+          email: currentUser.email || '',
+          userId: currentUser.id || ''
         });
 
         // Fetch incidents related to development/technical issues
-        const userRole = mapTeamToRole(storedTeam || 'developer');
-        const incidentsData = await fetchIncidentsAPI(userEmail, userRole);
+        const userRole = mapTeamToRole(currentUser.team || 'developer');
+        const incidentsData = await fetchIncidentsAPI(currentUser.email, userRole);
         setIncidents(incidentsData);
 
       } catch (err: any) {
@@ -67,10 +70,8 @@ const DeveloperDashboard = () => {
       }
     };
 
-    if (session?.user?.email) {
-      loadDashboardData();
-    }
-  }, [session?.user?.email]);
+    loadDashboardData();
+  }, [router]);
 
   const stats = getIncidentStats(incidents);
 

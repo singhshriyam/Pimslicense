@@ -1,31 +1,26 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
   fetchIncidentsAPI,
   getIncidentStats,
   formatDate,
-  getStatusBadge,
-  getPriorityBadge,
-  getPriorityColor,
   getStatusColor,
+  getPriorityColor,
   Incident
 } from '../../services/incidentService';
 
 import {
-  getStoredToken,
-  getStoredUserTeam,
-  getStoredUserName,
-  mapTeamToRole
+  getCurrentUser,
+  isAuthenticated,
+  clearUserData
 } from '../../services/userService';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const IncidentHandlerDashboard = () => {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -43,20 +38,22 @@ const IncidentHandlerDashboard = () => {
         setLoading(true);
         setError(null);
 
-        // Get user info from stored data or session
-        const storedName = getStoredUserName();
-        const storedTeam = getStoredUserTeam();
-        const userEmail = session?.user?.email || '';
+        // Check authentication first
+        if (!isAuthenticated()) {
+          router.replace('/auth/login');
+          return;
+        }
 
+        // Get user info from localStorage
+        const user = getCurrentUser();
         setUserInfo({
-          name: storedName || session?.user?.name || 'Handler',
-          team: storedTeam || 'Incident Handler',
-          email: userEmail
+          name: user.name || 'Handler',
+          team: user.team || 'Incident Handler',
+          email: user.email || ''
         });
 
-        // Fetch incidents assigned to this handler
-        const userRole = mapTeamToRole(storedTeam || 'incident_handler');
-        const incidentsData = await fetchIncidentsAPI(userEmail, userRole);
+        // Fetch incidents for this handler
+        const incidentsData = await fetchIncidentsAPI();
         setIncidents(incidentsData);
 
       } catch (err: any) {
@@ -67,10 +64,8 @@ const IncidentHandlerDashboard = () => {
       }
     };
 
-    if (session?.user?.email) {
-      loadDashboardData();
-    }
-  }, [session?.user?.email]);
+    loadDashboardData();
+  }, [router]);
 
   const stats = getIncidentStats(incidents);
 
@@ -157,6 +152,11 @@ const IncidentHandlerDashboard = () => {
     router.push('/dashboard?tab=all-incidents');
   };
 
+  const handleLogout = () => {
+    clearUserData();
+    router.replace('/auth/login');
+  };
+
   const getPriorityBadgeClass = (priority: string) => {
     switch (priority) {
       case 'high': return 'badge-danger';
@@ -193,6 +193,9 @@ const IncidentHandlerDashboard = () => {
       <Container fluid>
         <div className="alert alert-danger mt-3">
           <strong>Error:</strong> {error}
+          <Button color="link" onClick={() => window.location.reload()} className="p-0 ms-2">
+            Try again
+          </Button>
         </div>
       </Container>
     );
@@ -214,8 +217,11 @@ const IncidentHandlerDashboard = () => {
                     </p>
                   </div>
                   <div>
-                    <Button color="success" onClick={handleViewAllIncidents}>
+                    <Button color="success" onClick={handleViewAllIncidents} className="me-2">
                       View My Assignments
+                    </Button>
+                    <Button color="outline-danger" size="sm" onClick={handleLogout}>
+                      Logout
                     </Button>
                   </div>
                 </div>

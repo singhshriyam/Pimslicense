@@ -1,3 +1,4 @@
+// services/incidentService.ts
 import { getStoredToken, getStoredUserName, getStoredUserId } from './userService';
 
 export interface Incident {
@@ -24,12 +25,11 @@ export interface Incident {
 }
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://apexwpc.apextechno.co.uk/api';
+const API_BASE_URL = 'https://apexwpc.apextechno.co.uk/api';
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
   const token = getStoredToken();
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -42,7 +42,7 @@ const getAuthHeaders = () => {
   return headers;
 };
 
-// API Error handling
+// Simplified API Error handling
 class APIError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
@@ -50,49 +50,109 @@ class APIError extends Error {
   }
 }
 
-const handleAPIResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new APIError(
-      errorData.message || `HTTP error! status: ${response.status}`,
-      response.status
-    );
-  }
-  return response.json();
-};
-
-// Role-based filtering function
-export const filterIncidentsByRole = (incidents: Incident[], userEmail: string, userTeam: string): Incident[] => {
-  const team = userTeam.toLowerCase().replace(/\s+/g, '_');
-
-  switch (team) {
-    case 'user':
-      return incidents.filter(incident => incident.reportedBy === userEmail);
-
-    case 'incident_handler':
-    case 'incident_handeller':
-      return incidents.filter(incident => incident.assignedToEmail === userEmail);
-
-    case 'administrator':
-    case 'incident_manager':
-    case 'sla_manager':
-      return incidents;
-
-    default:
-      return incidents.filter(incident => incident.reportedBy === userEmail);
-  }
-};
-
-// Enhanced API functions with better error handling
-export const createIncidentAPI = async (incidentData: Partial<Incident>): Promise<Incident> => {
-  const endpoint = `${API_BASE_URL}/end-user/create-incident`;
+// Simplified fetch incidents function
+export const fetchIncidentsAPI = async (): Promise<Incident[]> => {
+  const endpoint = `${API_BASE_URL}/end-user/incident-list`;
   const token = getStoredToken();
-  const userId = getStoredUserId() || localStorage.getItem('userId') || '13';
+  const userId = getStoredUserId() || '13';
 
   if (!token) {
     throw new Error('Authentication required. Please log in again.');
   }
 
+  try {
+    const formData = new FormData();
+    formData.append('user_id', userId);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+    }
+
+    const responseText = await response.text();
+    let result;
+
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('JSON parse error:', responseText);
+      throw new Error('Invalid response format from server');
+    }
+
+    if (result.success && result.data) {
+      return result.data.map((item: any) => {
+        // Map status from incident state ID
+        let status: 'pending' | 'in_progress' | 'resolved' | 'closed' = 'pending';
+        if (item.incidentstate_id) {
+          switch (item.incidentstate_id) {
+            case 1: status = 'pending'; break;
+            case 2: status = 'in_progress'; break;
+            case 3: status = 'resolved'; break;
+            case 4: status = 'closed'; break;
+            default: status = 'pending';
+          }
+        }
+
+        return {
+          id: String(item.id || generateIncidentNumber()),
+          number: String(item.incident_no || item.incident_number || generateIncidentNumber()),
+          caller: String(item.user?.name || item.caller_name || 'Unknown'),
+          category: String(item.category?.name || item.category || 'Unknown'),
+          subCategory: String(item.subcategory?.name || item.sub_category || 'Unknown'),
+          shortDescription: String(item.short_description || 'No description'),
+          contactType: String(item.contact_type || 'Email'),
+          impact: String(item.impact?.name || item.impact || 'Medium'),
+          urgency: String(item.urgency?.name || item.urgency || 'Medium'),
+          priority: String(item.priority?.name || item.priority || '3 - Medium'),
+          description: String(item.narration || item.description || item.short_description || 'No description'),
+          status: status,
+          reportedBy: String(item.user?.email || item.reported_by || 'Unknown'),
+          reportedByName: String(item.user?.name || item.reported_by_name || 'Unknown'),
+          assignedTo: item.assigned_to ? String(item.assigned_to) : 'Unassigned',
+          assignedToEmail: item.assigned_to_email ? String(item.assigned_to_email) : undefined,
+          address: item.address ? String(item.address) : undefined,
+          postcode: item.postcode ? String(item.postcode) : undefined,
+          createdAt: String(item.opened_at || item.created_at || new Date().toISOString()),
+          updatedAt: item.updated_at ? String(item.updated_at) : undefined
+        } as Incident;
+      });
+    } else {
+      // Return empty array if no incidents found
+      if (result.message === 'No incidents found') {
+        return [];
+      }
+      throw new Error(result.message || 'Failed to fetch incidents');
+    }
+  } catch (error: any) {
+    console.error('Fetch incidents error:', error);
+
+    // Return empty array for certain errors instead of throwing
+    if (error.message.includes('No incidents found') || error.message.includes('404')) {
+      return [];
+    }
+
+    throw error;
+  }
+};
+
+// Simplified create incident function
+export const createIncidentAPI = async (incidentData: Partial<Incident>): Promise<Incident> => {
+  const endpoint = `${API_BASE_URL}/end-user/create-incident`;
+  const token = getStoredToken();
+  const userId = getStoredUserId() || '13';
+
+  if (!token) {
+    throw new Error('Authentication required. Please log in again.');
+  }
+
+  // Helper functions for mapping
   const getUrgencyId = (urgency: string) => {
     switch (urgency?.toLowerCase()) {
       case 'critical': return 1;
@@ -120,9 +180,6 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
       case 'environmental': return 1;
       case 'safety': return 2;
       case 'infrastructure': return 3;
-      case 'river or lake': return 1;
-      case 'street pavement': return 2;
-      case 'inside home': return 3;
       default: return 1;
     }
   };
@@ -135,7 +192,6 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
     category_id: getCategoryId(incidentData.category || 'Environmental'),
     category: incidentData.category || '',
     sub_category: incidentData.subCategory || '',
-    subcategory: incidentData.subCategory || '',
     short_description: incidentData.shortDescription || '',
     description: incidentData.description || '',
     address: incidentData.address || 'Not specified',
@@ -156,32 +212,26 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
       body: JSON.stringify(requestBody)
     });
 
-    const responseText = await response.text();
-
     if (!response.ok) {
+      const errorText = await response.text();
       let errorMessage = `Failed to create incident: ${response.status}`;
 
       try {
-        const errorJson = JSON.parse(responseText);
-        if (errorJson.data) {
-          const validationErrors = Object.entries(errorJson.data)
-            .map(([field, errors]: [string, any]) => `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
-            .join('; ');
-          errorMessage = `Validation Error: ${validationErrors}`;
-        } else if (errorJson.message) {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.message) {
           errorMessage = errorJson.message;
         }
       } catch (parseError) {
-        errorMessage += ` - ${responseText}`;
+        errorMessage += ` - ${errorText}`;
       }
 
       throw new Error(errorMessage);
     }
 
-    const result = JSON.parse(responseText);
+    const result = await response.json();
 
     if (result.success) {
-      const createdIncident: Incident = {
+      return {
         id: result.data?.id || generateIncidentNumber(),
         number: result.data?.incident_number || generateIncidentNumber(),
         caller: requestBody.caller_name,
@@ -200,146 +250,14 @@ export const createIncidentAPI = async (incidentData: Partial<Incident>): Promis
         postcode: requestBody.postcode,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      };
-
-      return createdIncident;
+      } as Incident;
     } else {
       throw new Error(result.message || 'Failed to create incident');
     }
   } catch (error: any) {
+    console.error('Create incident error:', error);
     throw error;
   }
-};
-
-export const fetchIncidentsAPI = async (userEmail?: string, userTeam?: string): Promise<Incident[]> => {
-  const endpoint = `${API_BASE_URL}/end-user/incident-list`;
-  const token = getStoredToken();
-  const userId = getStoredUserId() || localStorage.getItem('userId') || '13';
-
-
-  try {
-    const formData = new FormData();
-    formData.append('user_id', userId);
-
-    const headers: Record<string, string> = {};
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: headers,
-      body: formData
-    });
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-      let errorMessage = `API Error: ${response.status}`;
-
-      try {
-        const errorJson = JSON.parse(responseText);
-        errorMessage = errorJson.message || errorMessage;
-      } catch (parseError) {
-        errorMessage += ` - ${responseText}`;
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    const result = JSON.parse(responseText);
-
-    if (result.success && result.data) {
-      const transformedIncidents = result.data.map((item: any) => {
-        let status: 'pending' | 'in_progress' | 'resolved' | 'closed' = 'pending';
-
-        if (item.incidentstate_id) {
-          switch (item.incidentstate_id) {
-            case 1: status = 'pending'; break;
-            case 2: status = 'in_progress'; break;
-            case 3: status = 'resolved'; break;
-            case 4: status = 'closed'; break;
-            default: status = 'pending';
-          }
-        }
-
-        const transformedIncident: Incident = {
-          id: String(item.id || generateIncidentNumber()),
-          number: String(item.incident_no || item.incident_number || generateIncidentNumber()),
-          caller: String(item.user?.name || item.caller_name || 'Unknown'),
-          category: String(item.category?.name || item.category || 'Unknown'),
-          subCategory: String(item.subcategory?.name || item.sub_category || item.subcategory || 'Unknown'),
-          shortDescription: String(item.short_description || 'No description'),
-          contactType: String(item.contact_type || 'Email'),
-          impact: String(item.impact?.name || item.impact || 'Medium'),
-          urgency: String(item.urgency?.name || item.urgency || 'Medium'),
-          priority: String(item.priority?.name || item.priority || '3 - Medium'),
-          description: String(item.narration || item.description || item.short_description || 'No description'),
-          status: status,
-          reportedBy: String(item.user?.email || item.reported_by || userEmail || 'Unknown'),
-          reportedByName: String(item.user?.name || item.reported_by_name || 'Unknown'),
-          assignedTo: item.assigned_to ? String(item.assigned_to) : undefined,
-          assignedToEmail: item.assigned_to_email ? String(item.assigned_to_email) : undefined,
-          address: item.address ? String(item.address) : undefined,
-          postcode: item.postcode ? String(item.postcode) : undefined,
-          createdAt: String(item.opened_at || item.created_at || new Date().toISOString()),
-          updatedAt: item.updated_at ? String(item.updated_at) : undefined
-        };
-
-        return transformedIncident;
-      });
-
-      return transformedIncidents;
-    } else {
-
-      // If no incidents or unexpected format, return empty array instead of throwing
-      if (!result.success && result.message === 'No incidents found') {
-        return [];
-      }
-
-      throw new Error(result.message || 'Unexpected response format');
-    }
-  } catch (error: any) {
-
-    // For certain errors, return empty array instead of throwing
-    if (error.message.includes('No incidents found') || error.message.includes('404')) {
-      return [];
-    }
-
-    throw error;
-  }
-};
-
-export const updateIncidentAPI = async (incidentId: string, updates: Partial<Incident>): Promise<Incident> => {
-  const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}`, {
-    method: 'PUT',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
-      ...updates,
-      updatedAt: new Date().toISOString()
-    })
-  });
-
-  return await handleAPIResponse(response);
-};
-
-export const deleteIncidentAPI = async (incidentId: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders()
-  });
-
-  await handleAPIResponse(response);
-};
-
-export const getIncidentByIdAPI = async (incidentId: string): Promise<Incident | null> => {
-  const response = await fetch(`${API_BASE_URL}/incidents/${incidentId}`, {
-    method: 'GET',
-    headers: getAuthHeaders()
-  });
-
-  return await handleAPIResponse(response);
 };
 
 // Utility functions
@@ -349,23 +267,13 @@ export const generateIncidentNumber = (): string => {
   return `IN${timestamp}${random}`;
 };
 
-export const getStatusBadge = (status: string): string => {
+export const getStatusColor = (status: string): string => {
   switch (status) {
-    case 'resolved': return 'success';
-    case 'in_progress': return 'primary';
-    case 'pending': return 'warning';
-    case 'closed': return 'secondary';
-    default: return 'secondary';
-  }
-};
-
-export const getPriorityBadge = (priority: string): string => {
-  switch (priority) {
-    case '1 - Critical': return 'danger';
-    case '2 - High': return 'warning';
-    case '3 - Medium': return 'info';
-    case '4 - Low': return 'success';
-    default: return 'secondary';
+    case 'resolved': return '#10b981';
+    case 'in_progress': return '#3b82f6';
+    case 'pending': return '#f59e0b';
+    case 'closed': return '#6b7280';
+    default: return '#6b7280';
   }
 };
 
@@ -383,16 +291,6 @@ export const getPriorityColor = (priority: string): string => {
   }
 };
 
-export const getStatusColor = (status: string): string => {
-  switch (status) {
-    case 'resolved': return '#10b981';
-    case 'in_progress': return '#3b82f6';
-    case 'pending': return '#f59e0b';
-    case 'closed': return '#6b7280';
-    default: return '#6b7280';
-  }
-};
-
 export const formatDate = (dateString: string): string => {
   try {
     return new Date(dateString).toLocaleString();
@@ -404,7 +302,7 @@ export const formatDate = (dateString: string): string => {
 // Statistics functions
 export const getIncidentStats = (incidents: Incident[]) => {
   const total = incidents.length;
-  const critical = incidents.filter(i => i.priority?.toLowerCase().includes('critical') || i.priority === '1 - Critical').length;
+  const critical = incidents.filter(i => i.priority?.toLowerCase().includes('critical')).length;
   const inProgress = incidents.filter(i => i.status === 'in_progress').length;
   const resolved = incidents.filter(i => i.status === 'resolved').length;
   const pending = incidents.filter(i => i.status === 'pending').length;
@@ -420,74 +318,4 @@ export const getCategoryStats = (incidents: Incident[]) => {
   }, {} as Record<string, number>);
 
   return Object.entries(categories).map(([name, count]) => ({ name, count }));
-};
-
-export const getMonthlyTrends = (incidents: Incident[]) => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  const monthlyData = months.map((month, index) => {
-    const monthIncidents = incidents.filter(incident => {
-      try {
-        const incidentMonth = new Date(incident.createdAt).getMonth();
-        return incidentMonth === index;
-      } catch (error) {
-        return false;
-      }
-    });
-
-    return {
-      month,
-      reported: monthIncidents.length,
-      resolved: monthIncidents.filter(i => i.status === 'resolved').length,
-      inProgress: monthIncidents.filter(i => i.status === 'in_progress').length
-    };
-  });
-
-  return monthlyData;
-};
-
-// Health check function
-export const checkAPIHealth = async (): Promise<boolean> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
-      method: 'GET',
-      headers: getAuthHeaders()
-    });
-    return response.ok;
-  } catch (error) {
-    console.error('API health check failed:', error);
-    return false;
-  }
-};
-
-// Test function to verify API connectivity
-export const testAPIConnection = async (): Promise<{ success: boolean; message: string }> => {
-  try {
-    const token = getStoredToken();
-
-    if (!token) {
-      return { success: false, message: 'No authentication token found' };
-    }
-
-    // Test with a simple endpoint
-    const userId = getStoredUserId();
-    const formData = new FormData();
-    // formData.append('user_id');
-
-    const response = await fetch(`${API_BASE_URL}/end-user/incident-list`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    });
-
-    if (response.ok) {
-      return { success: true, message: 'API connection successful' };
-    } else {
-      return { success: false, message: `API returned status: ${response.status}` };
-    }
-  } catch (error: any) {
-    return { success: false, message: `Connection failed: ${error.message}` };
-  }
 };

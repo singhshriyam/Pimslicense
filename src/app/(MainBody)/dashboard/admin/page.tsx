@@ -1,7 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -18,9 +17,9 @@ import {
 
 import {
   fetchAllUsers,
-  getStoredToken,
-  getStoredUserTeam,
-  getStoredUserName,
+  getCurrentUser,
+  isAuthenticated,
+  clearUserData,
   mapTeamToRole,
   getUserStats as getAPIUserStats,
   User
@@ -29,7 +28,6 @@ import {
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const AdminDashboard = () => {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -39,7 +37,8 @@ const AdminDashboard = () => {
   const [userInfo, setUserInfo] = useState({
     name: '',
     team: '',
-    email: ''
+    email: '',
+    userId: ''
   });
 
   useEffect(() => {
@@ -48,25 +47,28 @@ const AdminDashboard = () => {
         setLoading(true);
         setError(null);
 
-        // Get user info from stored data or session
-        const storedName = getStoredUserName();
-        const storedTeam = getStoredUserTeam();
-        const userEmail = session?.user?.email || '';
+        // Check authentication
+        if (!isAuthenticated()) {
+          router.replace('/auth/login');
+          return;
+        }
 
+        // Get current user
+        const currentUser = getCurrentUser();
         setUserInfo({
-          name: storedName || session?.user?.name || 'Administrator',
-          team: storedTeam || 'Administrator',
-          email: userEmail
+          name: currentUser.name || 'Administrator',
+          team: currentUser.team || 'Administrator',
+          email: currentUser.email || '',
+          userId: currentUser.id || ''
         });
 
         // Fetch all incidents (admins can see all)
-        const userRole = mapTeamToRole(storedTeam || 'admin');
-        const incidentsData = await fetchIncidentsAPI(userEmail, userRole);
+        const userRole = mapTeamToRole(currentUser.team || 'admin');
+        const incidentsData = await fetchIncidentsAPI(currentUser.email, userRole);
         setIncidents(incidentsData);
 
         // Fetch all users for admin management
-        const token = getStoredToken();
-        const usersData = await fetchAllUsers(token || undefined);
+        const usersData = await fetchAllUsers();
         setUsers(usersData);
 
       } catch (err: any) {
@@ -77,10 +79,8 @@ const AdminDashboard = () => {
       }
     };
 
-    if (session?.user?.email) {
-      loadDashboardData();
-    }
-  }, [session?.user?.email]);
+    loadDashboardData();
+  }, [router]);
 
   const stats = getIncidentStats(incidents);
   const categoryStats = getCategoryStats(incidents);

@@ -1,22 +1,21 @@
-// Data/Layout/Menu.tsx - Production Ready Version
+// Data/Layout/Menu.tsx - Complete Version without NextAuth
 import { MenuItem } from "@/Types/Layout.type";
 import { useState, useEffect } from 'react';
-import { useSession } from "next-auth/react";
+
 import { getStoredUserTeam, mapTeamToRole, isAuthenticated } from "../../app/(MainBody)/services/userService";
 
 // User role type definition
 export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'USER' | 'SLA_MANAGER' | 'DEVELOPER';
 
-export interface NextAuthUser {
+export interface User {
   id?: string;
   email?: string;
   name?: string;
   team?: string;
 }
 
-// Enhanced useUserRole hook with proper error handling
+// Enhanced useUserRole hook with localStorage (no NextAuth)
 export const useUserRole = () => {
-  const { data: session, status } = useSession();
   const [currentRole, setCurrentRole] = useState<UserRole>('USER');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,42 +26,22 @@ export const useUserRole = () => {
         setIsLoading(true);
         setError(null);
 
-        if (status === 'loading') {
-          return; // Still loading session
-        }
-
-        if (status === 'unauthenticated') {
+        // Check if user is authenticated using localStorage
+        if (!isAuthenticated()) {
           setCurrentRole('USER');
           setIsLoading(false);
           return;
         }
 
-        if (status === 'authenticated') {
-          // Check if we have valid stored session data
-          if (!isAuthenticated()) {
-            setError('Session data invalid. Please log in again.');
-            setCurrentRole('USER');
-            setIsLoading(false);
-            return;
-          }
+        // Get role from stored data
+        const storedTeam = getStoredUserTeam();
 
-          // Get role from stored data first (more reliable)
-          const storedTeam = getStoredUserTeam();
-          let userTeam = storedTeam;
-
-          // Fallback to session data if stored data not available
-          if (!userTeam && session?.user) {
-            const user = session.user as NextAuthUser;
-            userTeam = user.team;
-          }
-
-          if (!userTeam) {
-            console.warn('No team/role information found, defaulting to USER');
-            setCurrentRole('USER');
-          } else {
-            const mappedRole = mapTeamToRole(userTeam);
-            setCurrentRole(mappedRole as UserRole);
-          }
+        if (!storedTeam) {
+          console.warn('No team/role information found, defaulting to USER');
+          setCurrentRole('USER');
+        } else {
+          const mappedRole = mapTeamToRole(storedTeam);
+          setCurrentRole(mappedRole as UserRole);
         }
 
         setIsLoading(false);
@@ -75,29 +54,27 @@ export const useUserRole = () => {
     };
 
     determineUserRole();
-  }, [session, status]);
+  }, []); // No session dependency
 
   return {
     currentRole,
     isLoading,
-    isAuthenticated: status === 'authenticated' && isAuthenticated(),
-    session,
+    isAuthenticated: isAuthenticated(),
     error,
     getUserInfo: () => {
-      if (status === 'authenticated' && session?.user) {
-        return session.user as NextAuthUser;
+      if (isAuthenticated()) {
+        return {
+          id: localStorage.getItem('userId'),
+          email: localStorage.getItem('userEmail'),
+          name: localStorage.getItem('userName'),
+          team: localStorage.getItem('userTeam')
+        };
       }
       return null;
     },
     getTeamName: () => {
       const storedTeam = getStoredUserTeam();
-      if (storedTeam) return storedTeam;
-
-      if (status === 'authenticated' && session?.user) {
-        return (session.user as NextAuthUser)?.team || 'Unknown Team';
-      }
-
-      return 'Unknown Team';
+      return storedTeam || 'Unknown Team';
     }
   };
 };
@@ -471,15 +448,14 @@ export const getGuestMenu = (): MenuItem[] => {
   return GuestMenuList;
 };
 
-// Function to get menu with NextAuth session data
-export const getMenuBySession = (session: any): MenuItem[] => {
-  if (!session?.user) {
+// Function to get menu with localStorage data (no NextAuth)
+export const getMenuByUser = (): MenuItem[] => {
+  if (!isAuthenticated()) {
     return getGuestMenu();
   }
 
-  const user = session.user as NextAuthUser;
   const storedTeam = getStoredUserTeam();
-  const userTeam = storedTeam || user.team || 'USER';
+  const userTeam = storedTeam || 'USER';
   const role = mapTeamToRole(userTeam) as UserRole;
 
   return getMenuByRole(role);

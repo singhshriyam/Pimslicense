@@ -1,11 +1,14 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import {
+  getCurrentUser,
+  isAuthenticated,
+  clearUserData
+} from '../../services/userService';
 
 const IncidentManagerDashboard = () => {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [userInfo, setUserInfo] = useState({
@@ -18,8 +21,9 @@ const IncidentManagerDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (session?.user) {
-      const user = session.user as any;
+    // Check if user is authenticated using localStorage
+    if (isAuthenticated()) {
+      const user = getCurrentUser();
 
       setUserInfo({
         name: user.name || 'Manager',
@@ -30,10 +34,10 @@ const IncidentManagerDashboard = () => {
 
       setLoading(false);
     } else {
-      // Redirect to login if no session
+      // Redirect to login if not authenticated
       router.replace('/auth/login');
     }
-  }, [session, router]);
+  }, [router]);
 
   const handleViewAllIncidents = () => {
     router.push('/dashboard?tab=all-incidents');
@@ -41,6 +45,11 @@ const IncidentManagerDashboard = () => {
 
   const handleCreateIncident = () => {
     router.push('/dashboard?tab=create-incident');
+  };
+
+  const handleLogout = () => {
+    clearUserData();
+    router.replace('/auth/login');
   };
 
   if (loading) {
@@ -77,8 +86,11 @@ const IncidentManagerDashboard = () => {
                   <Button color="warning" onClick={handleCreateIncident} className="me-2">
                     Create Incident
                   </Button>
-                  <Button color="outline-warning" onClick={handleViewAllIncidents}>
+                  <Button color="outline-warning" onClick={handleViewAllIncidents} className="me-2">
                     Manage All
+                  </Button>
+                  <Button color="outline-danger" size="sm" onClick={handleLogout}>
+                    Logout
                   </Button>
                 </div>
               </div>
@@ -206,7 +218,7 @@ const IncidentManagerDashboard = () => {
                 </div>
                 <div className="col-md-3 mb-3">
                   <div className="d-grid">
-                    <Button color="info">
+                    <Button color="info" onClick={() => window.location.reload()}>
                       🔄 Refresh Data
                     </Button>
                   </div>
@@ -224,21 +236,24 @@ const IncidentManagerDashboard = () => {
         </Col>
       </Row>
 
-      {/* Debug Info - Remove in production */}
+      {/* User Info - Simplified for beginners */}
       <Row>
         <Col lg={12}>
           <Card className="border-info">
             <CardHeader className="bg-info bg-opacity-10">
-              <h6 className="text-info mb-0">🐛 Debug Info (Remove in production)</h6>
+              <h6 className="text-info mb-0">ℹ️ Your Dashboard Info</h6>
             </CardHeader>
             <CardBody>
-              <pre className="bg-light p-3 rounded">
-{JSON.stringify({
-  userInfo,
-  sessionUser: session?.user,
-  currentPath: typeof window !== 'undefined' ? window.location.pathname : 'unknown'
-}, null, 2)}
-              </pre>
+              <div className="row">
+                <div className="col-md-6">
+                  <p><strong>Name:</strong> {userInfo.name}</p>
+                  <p><strong>Email:</strong> {userInfo.email}</p>
+                </div>
+                <div className="col-md-6">
+                  <p><strong>Team:</strong> {userInfo.team}</p>
+                  <p><strong>Role:</strong> Incident Manager</p>
+                </div>
+              </div>
             </CardBody>
           </Card>
         </Col>

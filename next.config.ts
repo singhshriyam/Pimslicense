@@ -7,4 +7,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: false
 };
 
+module.exports = {
+  crossOrigin: 'anonymous',
+}
+
 export default nextConfig;

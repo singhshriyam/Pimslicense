@@ -6,8 +6,8 @@ import { detectLanguage } from "./i18n/server";
 import { I18nProvider } from "./i18n/i18n-context";
 import NextTopLoader from "nextjs-toploader";
 import SessionWrapper from "@/CommonComponent/SessionWrapper";
-import { getServerSession } from "next-auth";
-import { authoption } from "./api/auth/[...nextauth]/authOption";
+
+// import { authoption } from "./api/auth/[...nextauth]/authOption";
 import ErrorBoundary from "@/CommonComponent/ErrorBoundry";
 
 const lexend = Lexend({
@@ -26,7 +26,7 @@ const roboto = Roboto({
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const lng = await detectLanguage();
-  const session = await getServerSession(authoption);
+  // const session = await getServerSession(authoption);
 
   return (
     <I18nProvider language={lng}>
@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <body suppressHydrationWarning={true} className={lexend.className || roboto.className}>
           <ErrorBoundary>
             <NoSsr>
-              <SessionWrapper session={session}>
+              <SessionWrapper>
                 <MainProvider>{children}</MainProvider>
               </SessionWrapper>
             </NoSsr>

@@ -1,7 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -13,11 +12,16 @@ import {
   Incident
 } from '../../services/incidentService';
 
+import {
+  getCurrentUser,
+  isAuthenticated,
+  clearUserData
+} from '../../services/userService';
+
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const EndUserDashboard = () => {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [dashboardData, setDashboardData] = useState({
@@ -31,7 +35,7 @@ const EndUserDashboard = () => {
     error: null as string | null
   });
 
-  const [userInfo, setUserInfo] = useState({
+  const [user, setUser] = useState({
     name: '',
     team: '',
     email: '',
@@ -43,26 +47,23 @@ const EndUserDashboard = () => {
       try {
         setDashboardData(prev => ({ ...prev, loading: true, error: null }));
 
-        if (!session?.user?.email) {
-          setDashboardData(prev => ({
-            ...prev,
-            loading: false,
-            error: 'Please log in to view your dashboard'
-          }));
+        // Check authentication
+        if (!isAuthenticated()) {
+          router.replace('/auth/login');
           return;
         }
 
-        // Get user info from session
-        const user = session.user as any;
-        setUserInfo({
-          name: user.name || 'User',
-          team: user.team || 'End User',
-          email: user.email || '',
-          userId: user.id || ''
+        // Get current user
+        const currentUser = getCurrentUser();
+        setUser({
+          name: currentUser.name || 'User',
+          team: currentUser.team || 'End User',
+          email: currentUser.email || '',
+          userId: currentUser.id || ''
         });
 
-        // Fetch user's incidents using API
-        const userIncidents = await fetchIncidentsAPI(user.email, 'USER');
+        // Fetch user's incidents using your backend API
+        const userIncidents = await fetchIncidentsAPI();
         const stats = getIncidentStats(userIncidents);
 
         setDashboardData({
@@ -86,16 +87,16 @@ const EndUserDashboard = () => {
       }
     };
 
-    if (session?.user) {
-      fetchData();
-    } else {
-      router.replace('/auth/login');
-    }
-  }, [session, router]);
+    fetchData();
+  }, [router]);
 
   // Format date for display
   const formatDateLocal = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Unknown';
+    }
   };
 
   // Pie chart configuration
@@ -150,8 +151,12 @@ const EndUserDashboard = () => {
 
     const monthlyData = months.map((month, index) => {
       const monthIncidents = dashboardData.myIncidents.filter(incident => {
-        const incidentMonth = new Date(incident.createdAt).getMonth();
-        return incidentMonth === index;
+        try {
+          const incidentMonth = new Date(incident.createdAt).getMonth();
+          return incidentMonth === index;
+        } catch (error) {
+          return false;
+        }
       });
 
       return {
@@ -225,31 +230,33 @@ const EndUserDashboard = () => {
   };
 
   const handleRefreshData = async () => {
-    if (session?.user?.email) {
-      const user = session.user as any;
-      try {
-        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
-        const userIncidents = await fetchIncidentsAPI(user.email, 'USER');
-        const stats = getIncidentStats(userIncidents);
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+      const userIncidents = await fetchIncidentsAPI();
+      const stats = getIncidentStats(userIncidents);
 
-        setDashboardData({
-          myIncidents: userIncidents,
-          totalIncidents: stats.total,
-          solvedIncidents: stats.resolved,
-          inProgressIncidents: stats.inProgress,
-          pendingIncidents: stats.pending,
-          closedIncidents: stats.closed,
-          loading: false,
-          error: null
-        });
-      } catch (error: any) {
-        setDashboardData(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message || 'Failed to refresh data'
-        }));
-      }
+      setDashboardData({
+        myIncidents: userIncidents,
+        totalIncidents: stats.total,
+        solvedIncidents: stats.resolved,
+        inProgressIncidents: stats.inProgress,
+        pendingIncidents: stats.pending,
+        closedIncidents: stats.closed,
+        loading: false,
+        error: null
+      });
+    } catch (error: any) {
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to refresh data'
+      }));
     }
+  };
+
+  const handleLogout = () => {
+    clearUserData();
+    router.replace('/auth/login');
   };
 
   if (dashboardData.loading) {
@@ -287,7 +294,7 @@ const EndUserDashboard = () => {
               <CardBody>
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h4 className="mb-1">Welcome back, {userInfo.name}!</h4>
+                    <h4 className="mb-1">Welcome back, {user.name}!</h4>
                   </div>
                 </div>
               </CardBody>
@@ -362,11 +369,13 @@ const EndUserDashboard = () => {
               <CardHeader className="pb-0">
                 <div className="d-flex justify-content-between align-items-center">
                   <h5>My Recent Incidents</h5>
-                  {dashboardData.totalIncidents > 0 && (
-                    <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
-                      View All
-                    </Button>
-                  )}
+                  <div>
+                    {dashboardData.totalIncidents > 0 && (
+                      <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
+                        View All
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardBody>

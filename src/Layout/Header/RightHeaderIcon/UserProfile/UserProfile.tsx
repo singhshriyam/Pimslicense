@@ -1,23 +1,33 @@
 import { Href, ImagePath } from "@/Constant";
 import { userProfileData } from "@/Data/Layout/Header";
-import { signOut, useSession } from "next-auth/react";
+import { getCurrentUser, clearUserData } from "../../../../app/(MainBody)/services/userService";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { LogOut } from "react-feather";
 
 const UserProfile = () => {
-  const { data: session } = useSession();
+  const router = useRouter();
+  const user = getCurrentUser();
 
   const handleLogout = () => {
-    signOut();
+    clearUserData();
+    router.push('/auth/login');
   };
+
   return (
     <li className='profile-nav onhover-dropdown p-0'>
       <div className='d-flex align-items-center profile-media'>
-        <Image className='b-r-10 img-40 img-fluid' width={40} height={40} src={session?.user?.image || `${ImagePath}/dashboard/profile.png`} alt='' />
+        <Image
+          className='b-r-10 img-40 img-fluid'
+          width={40}
+          height={40}
+          src={`${ImagePath}/dashboard/profile.png`}
+          alt='Profile'
+        />
         <div className='flex-grow-1'>
-          <span>{session?.user?.email}</span>
-          <p className='mb-0'>{session?.user?.name || 'user'}</p>
+          <span>{user.email || 'user@example.com'}</span>
+          <p className='mb-0'>{user.name || 'User'}</p>
         </div>
       </div>
       <ul className='profile-dropdown onhover-show-div'>
@@ -39,4 +49,5 @@ const UserProfile = () => {
     </li>
   );
 };
+
 export default UserProfile;

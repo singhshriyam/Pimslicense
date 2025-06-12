@@ -1,98 +1,69 @@
 "use client";
-import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
-import { Container, Row, Col, Button } from "reactstrap";
+import { Container, Row, Col } from "reactstrap";
+import {
+  isAuthenticated,
+  getStoredUserTeam,
+  getUserDashboard,
+  getCurrentUser
+} from "../services/userService";
+
+
 import IncidentCreationForm from "../../../Components/Forms/IncidentCreationForm";
-import AllIncidents from '../../../Components/all-incidents';
+import AllIncidents from "../../../Components/all-incidents";
 
-// Team to dashboard mapping - EXACT MATCHES ONLY
-const getTeamDashboard = (team: string): string => {
-  if (!team) return '/dashboard/enduser';
-
-  const teamLower = team.toLowerCase().trim();
-
-  // Exact matches only
-  if (teamLower === 'incident manager' || teamLower === 'incident_manager') {
-    return '/dashboard/incident_manager';
-  }
-
-  if (teamLower === 'incident handler' || teamLower === 'incident_handler') {
-    return '/dashboard/incident_handler';
-  }
-
-  if (teamLower === 'administrator' || teamLower === 'admin') {
-    return '/dashboard/admin';
-  }
-
-  if (teamLower === 'developer' || teamLower === 'dev') {
-    return '/dashboard/developer';
-  }
-
-  return '/dashboard/enduser';
-};
-
-// All Incidents Component
-const AllIncidentsView = ({
-  onBack,
-  userEmail,
-  userTeam
-}: {
-  onBack: () => void;
-  userEmail: string;
-  userTeam: string;
-}) => {
-  return (
-    <Container fluid className="p-4">
-      <AllIncidents />
-    </Container>
-  );
-};
-
-const DashboardPageContent = () => {
-  const { data: session, status } = useSession();
+const DashboardContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get('tab');
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    if (status === "authenticated" && session?.user) {
-      const user = session.user as any;
-      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-
-      // If we have a tab parameter, don't redirect - show the tab content
-      if (activeTab === 'create-incident' || activeTab === 'all-incidents') {
-        return;
-      }
-
-      // Only redirect if we're on the EXACT '/dashboard' path (not sub-routes)
-      if (currentPath === '/dashboard') {
-        const dashboardRoute = getTeamDashboard(user.team);
-        router.replace(dashboardRoute);
-        return;
-      }
-
-      // If we're on a specific dashboard route (like /dashboard/enduser), do nothing
-      if (currentPath.startsWith('/dashboard/')) {
-        return;
-      }
-    } else if (status === "unauthenticated") {
+    if (!isAuthenticated()) {
       router.replace("/auth/login");
+      return;
     }
-  }, [session, status, router, activeTab]);
 
-  // Show loading while checking authentication
-  if (status === "loading") {
+    // Get current user data
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+
+    const userTeam = currentUser.team || "user";
+    const currentPath = window.location.pathname;
+
+    console.log("User team:", userTeam);
+    console.log("Current path:", currentPath);
+
+    // If we have a tab parameter, don't redirect - show the tab content
+    if (activeTab === 'create-incident' || activeTab === 'all-incidents') {
+      setLoading(false);
+      return;
+    }
+
+    // If on exact '/dashboard' path, redirect to appropriate dashboard
+    if (currentPath === '/dashboard') {
+      const dashboardRoute = getUserDashboard(userTeam);
+      console.log("Redirecting to:", dashboardRoute);
+      router.replace(dashboardRoute);
+      return;
+    }
+
+    setLoading(false);
+  }, [router, activeTab]);
+
+  if (loading) {
     return (
       <Container fluid className="p-0">
         <Row className="m-0">
           <Col xs={12} className="p-0">
             <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "100vh" }}>
               <div className="text-center">
-                <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
+                <div className="spinner-border text-primary" style={{ width: "3rem", height: "3rem" }}>
                   <span className="visually-hidden">Loading...</span>
                 </div>
-                <h5 className="mt-3 text-muted">Checking authentication...</h5>
+                <h5 className="mt-3 text-muted">Loading dashboard...</h5>
               </div>
             </div>
           </Col>
@@ -102,28 +73,25 @@ const DashboardPageContent = () => {
   }
 
   // Show Create Incident Form if tab is active
-  if (status === "authenticated" && session?.user && activeTab === 'create-incident') {
-    const user = session.user as any;
-    const userEmail = user.email || '';
-    const userName = user.name || '';
-    const userTeam = user.team || 'user';
-
+  if (activeTab === 'create-incident') {
     const handleFormCancel = () => {
-      const dashboardRoute = getTeamDashboard(userTeam);
+      const dashboardRoute = getUserDashboard(user?.team || "user");
+      router.push(dashboardRoute);
+    };
+
+    const handleFormSuccess = () => {
+      const dashboardRoute = getUserDashboard(user?.team || "user");
       router.push(dashboardRoute);
     };
 
     return (
       <IncidentCreationForm
-        userRole={userTeam}
-        userEmail={userEmail}
-        userName={userName}
+        userRole={user?.team || 'user'}
+        userEmail={user?.email || ''}
+        userName={user?.name || ''}
         onCancel={handleFormCancel}
         onIncidentCreated={() => {}}
-        onSuccess={() => {
-          const dashboardRoute = getTeamDashboard(userTeam);
-          router.push(dashboardRoute);
-        }}
+        onSuccess={handleFormSuccess}
         showBackButton={true}
         compactMode={false}
       />
@@ -131,39 +99,24 @@ const DashboardPageContent = () => {
   }
 
   // Show All Incidents if tab is active
-  if (status === "authenticated" && session?.user && activeTab === 'all-incidents') {
-    const user = session.user as any;
-    const userEmail = user.email || '';
-    const userTeam = user.team || 'user';
-
-    const handleAllIncidentsBack = () => {
-      const dashboardRoute = getTeamDashboard(userTeam);
-      router.push(dashboardRoute);
-    };
-
-    return (
-      <AllIncidentsView
-        onBack={handleAllIncidentsBack}
-        userEmail={userEmail}
-        userTeam={userTeam}
-      />
-    );
+  if (activeTab === 'all-incidents') {
+    return <AllIncidents />;
   }
 
-  // If we reach here, we're redirecting
+  // Default redirecting state
   return (
     <Container fluid className="p-0">
       <Row className="m-0">
         <Col xs={12} className="p-0">
           <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "100vh" }}>
             <div className="text-center">
-              <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
+              <div className="spinner-border text-primary" style={{ width: "3rem", height: "3rem" }}>
                 <span className="visually-hidden">Loading...</span>
               </div>
               <h5 className="mt-3 text-muted">Redirecting to your dashboard...</h5>
-              {session?.user && (
+              {user && (
                 <p className="text-muted mt-2">
-                  User: {(session.user as any).name} | Team: {(session.user as any).team}
+                  User: {user.name} | Team: {user.team}
                 </p>
               )}
             </div>
@@ -182,7 +135,7 @@ const DashboardPage = () => {
           <Col xs={12} className="p-0">
             <div className="d-flex justify-content-center align-items-center" style={{ minHeight: "100vh" }}>
               <div className="text-center">
-                <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
+                <div className="spinner-border text-primary" style={{ width: "3rem", height: "3rem" }}>
                   <span className="visually-hidden">Loading...</span>
                 </div>
                 <h5 className="mt-3 text-muted">Loading dashboard...</h5>
@@ -192,7 +145,7 @@ const DashboardPage = () => {
         </Row>
       </Container>
     }>
-      <DashboardPageContent />
+      <DashboardContent />
     </Suspense>
   );
 };
