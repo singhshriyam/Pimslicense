@@ -1,28 +1,36 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import {
-  fetchIncidentsAPI,
-  getIncidentStats,
-  formatDate,
-  getStatusColor,
-  getPriorityColor,
-  Incident
-} from '../../services/incidentService';
-
 import {
   getCurrentUser,
   isAuthenticated,
   clearUserData
 } from '../../services/userService';
 
+import {
+  fetchEndUserIncidents,
+  getIncidentStats,
+  getStatusColor,
+  getPriorityColor,
+  formatDate,
+  type Incident
+} from '../../services/incidentService';
+
+// Import the unified AllIncidents component
+import AllIncidents from '../../../../Components/AllIncidents';
+
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const EndUserDashboard = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check if we should show all incidents based on URL parameter
+  const viewParam = searchParams.get('view');
+  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents');
 
   const [dashboardData, setDashboardData] = useState({
     myIncidents: [] as Incident[],
@@ -42,55 +50,62 @@ const EndUserDashboard = () => {
     userId: ''
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+  // Force data refresh function
+  const fetchData = async () => {
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
 
-        // Check authentication
-        if (!isAuthenticated()) {
-          router.replace('/auth/login');
-          return;
-        }
-
-        // Get current user
-        const currentUser = getCurrentUser();
-        setUser({
-          name: currentUser.name || 'User',
-          team: currentUser.team || 'End User',
-          email: currentUser.email || '',
-          userId: currentUser.id || ''
-        });
-
-        // Fetch user's incidents using your backend API
-        const userIncidents = await fetchIncidentsAPI();
-        const stats = getIncidentStats(userIncidents);
-
-        setDashboardData({
-          myIncidents: userIncidents,
-          totalIncidents: stats.total,
-          solvedIncidents: stats.resolved,
-          inProgressIncidents: stats.inProgress,
-          pendingIncidents: stats.pending,
-          closedIncidents: stats.closed,
-          loading: false,
-          error: null
-        });
-
-      } catch (error: any) {
-        console.error('Dashboard fetch error:', error);
-        setDashboardData(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message || 'Failed to load dashboard data'
-        }));
+      // Check authentication
+      if (!isAuthenticated()) {
+        router.replace('/auth/login');
+        return;
       }
-    };
 
+      // Get current user
+      const currentUser = getCurrentUser();
+      setUser({
+        name: currentUser?.name || 'User',
+        team: currentUser?.team || 'End User',
+        email: currentUser?.email || '',
+        userId: currentUser?.id || ''
+      });
+
+      // Fetch user's incidents using unified service
+      const userIncidents = await fetchEndUserIncidents();
+      const stats = getIncidentStats(userIncidents);
+
+      setDashboardData({
+        myIncidents: userIncidents,
+        totalIncidents: stats.total,
+        solvedIncidents: stats.resolved,
+        inProgressIncidents: stats.inProgress,
+        pendingIncidents: stats.pending,
+        closedIncidents: stats.closed,
+        loading: false,
+        error: null
+      });
+
+    } catch (error: any) {
+      console.error('Dashboard fetch error:', error);
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to load dashboard data'
+      }));
+    }
+  };
+
+  useEffect(() => {
     fetchData();
   }, [router]);
 
-  // Format date for display
+  // Update showAllIncidents when URL parameter changes
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view');
+    setShowAllIncidents(currentViewParam === 'all-incidents');
+  }, [searchParams]);
+
+  // Format date for display without time
   const formatDateLocal = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString();
@@ -226,32 +241,23 @@ const EndUserDashboard = () => {
   };
 
   const handleViewAllIncidents = () => {
-    router.push('/dashboard?tab=all-incidents');
+    setShowAllIncidents(true);
+    // Update URL without page refresh
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'all-incidents');
+    window.history.pushState({}, '', newUrl.toString());
+  };
+
+  const handleBackToDashboard = () => {
+    setShowAllIncidents(false);
+    // Update URL without page refresh
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('view');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
   const handleRefreshData = async () => {
-    try {
-      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
-      const userIncidents = await fetchIncidentsAPI();
-      const stats = getIncidentStats(userIncidents);
-
-      setDashboardData({
-        myIncidents: userIncidents,
-        totalIncidents: stats.total,
-        solvedIncidents: stats.resolved,
-        inProgressIncidents: stats.inProgress,
-        pendingIncidents: stats.pending,
-        closedIncidents: stats.closed,
-        loading: false,
-        error: null
-      });
-    } catch (error: any) {
-      setDashboardData(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message || 'Failed to refresh data'
-      }));
-    }
+    await fetchData();
   };
 
   const handleLogout = () => {
@@ -284,6 +290,17 @@ const EndUserDashboard = () => {
     );
   }
 
+  // Render All Incidents View using unified component
+  if (showAllIncidents) {
+    return (
+      <AllIncidents
+        userType="enduser"
+        onBack={handleBackToDashboard}
+      />
+    );
+  }
+
+  // Render Dashboard View (Default)
   return (
     <>
       <Container fluid>
@@ -295,6 +312,11 @@ const EndUserDashboard = () => {
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
                     <h4 className="mb-1">Welcome back, {user.name}!</h4>
+                  </div>
+                  <div>
+                    <Button color="primary" onClick={handleCreateIncident}>
+                      + Report Incident
+                    </Button>
                   </div>
                 </div>
               </CardBody>
@@ -402,7 +424,7 @@ const EndUserDashboard = () => {
                       <thead>
                         <tr>
                           <th scope="col">Incident</th>
-                          <th scope="col">Title</th>
+                          <th scope="col">Category</th>
                           <th scope="col">Status</th>
                           <th scope="col">Assigned To</th>
                           <th scope="col">Reported Date</th>

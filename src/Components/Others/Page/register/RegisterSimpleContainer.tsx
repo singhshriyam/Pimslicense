@@ -1,18 +1,10 @@
 "use client";
-import { CreateAccount, EmailAddress, Password, SignIn, Name, Address } from "@/Constant";
+import { CreateAccount, EmailAddress, Password, SignIn } from "@/Constant";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { Button, Form, FormGroup, Input, Label, Container, Row, Col } from "reactstrap";
-
-// Extend Window interface for timeout
-declare global {
-  interface Window {
-    postcodeTimeout: NodeJS.Timeout;
-    emailCheckTimeout: NodeJS.Timeout;
-  }
-}
+import { Button, Form, FormGroup, Input, Label, Container, Row, Col, Card, CardBody } from "reactstrap";
 
 interface RegisterFormData {
   email: string;
@@ -26,55 +18,68 @@ interface RegisterFormData {
   otp: string;
 }
 
-interface Step {
-  id: number;
-  title: string;
-  completed: boolean;
-}
-
 const RegisterSimpleContainer = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [registrationStatus, setRegistrationStatus] = useState<'form' | 'success' | 'error'>('form');
+  const [registrationError, setRegistrationError] = useState<string>('');
+  const [registrationErrorDetails, setRegistrationErrorDetails] = useState<any>(null);
+
   const [formData, setFormData] = useState<RegisterFormData>({
-    email: "",
-    password: "",
-    password_confirmation: "",
-    address: "",
-    postcode: "",
-    mobile: "",
-    name: "",
-    last_name: "",
-    otp: ""
+    email: "", password: "", password_confirmation: "", address: "", postcode: "",
+    mobile: "", name: "", last_name: "", otp: ""
   });
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [captcha, setCaptcha] = useState<{ question: string; answer: number }>({
-    question: "",
-    answer: 0,
-  });
+  const [captcha, setCaptcha] = useState<{ question: string; answer: number }>({ question: "", answer: 0 });
   const [captchaInput, setCaptchaInput] = useState("");
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [addressLoading, setAddressLoading] = useState(false);
   const [emailChecking, setEmailChecking] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const router = useRouter();
 
-  // EmailJS Configuration
-  const EMAILJS_CONFIG = {
-    serviceId: 'service_h30s1zv',
-    templateId: 'template_xt88g6m',
-    publicKey: 'pwFf0WygEXe4SRTgB'
-  };
-
-  const steps: Step[] = [
+  const steps = [
     { id: 1, title: "Personal Details", completed: currentStep > 1 },
     { id: 2, title: "Contact & Verification", completed: currentStep > 2 },
     { id: 3, title: "Confirmation", completed: false },
   ];
 
-  // Check if email already exists using the users API
+  // Reset functions
+  const handleTryAgain = () => {
+    setRegistrationStatus('form');
+    setRegistrationError('');
+    setRegistrationErrorDetails(null);
+    setCurrentStep(3);
+    setLoading(false);
+  };
+
+  const handleStartOver = () => {
+    setRegistrationStatus('form');
+    setRegistrationError('');
+    setRegistrationErrorDetails(null);
+    setCurrentStep(1);
+    setFormData({
+      email: "", password: "", password_confirmation: "", address: "", postcode: "",
+      mobile: "", name: "", last_name: "", otp: ""
+    });
+    setOtpSent(false);
+    setCaptchaInput("");
+    setErrors({});
+    setLoading(false);
+  };
+
+  // Input change handler
+  const handleInputChange = (field: keyof RegisterFormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  // Check if email already exists
   const checkEmailExists = async (email: string) => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return;
@@ -93,7 +98,6 @@ const RegisterSimpleContainer = () => {
 
       if (response.ok) {
         const users = await response.json();
-
         let userList = [];
         if (Array.isArray(users)) {
           userList = users;
@@ -108,23 +112,13 @@ const RegisterSimpleContainer = () => {
         );
 
         if (emailExists) {
-          setErrors(prev => ({
-            ...prev,
-            email: "This email address is already registered"
-          }));
+          setErrors(prev => ({ ...prev, email: "This email address is already registered" }));
         } else {
           setErrors(prev => {
             const { email, ...rest } = prev;
             return rest;
           });
         }
-      } else if (response.status === 401) {
-        // API requires authentication - disable real-time checking
-        console.log('API requires authentication - email checking disabled');
-        setErrors(prev => {
-          const { email, ...rest } = prev;
-          return rest;
-        });
       } else {
         setErrors(prev => {
           const { email, ...rest } = prev;
@@ -132,7 +126,6 @@ const RegisterSimpleContainer = () => {
         });
       }
     } catch (error) {
-      console.log('Email check failed:', error);
       setErrors(prev => {
         const { email, ...rest } = prev;
         return rest;
@@ -142,18 +135,40 @@ const RegisterSimpleContainer = () => {
     }
   };
 
-  // Handle email input with debounced checking
+  // Auto-populate address based on postcode
+  const autoPopulateAddress = async (postcode: string) => {
+    if (!postcode || postcode.length < 5) return;
+
+    setAddressLoading(true);
+
+    try {
+      const cleanPostcode = postcode.toUpperCase().replace(/\s+/g, '');
+      const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 200 && data.result) {
+          const areaAddress = `${data.result.admin_ward}, ${data.result.admin_district}, ${data.result.admin_county}`;
+          setFormData(prev => ({ ...prev, address: areaAddress }));
+        }
+      }
+    } catch (error) {
+      // Silently fail - user can still enter address manually
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  // Handle email with debounced checking
   const handleEmailChange = (value: string) => {
     handleInputChange('email', value);
 
     if (typeof window !== 'undefined') {
-      clearTimeout(window.emailCheckTimeout);
-
+      clearTimeout((window as any).emailCheckTimeout);
       if (errors.email) {
         setErrors(prev => ({ ...prev, email: "" }));
       }
-
-      window.emailCheckTimeout = setTimeout(() => {
+      (window as any).emailCheckTimeout = setTimeout(() => {
         if (value.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
           checkEmailExists(value);
         }
@@ -161,15 +176,7 @@ const RegisterSimpleContainer = () => {
     }
   };
 
-  // Validate password strength
-  const validatePassword = (password: string): string => {
-    if (!password) return "";
-    if (password.length < 6) return "Password must be at least 6 characters";
-    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return "Password must contain at least one letter and one number";
-    return "";
-  };
-
-  // Handle password change with validation
+  // Handle password with validation
   const handlePasswordChange = (value: string) => {
     handleInputChange('password', value);
 
@@ -183,7 +190,7 @@ const RegisterSimpleContainer = () => {
       });
     }
 
-    // Also check password confirmation if it exists
+    // Check password confirmation if it exists
     if (formData.password_confirmation && value !== formData.password_confirmation) {
       setErrors(prev => ({ ...prev, password_confirmation: "Passwords do not match" }));
     } else if (formData.password_confirmation) {
@@ -194,7 +201,7 @@ const RegisterSimpleContainer = () => {
     }
   };
 
-  // Handle password confirmation change
+  // Handle password confirmation
   const handlePasswordConfirmationChange = (value: string) => {
     handleInputChange('password_confirmation', value);
 
@@ -208,7 +215,69 @@ const RegisterSimpleContainer = () => {
     }
   };
 
-  // Generate random math captcha
+  // Handle postcode with address lookup
+  const handlePostcodeChange = (value: string) => {
+    handleInputChange('postcode', value);
+
+    if (typeof window !== 'undefined') {
+      clearTimeout((window as any).postcodeTimeout);
+      (window as any).postcodeTimeout = setTimeout(() => {
+        if (value.trim().length >= 5) {
+          autoPopulateAddress(value);
+        }
+      }, 500);
+    }
+  };
+
+  // Password validation
+  const validatePassword = (password: string): string => {
+    if (!password) return "Password is required";
+    if (password.length < 6) return "Password must be at least 6 characters";
+    if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) return "Password must contain letters and numbers";
+    return "";
+  };
+
+  // Field validation
+  const validateField = (field: keyof RegisterFormData, value: string): string => {
+    switch (field) {
+      case 'name':
+      case 'last_name':
+        if (!value.trim()) return `${field === 'name' ? 'First' : 'Last'} name is required`;
+        if (value.trim().length < 2) return "Must be at least 2 characters";
+        if (!/^[a-zA-Z\s]+$/.test(value.trim())) return "Only letters allowed";
+        return "";
+      case 'email':
+        if (!value.trim()) return "Email is required";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Invalid email format";
+        return "";
+      case 'mobile':
+        if (!value.trim()) return "Mobile number is required";
+        if (!/^[\+]?[\d\s\-\(\)]{10,}$/.test(value.trim())) return "Invalid mobile number";
+        return "";
+      case 'postcode':
+        if (!value.trim()) return "Postcode is required";
+        if (!/^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$/.test(value.trim())) return "Invalid UK postcode";
+        return "";
+      case 'address':
+        if (!value.trim()) return "Address is required";
+        if (value.trim().length < 10) return "Please enter complete address";
+        return "";
+      case 'password':
+        return validatePassword(value);
+      case 'password_confirmation':
+        if (!value) return "Please confirm password";
+        if (value !== formData.password) return "Passwords do not match";
+        return "";
+      case 'otp':
+        if (!value.trim()) return "OTP is required";
+        if (!/^\d{6}$/.test(value.trim())) return "OTP must be 6 digits";
+        return "";
+      default:
+        return "";
+    }
+  };
+
+  // Generate captcha
   const generateCaptcha = () => {
     const num1 = Math.floor(Math.random() * 20) + 1;
     const num2 = Math.floor(Math.random() * 20) + 1;
@@ -239,56 +308,9 @@ const RegisterSimpleContainer = () => {
     setCaptcha({ question, answer });
   };
 
-  // Auto-populate address based on postcode using free postcodes.io API
-  const autoPopulateAddress = async (postcode: string) => {
-    if (!postcode || postcode.length < 5) return;
-
-    setAddressLoading(true);
-
-    try {
-      const cleanPostcode = postcode.toUpperCase().replace(/\s+/g, '');
-      const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
-
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.status === 200 && data.result) {
-          const areaAddress = `${data.result.admin_ward}, ${data.result.admin_district}, ${data.result.admin_county}`;
-          setFormData(prev => ({
-            ...prev,
-            address: areaAddress
-          }));
-        }
-      }
-    } catch (error) {
-      // Silently fail - user can still enter address manually
-    } finally {
-      setAddressLoading(false);
-    }
-  };
-
-  // Handle postcode input with debounced address lookup
-  const handlePostcodeChange = (value: string) => {
-    handleInputChange('postcode', value);
-
-    if (typeof window !== 'undefined') {
-      clearTimeout(window.postcodeTimeout);
-      window.postcodeTimeout = setTimeout(() => {
-        if (value.trim().length >= 5) {
-          autoPopulateAddress(value);
-        }
-      }, 500);
-    }
-  };
-
-  // Send OTP via EmailJS
+  // Send OTP
   const sendOtp = async () => {
-    if (!formData.email.trim()) {
-      setErrors(prev => ({ ...prev, email: "Please enter your email address first" }));
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       setErrors(prev => ({ ...prev, email: "Please enter a valid email address" }));
       return;
     }
@@ -297,24 +319,20 @@ const RegisterSimpleContainer = () => {
     setLoading(true);
 
     try {
-      const templateParams = {
-        to_email: formData.email,
-        user_name: formData.name || 'User',
-        otp: otp,
-        from_name: 'Registration Team',
-        reply_to: 'noreply@yourapp.com'
-      };
-
       const emailjsResponse = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          service_id: EMAILJS_CONFIG.serviceId,
-          template_id: EMAILJS_CONFIG.templateId,
-          user_id: EMAILJS_CONFIG.publicKey,
-          template_params: templateParams
+          service_id: 'service_h30s1zv',
+          template_id: 'template_xt88g6m',
+          user_id: 'pwFf0WygEXe4SRTgB',
+          template_params: {
+            to_email: formData.email,
+            user_name: formData.name || 'User',
+            otp: otp,
+            from_name: 'Registration Team',
+            reply_to: 'noreply@yourapp.com'
+          }
         })
       });
 
@@ -322,17 +340,14 @@ const RegisterSimpleContainer = () => {
         sessionStorage.setItem('registration_otp', otp);
         sessionStorage.setItem('otp_timestamp', Date.now().toString());
         sessionStorage.setItem('otp_email', formData.email.toLowerCase().trim());
-
         setOtpSent(true);
         toast.success("OTP sent to your email successfully!");
-
-        // Clear any email errors
         setErrors(prev => {
           const { email, ...rest } = prev;
           return rest;
         });
       } else {
-        throw new Error(`EmailJS Error: ${emailjsResponse.status}`);
+        throw new Error('Failed to send OTP');
       }
     } catch (error) {
       setErrors(prev => ({ ...prev, email: "Failed to send OTP. Please try again." }));
@@ -341,98 +356,23 @@ const RegisterSimpleContainer = () => {
     }
   };
 
-  const handleInputChange = (field: keyof RegisterFormData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // Clear error when user starts typing (for non-special fields)
-    if (field !== 'email' && field !== 'password' && field !== 'password_confirmation' && errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
-    }
-  };
-
-  // Validate individual fields with detailed error messages
-  const validateField = (field: keyof RegisterFormData, value: string): string => {
-    switch (field) {
-      case 'name':
-        if (!value.trim()) return "First name is required";
-        if (value.trim().length < 2) return "First name must be at least 2 characters";
-        if (!/^[a-zA-Z\s]+$/.test(value.trim())) return "First name can only contain letters";
-        return "";
-
-      case 'last_name':
-        if (!value.trim()) return "Last name is required";
-        if (value.trim().length < 2) return "Last name must be at least 2 characters";
-        if (!/^[a-zA-Z\s]+$/.test(value.trim())) return "Last name can only contain letters";
-        return "";
-
-      case 'email':
-        if (!value.trim()) return "Email address is required";
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Please enter a valid email address";
-        return "";
-
-      case 'mobile':
-        if (!value.trim()) return "Mobile number is required";
-        if (!/^[\+]?[\d\s\-\(\)]{10,}$/.test(value.trim())) return "Please enter a valid mobile number";
-        return "";
-
-      case 'postcode':
-        if (!value.trim()) return "Postcode is required";
-        if (!/^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$/.test(value.trim())) return "Please enter a valid UK postcode";
-        return "";
-
-      case 'address':
-        if (!value.trim()) return "Address is required";
-        if (value.trim().length < 10) return "Please enter a complete address";
-        return "";
-
-      case 'password':
-        if (!value) return "Password is required";
-        if (value.length < 6) return "Password must be at least 6 characters";
-        if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(value)) return "Password must contain at least one letter and one number";
-        return "";
-
-      case 'password_confirmation':
-        if (!value) return "Please confirm your password";
-        if (value !== formData.password) return "Passwords do not match";
-        return "";
-
-      case 'otp':
-        if (!value.trim()) return "OTP is required";
-        if (!/^\d{6}$/.test(value.trim())) return "OTP must be 6 digits";
-        return "";
-
-      default:
-        return "";
-    }
-  };
-
+  // Validate step
   const validateStep = (step: number): boolean => {
     const newErrors: { [key: string]: string } = {};
 
     switch (step) {
       case 1:
-        const nameError = validateField('name', formData.name);
-        if (nameError) newErrors.name = nameError;
-
-        const lastNameError = validateField('last_name', formData.last_name);
-        if (lastNameError) newErrors.last_name = lastNameError;
-
-        const postcodeError = validateField('postcode', formData.postcode);
-        if (postcodeError) newErrors.postcode = postcodeError;
-
-        const addressError = validateField('address', formData.address);
-        if (addressError) newErrors.address = addressError;
+        ['name', 'last_name', 'postcode', 'address'].forEach(field => {
+          const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
+          if (error) newErrors[field] = error;
+        });
         break;
 
       case 2:
-        const emailError = validateField('email', formData.email);
-        if (emailError) newErrors.email = emailError;
-
-        const mobileError = validateField('mobile', formData.mobile);
-        if (mobileError) newErrors.mobile = mobileError;
+        ['email', 'mobile'].forEach(field => {
+          const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
+          if (error) newErrors[field] = error;
+        });
 
         if (!otpSent) {
           newErrors.otp = "Please send OTP first";
@@ -441,24 +381,20 @@ const RegisterSimpleContainer = () => {
           if (otpError) {
             newErrors.otp = otpError;
           } else {
-            // Validate OTP with additional security checks
             const storedOtp = sessionStorage.getItem('registration_otp');
             const otpTimestamp = sessionStorage.getItem('otp_timestamp');
             const otpEmail = sessionStorage.getItem('otp_email');
 
             if (!storedOtp || formData.otp !== storedOtp) {
-              newErrors.otp = "Invalid OTP. Please check and try again.";
+              newErrors.otp = "Invalid OTP";
             } else if (otpEmail !== formData.email.toLowerCase().trim()) {
-              newErrors.otp = "OTP was sent to a different email address";
-            } else if (otpTimestamp) {
-              const timeElapsed = Date.now() - parseInt(otpTimestamp);
-              if (timeElapsed > 10 * 60 * 1000) { // 10 minutes expiry
-                newErrors.otp = "OTP has expired. Please request a new one.";
-                sessionStorage.removeItem('registration_otp');
-                sessionStorage.removeItem('otp_timestamp');
-                sessionStorage.removeItem('otp_email');
-                setOtpSent(false);
-              }
+              newErrors.otp = "OTP sent to different email";
+            } else if (otpTimestamp && Date.now() - parseInt(otpTimestamp) > 10 * 60 * 1000) {
+              newErrors.otp = "OTP expired. Request new one.";
+              sessionStorage.removeItem('registration_otp');
+              sessionStorage.removeItem('otp_timestamp');
+              sessionStorage.removeItem('otp_email');
+              setOtpSent(false);
             }
           }
         }
@@ -466,16 +402,15 @@ const RegisterSimpleContainer = () => {
         if (!captchaInput.trim()) {
           newErrors.captcha = "Please solve the captcha";
         } else if (parseInt(captchaInput) !== captcha.answer) {
-          newErrors.captcha = "Incorrect answer. Please try again.";
+          newErrors.captcha = "Incorrect answer";
         }
         break;
 
       case 3:
-        const passwordError = validateField('password', formData.password);
-        if (passwordError) newErrors.password = passwordError;
-
-        const confirmPasswordError = validateField('password_confirmation', formData.password_confirmation);
-        if (confirmPasswordError) newErrors.password_confirmation = confirmPasswordError;
+        ['password', 'password_confirmation'].forEach(field => {
+          const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
+          if (error) newErrors[field] = error;
+        });
         break;
     }
 
@@ -486,15 +421,11 @@ const RegisterSimpleContainer = () => {
   const handleNext = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => prev + 1);
-      if (currentStep === 1) {
-        generateCaptcha();
-      }
+      if (currentStep === 1) generateCaptcha();
     }
   };
 
-  const handleBack = () => {
-    setCurrentStep(prev => prev - 1);
-  };
+  const handleBack = () => setCurrentStep(prev => prev - 1);
 
   const refreshCaptcha = () => {
     generateCaptcha();
@@ -502,181 +433,103 @@ const RegisterSimpleContainer = () => {
     setErrors(prev => ({ ...prev, captcha: "" }));
   };
 
-  // FIXED handleSubmit - Uses FormData exactly like Postman
+  // Submit handler
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    if (!validateStep(3)) {
-      return;
-    }
+    if (!validateStep(3)) return;
 
     setLoading(true);
 
     try {
-      // Clean up OTP data from session
-      sessionStorage.removeItem('registration_otp');
-      sessionStorage.removeItem('otp_timestamp');
-      sessionStorage.removeItem('otp_email');
+      // Clean up session
+      ['registration_otp', 'otp_timestamp', 'otp_email'].forEach(key =>
+        sessionStorage.removeItem(key)
+      );
 
-      // Prepare FormData (exactly like your Postman request)
       const apiFormData = new FormData();
-      apiFormData.append('name', formData.name.trim());
-      apiFormData.append('email', formData.email.toLowerCase().trim());
-      apiFormData.append('password', formData.password);
-      apiFormData.append('password_confirmation', formData.password_confirmation);
-      apiFormData.append('address', formData.address.trim());
-      apiFormData.append('postcode', formData.postcode.toUpperCase().trim());
-      apiFormData.append('mobile', formData.mobile.trim());
-      apiFormData.append('last_name', formData.last_name.trim());
+      Object.entries(formData).forEach(([key, value]) => {
+        if (key !== 'otp') {
+          apiFormData.append(key, key === 'email' ? value.toLowerCase().trim() :
+                           key === 'postcode' ? value.toUpperCase().trim() : value.trim());
+        }
+      });
 
-      console.log('Sending FormData to API (matching Postman):');
-      for (let [key, value] of apiFormData.entries()) {
-        console.log(`${key}: ${value}`);
-      }
-
-      // Make the API call exactly like your Postman request
       const response = await fetch('https://apexwpc.apextechno.co.uk/api/signup', {
         method: 'POST',
         headers: {
-          // Don't set Content-Type - let browser set it for FormData
           'Accept': 'application/json',
           'X-Requested-With': 'XMLHttpRequest'
         },
-        body: apiFormData // Use FormData, not JSON
+        body: apiFormData
       });
 
-      console.log('API Response Status:', response.status);
-
-      // Parse response
       let data;
-      const contentType = response.headers.get('content-type');
-
       try {
+        const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           data = await response.json();
         } else {
           const textResponse = await response.text();
-          console.log('Non-JSON response:', textResponse);
           try {
             data = JSON.parse(textResponse);
           } catch {
-            data = {
-              message: textResponse,
-              success: response.ok,
-              status: response.status
-            };
+            data = { message: textResponse, success: response.ok };
           }
         }
-      } catch (parseError) {
-        console.log('Parse error:', parseError);
-        data = { success: response.ok, message: 'Registration response could not be parsed' };
+      } catch {
+        data = { success: response.ok, message: 'Response could not be parsed' };
       }
 
-      console.log('API Response Data:', data);
-
-      // Check for success - API returns 200 even for validation errors, so check data.success
       const isSuccess = (response.ok && data?.success === true) ||
                        data?.status === 'success' ||
-                       (response.status === 201) ||
+                       response.status === 201 ||
                        (data?.message && data.message.toLowerCase().includes('success') && data?.success !== false);
 
       if (isSuccess) {
-        console.log('✅ Registration successful!');
-        toast.success("Account created successfully! Redirecting to login...");
-
-        // Clear form data
-        setFormData({
-          email: "",
-          password: "",
-          password_confirmation: "",
-          address: "",
-          postcode: "",
-          mobile: "",
-          name: "",
-          last_name: "",
-          otp: ""
-        });
-
-        setCurrentStep(1);
-        setOtpSent(false);
-        setCaptchaInput("");
-        setErrors({});
-
-        setTimeout(() => {
-          router.push("/auth/login");
-        }, 2000);
+        setRegistrationStatus('success');
+        toast.success("Account created successfully!");
       } else {
-        console.log('❌ Registration failed');
+        let errorMessage = "Registration failed. Please try again.";
+        let errorDetails = null;
 
-        // Handle specific error messages - API returns 200 with success: false for validation errors
-        if (data?.errors && typeof data.errors === 'object') {
-          console.log('API returned validation errors:', data.errors);
-          const apiErrors: { [key: string]: string } = {};
-
-          Object.keys(data.errors).forEach(key => {
-            const errorMessages = Array.isArray(data.errors[key])
-              ? data.errors[key]
-              : [data.errors[key]];
-            apiErrors[key] = errorMessages.join(', ');
+        // Handle validation errors from API response
+        if (data?.data && typeof data.data === 'object') {
+          const errorArray: string[] = [];
+          Object.entries(data.data).forEach(([field, fieldErrors]) => {
+            const messages = Array.isArray(fieldErrors) ? fieldErrors : [fieldErrors];
+            messages.forEach(msg => errorArray.push(`${field.charAt(0).toUpperCase() + field.slice(1)}: ${msg}`));
           });
 
-          setErrors(apiErrors);
-
-          // Show specific message for email exists
-          if (apiErrors.email && (
-            apiErrors.email.toLowerCase().includes('taken') ||
-            apiErrors.email.toLowerCase().includes('already') ||
-            apiErrors.email.toLowerCase().includes('exists')
-          )) {
-            toast.error("This email address is already registered. Please use a different email or try logging in.");
+          if (data.data.email && Array.isArray(data.data.email)) {
+            const emailError = data.data.email[0];
+            if (emailError.toLowerCase().includes('taken') ||
+                emailError.toLowerCase().includes('already') ||
+                emailError.toLowerCase().includes('exists')) {
+              errorMessage = "Email address is already registered";
+              errorDetails = ["This email is already in use. Please use a different email or try signing in."];
+            } else {
+              errorMessage = "Please correct the following errors:";
+              errorDetails = errorArray;
+            }
           } else {
-            toast.error("Please correct the errors below and try again.");
+            errorMessage = "Please correct the following errors:";
+            errorDetails = errorArray;
           }
-          return; // Exit early to prevent further error handling
+        } else if (data?.message) {
+          errorMessage = Array.isArray(data.message) ? data.message.join(', ') : data.message;
         }
 
-        // Handle single error message
-        if (data?.message) {
-          const message = Array.isArray(data.message) ? data.message.join(', ') : data.message;
-          console.log('API message:', message);
-
-          if (message.toLowerCase().includes('validation error')) {
-            toast.error("Please check your information and correct any errors.");
-          } else if (message.toLowerCase().includes('email') && (
-            message.toLowerCase().includes('taken') ||
-            message.toLowerCase().includes('exists') ||
-            message.toLowerCase().includes('already')
-          )) {
-            setErrors({ email: "This email address is already registered" });
-            toast.error("This email address is already registered. Please use a different email or try logging in.");
-          } else {
-            toast.error(message);
-          }
-          return; // Exit early
-        }
-
-        // Handle other response codes
-        if (response.status === 422) {
-          toast.error("Validation failed. Please check your information and try again.");
-        } else if (response.status === 409) {
-          setErrors({ email: "This email address is already registered" });
-          toast.error("This email address is already registered. Please use a different email or try logging in.");
-        } else if (response.status === 404) {
-          toast.error("Registration service not found. Please contact support.");
-        } else {
-          toast.error(`Registration failed. Please check your information and try again.`);
-        }
+        setRegistrationError(errorMessage);
+        setRegistrationErrorDetails(errorDetails);
+        setRegistrationStatus('error');
       }
-    } catch (error) {
-      console.error('Registration error:', error);
+    } catch (error: any) {
+      let errorMessage = "Network error occurred";
+      let errorDetails = ["Please check your internet connection and try again."];
 
-      if (error.message.includes('CORS')) {
-        toast.error("Unable to connect to registration server due to security restrictions. Please contact support.");
-      } else if (errorMessage.includes('fetch')) {
-        toast.error("Unable to connect to registration server. Please check your internet connection.");
-      } else {
-        toast.error("Network error: Please check your connection and try again.");
-      }
+      setRegistrationError(errorMessage);
+      setRegistrationErrorDetails(errorDetails);
+      setRegistrationStatus('error');
     } finally {
       setLoading(false);
     }
@@ -691,16 +544,132 @@ const RegisterSimpleContainer = () => {
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined') {
-        if (window.postcodeTimeout) {
-          clearTimeout(window.postcodeTimeout);
+        if ((window as any).postcodeTimeout) {
+          clearTimeout((window as any).postcodeTimeout);
         }
-        if (window.emailCheckTimeout) {
-          clearTimeout(window.emailCheckTimeout);
+        if ((window as any).emailCheckTimeout) {
+          clearTimeout((window as any).emailCheckTimeout);
         }
       }
     };
   }, []);
 
+  // Success Page
+  if (registrationStatus === 'success') {
+    return (
+      <Container fluid className="p-0">
+        <Row className="m-0">
+          <Col xs={12} className="p-0">
+            <div className="login-card login-dark">
+              <div className="text-center mb-4">
+                <div className="mb-4">
+                  <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#28a745" strokeWidth="2" className="mb-3">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22,4 12,14.01 9,11.01"/>
+                  </svg>
+                  <h3 className="text-success mb-3">Registration Successful!</h3>
+                  <p className="text-dark mb-4">Welcome aboard! Your account has been created successfully.</p>
+                </div>
+
+                <Card className="bg-light mb-4">
+                  <CardBody>
+                    <h6 className="text-dark mb-3">Account Details:</h6>
+                    <div className="text-start">
+                      <div className="row mb-2">
+                        <div className="col-4"><strong className="text-dark">Name:</strong></div>
+                        <div className="col-8 text-dark">{formData.name} {formData.last_name}</div>
+                      </div>
+                      <div className="row mb-2">
+                        <div className="col-4"><strong className="text-dark">Email:</strong></div>
+                        <div className="col-8 text-dark">{formData.email}</div>
+                      </div>
+                      <div className="row mb-2">
+                        <div className="col-4"><strong className="text-dark">Mobile:</strong></div>
+                        <div className="col-8 text-dark">{formData.mobile}</div>
+                      </div>
+                      <div className="row">
+                        <div className="col-4"><strong className="text-dark">Location:</strong></div>
+                        <div className="col-8 text-dark">{formData.postcode}</div>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
+
+                <div className="d-grid gap-2">
+                  <Button color="success" size="lg" onClick={() => router.push('/auth/login')} className="mb-2">
+                    Sign In to Your Account
+                  </Button>
+                  <Button color="outline-secondary" size="sm" onClick={handleStartOver}>
+                    Register Another Account
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </Container>
+    );
+  }
+
+  // Error Page
+  if (registrationStatus === 'error') {
+    return (
+      <Container fluid className="p-0">
+        <Row className="m-0">
+          <Col xs={12} className="p-0">
+            <div className="login-card login-dark">
+              <div className="login-main">
+                <Link className="logo" href="/">
+                  <h3 className="text-center mb-4 text-dark">Registration Failed</h3>
+                </Link>
+                <div className="text-center mb-4">
+                  <div className="mb-4">
+                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#dc3545" strokeWidth="2" className="mb-3">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="15" y1="9" x2="9" y2="15"/>
+                      <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                  </div>
+                </div>
+
+                {registrationErrorDetails && (
+                  <div className="mb-4">
+                    <h5 className="text-dark text-center mb-3">What went wrong:</h5>
+                    <div className="bg-light p-3 rounded">
+                      {Array.isArray(registrationErrorDetails) ? (
+                        <ul className="mb-0 text-center text-dark">
+                          {registrationErrorDetails.map((error, index) => (
+                            <li key={index} className="mb-2">{error}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-dark mb-0">{registrationErrorDetails}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group mb-0">
+                  <div className="text-end mt-3">
+                    <div className="d-flex gap-2">
+                      <Button type="button" color="outline-secondary" onClick={handleStartOver} className="flex-fill">
+                        Try again
+                      </Button>
+                      <Button type="button" color="outline-info" onClick={() => router.push('/auth/login')} className="flex-fill">
+                        Sign In
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Col>
+        </Row>
+      </Container>
+    );
+  }
+
+  // Main Registration Form
   return (
     <Container fluid className="p-0">
       <Row className="m-0">
@@ -750,31 +719,22 @@ const RegisterSimpleContainer = () => {
                       <h4 className="text-dark">Personal Details</h4>
                       <p className="text-muted">Enter your personal information</p>
 
-                      <FormGroup>
-                        <Label className="col-form-label text-dark">First Name *</Label>
-                        <Input
-                          type="text"
-                          value={formData.name}
-                          onChange={(e) => handleInputChange('name', e.target.value)}
-                          placeholder="Enter your first name"
-                          invalid={!!errors.name}
-                          autoComplete="given-name"
-                        />
-                        {errors.name && <div className="invalid-feedback d-block">{errors.name}</div>}
-                      </FormGroup>
-
-                      <FormGroup>
-                        <Label className="col-form-label text-dark">Last Name *</Label>
-                        <Input
-                          type="text"
-                          value={formData.last_name}
-                          onChange={(e) => handleInputChange('last_name', e.target.value)}
-                          placeholder="Enter your last name"
-                          invalid={!!errors.last_name}
-                          autoComplete="family-name"
-                        />
-                        {errors.last_name && <div className="invalid-feedback d-block">{errors.last_name}</div>}
-                      </FormGroup>
+                      {['name', 'last_name'].map((field) => (
+                        <FormGroup key={field}>
+                          <Label className="col-form-label text-dark">
+                            {field === 'name' ? 'First Name' : 'Last Name'} *
+                          </Label>
+                          <Input
+                            type="text"
+                            value={formData[field as keyof RegisterFormData]}
+                            onChange={(e) => handleInputChange(field as keyof RegisterFormData, e.target.value)}
+                            placeholder={`Enter your ${field === 'name' ? 'first name' : 'last name'}`}
+                            invalid={!!errors[field]}
+                            autoComplete={field === 'name' ? 'given-name' : 'family-name'}
+                          />
+                          {errors[field] && <div className="invalid-feedback d-block">{errors[field]}</div>}
+                        </FormGroup>
+                      ))}
 
                       <FormGroup>
                         <Label className="col-form-label text-dark">Post Code *</Label>
@@ -829,9 +789,8 @@ const RegisterSimpleContainer = () => {
                           type="tel"
                           value={formData.mobile}
                           onChange={(e) => handleInputChange('mobile', e.target.value)}
-                          placeholder="Enter your mobile number (e.g., +44 7123 456789)"
+                          placeholder="Enter your mobile number"
                           invalid={!!errors.mobile}
-                          autoComplete="tel"
                         />
                         {errors.mobile && <div className="invalid-feedback d-block">{errors.mobile}</div>}
                       </FormGroup>
@@ -863,7 +822,7 @@ const RegisterSimpleContainer = () => {
                             disabled={!formData.email.trim() || loading || emailChecking || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) || !!errors.email}
                             style={{ minWidth: '100px' }}
                           >
-                            {loading ? "Sending..." : otpSent ? "Resend OTP" : "Send OTP"}
+                            {loading ? "Sending..." : otpSent ? "Resend" : "Send OTP"}
                           </Button>
                         </div>
                         {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
@@ -880,16 +839,12 @@ const RegisterSimpleContainer = () => {
                             placeholder="Enter 6-digit OTP"
                             maxLength={6}
                             invalid={!!errors.otp}
-                            autoComplete="one-time-code"
                           />
                           {errors.otp && <div className="invalid-feedback d-block">{errors.otp}</div>}
-                          <small className="text-muted">
-                            OTP sent to {formData.email} (valid for 10 minutes)
-                          </small>
+                          <small className="text-muted">OTP sent to {formData.email} (valid for 10 minutes)</small>
                         </FormGroup>
                       )}
 
-                      {/* Captcha */}
                       <FormGroup>
                         <Label className="col-form-label text-dark">Security Check *</Label>
                         <div className="d-flex align-items-center">
@@ -897,14 +852,7 @@ const RegisterSimpleContainer = () => {
                             <span className="bg-light p-2 rounded me-2 fw-bold text-dark border">
                               {captcha.question} = ?
                             </span>
-                            <Button
-                              type="button"
-                              color="link"
-                              size="sm"
-                              onClick={refreshCaptcha}
-                              title="Generate new captcha"
-                              className="text-primary"
-                            >
+                            <Button type="button" color="link" size="sm" onClick={refreshCaptcha} className="text-primary">
                               🔄
                             </Button>
                           </div>
@@ -921,12 +869,8 @@ const RegisterSimpleContainer = () => {
                       </FormGroup>
 
                       <div className="d-flex gap-2 mt-3">
-                        <Button type="button" color="secondary" onClick={handleBack} className="flex-fill">
-                          Back
-                        </Button>
-                        <Button type="button" color="primary" onClick={handleNext} className="flex-fill">
-                          Continue to Password
-                        </Button>
+                        <Button type="button" color="secondary" onClick={handleBack} className="flex-fill">Back</Button>
+                        <Button type="button" color="primary" onClick={handleNext} className="flex-fill">Continue</Button>
                       </div>
                     </div>
                   )}
@@ -944,7 +888,7 @@ const RegisterSimpleContainer = () => {
                             type={showPassword ? "text" : "password"}
                             value={formData.password}
                             onChange={(e) => handlePasswordChange(e.target.value)}
-                            placeholder="Enter your password (min 6 characters)"
+                            placeholder="Enter your password"
                             invalid={!!errors.password}
                             autoComplete="new-password"
                           />
@@ -1002,9 +946,7 @@ const RegisterSimpleContainer = () => {
                       </div>
 
                       <div className="d-flex gap-2 mt-3">
-                        <Button type="button" color="secondary" onClick={handleBack} className="flex-fill">
-                          Back
-                        </Button>
+                        <Button type="button" color="secondary" onClick={handleBack} className="flex-fill">Back</Button>
                         <Button type="submit" color="success" disabled={loading} className="flex-fill">
                           {loading ? (
                             <>

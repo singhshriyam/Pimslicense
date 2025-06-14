@@ -1,27 +1,34 @@
-// src/components/IncidentCreationForm.tsx - Fixed version
+// src/components/IncidentCreationForm.tsx - Complete with Geolocation Support
 "use client";
 import React, { useState } from 'react';
 import { Container, Row, Col, Card, CardBody, Form, FormGroup, Label, Input, Button, Alert } from 'reactstrap';
 
-// Import from the correct path with proper exports
+// Import from the unified service
 import {
-  Incident,
-  createIncidentAPI,
-  generateIncidentNumber
+  createIncident,
+  generateIncidentNumber,
+  type Incident
 } from '../../app/(MainBody)/services/incidentService';
 
+
+import {
+  getCurrentUser
+} from '../../app/(MainBody)/services/userService';
+
 interface IncidentFormData {
-  number: string;
+  incident_no: string;
   caller: string;
-  category: string;
-  subCategory: string;
-  shortDescription: string;
-  contactType: string;
-  impact: string;
-  urgency: string;
+  category_id: string;
+  subcategory_id: string;
+  short_description: string;
+  contact_type_id: string;
+  impact_id: string;
+  urgency_id: string;
   description: string;
   address: string;
   postcode: string;
+  latitude: string;
+  longitude: string;
 }
 
 interface IncidentCreationFormProps {
@@ -46,17 +53,19 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   compactMode = false
 }) => {
   const [formData, setFormData] = useState<IncidentFormData>({
-    number: generateIncidentNumber(),
+    incident_no: generateIncidentNumber(),
     caller: userName || '',
-    category: '',
-    subCategory: '',
-    shortDescription: '',
-    contactType: 'Email',
-    impact: 'Moderate',
-    urgency: 'Medium',
+    category_id: '',
+    subcategory_id: '',
+    short_description: '',
+    contact_type_id: '3', // SelfService
+    impact_id: '1', // Default to Significant
+    urgency_id: '2', // Default to Medium
     description: '',
     address: '',
-    postcode: ''
+    postcode: '',
+    latitude: '',
+    longitude: ''
   });
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -64,48 +73,152 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [loadingAddress, setLoadingAddress] = useState(false);
+  const [loadingLocation, setLoadingLocation] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [locationStatus, setLocationStatus] = useState<string>('');
 
-  // Category and subcategory options
-  const categoryOptions = {
-    'River or lake': [
-      'Water contamination',
-      'Air pollution',
-      'Soil contamination',
-      'Noise pollution',
-      'Chemical spill',
-      'Oil spill',
-      'Sewage overflow'
+  // Category and subcategory options with IDs matching your backend
+  const categoryOptions = [
+    { id: '1', name: 'Inside home' },
+    { id: '2', name: 'Street Pavement' },
+    { id: '3', name: 'SP site' },
+    { id: '4', name: 'Outside drive way /garden' },
+    { id: '5', name: 'River strem or lake' }
+  ];
+
+  const subcategoryOptions: Record<string, Array<{id: string, name: string}>> = {
+    '1': [ // Inside home
+      { id: '1', name: 'Leak from my pipe' },
+      { id: '2', name: 'Toilet/sink /shower issues' },
+      { id: '3', name: 'Sewage spillout' },
+      { id: '4', name: 'Cover or lid is damaged' },
+      { id: '5', name: 'Sewage smell in my home' },
+      { id: '6', name: 'Blocked alarm' }
     ],
-    'Street Pavement': [
-      'Gas leak',
-      'Chemical exposure',
-      'Equipment malfunction',
-      'Fire hazard',
-      'Waste disposal',
-      'Health hazard',
-      'Emergency response'
+    '2': [ // Street Pavement
+      { id: '7', name: 'Manhole blocked /smelly' },
+      { id: '8', name: 'Cover or lid is damaged' },
+      { id: '9', name: 'Smelly sewage over flowing on the street' },
+      { id: '10', name: 'Roadside drain or gully that is blocked' }
     ],
-    'Inside home': [
-      'Leak from my pipe',
-      'Water quality issue',
-      'Plumbing problem',
-      'Drainage issue',
-      'Water pressure problem',
-      'Hot water issue',
-      'Pipe burst'
+    '3': [ // SP site
+      { id: '11', name: 'Mark the site in the map or list of SP sites' }
     ],
-    'Infrastructure': [
-      'Network issue',
-      'Power outage',
-      'Equipment failure',
-      'System maintenance',
-      'Communication problem',
-      'Technical support',
-      'Hardware malfunction'
+    '4': [ // Outside drive way /garden
+      { id: '12', name: 'Leak on my property outside' },
+      { id: '13', name: 'Blocked /smelly manhole on my property' },
+      { id: '14', name: 'Sewage overflow on my property' },
+      { id: '15', name: 'Blocked drain on my property' },
+      { id: '16', name: 'Sewage odour outside my home' }
+    ],
+    '5': [ // River stream or lake
+      // Add subcategories if available
     ]
+  };
+
+  // Contact type options
+  const contactTypeOptions = [
+    { id: '3', name: 'SelfService' },
+    { id: '1', name: 'Phone' },
+    { id: '2', name: 'Email' },
+    { id: '4', name: 'Walk-in' }
+  ];
+
+  // Impact options
+  const impactOptions = [
+    { id: '1', name: 'Significant' },
+    { id: '2', name: 'Moderate' },
+    { id: '3', name: 'Low' }
+  ];
+
+  // Urgency options
+  const urgencyOptions = [
+    { id: '1', name: 'High' },
+    { id: '2', name: 'Medium' },
+    { id: '3', name: 'Low' },
+    { id: '4', name: 'High' } // Note: Your DB shows both id 1 and 4 as "High"
+  ];
+
+  // Get current location using browser geolocation
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    setLoadingLocation(true);
+    setLocationStatus('Getting your location...');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude = position.coords.latitude.toString();
+        const longitude = position.coords.longitude.toString();
+
+        setFormData(prev => ({
+          ...prev,
+          latitude,
+          longitude
+        }));
+
+        setLocationStatus(`Location captured: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
+        setLoadingLocation(false);
+
+        // Optional: Reverse geocode to get address
+        reverseGeocode(latitude, longitude);
+      },
+      (error) => {
+        let errorMessage = 'Unable to get location: ';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += 'Location access denied by user.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += 'Location information unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage += 'Location request timed out.';
+            break;
+          default:
+            errorMessage += 'An unknown error occurred.';
+            break;
+        }
+        setLocationStatus(errorMessage);
+        setLoadingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  // Reverse geocode coordinates to get address (using a simpler approach)
+  const reverseGeocode = async (latitude: string, longitude: string) => {
+    try {
+      // Using Nominatim (free OpenStreetMap geocoding service)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.display_name) {
+          const address = data.display_name;
+          const postcode = data.address?.postcode || '';
+
+          setFormData(prev => ({
+            ...prev,
+            address: address,
+            postcode: postcode
+          }));
+        }
+      }
+    } catch (error) {
+      // Silently fail reverse geocoding - user can still enter address manually
+      console.log('Reverse geocoding failed:', error);
+    }
   };
 
   // Auto-detect address from UK postcode
@@ -125,10 +238,20 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
           result.country
         ].filter(Boolean).join(', ');
 
+        // Also get latitude and longitude from postcode
+        const latitude = result.latitude ? result.latitude.toString() : '';
+        const longitude = result.longitude ? result.longitude.toString() : '';
+
         setFormData(prev => ({
           ...prev,
-          address: fullAddress
+          address: fullAddress,
+          latitude,
+          longitude
         }));
+
+        if (latitude && longitude) {
+          setLocationStatus(`Location from postcode: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
+        }
       }
     } catch (error) {
       // Silently fail postcode lookup
@@ -143,8 +266,8 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
 
-      if (name === 'category') {
-        newData.subCategory = '';
+      if (name === 'category_id') {
+        newData.subcategory_id = '';
       }
 
       if (name === 'postcode' && value.length >= 5) {
@@ -170,18 +293,18 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
       errors.caller = 'Caller name is required';
     }
 
-    if (!formData.category) {
-      errors.category = 'Category is required';
+    if (!formData.category_id) {
+      errors.category_id = 'Category is required';
     }
 
-    if (!formData.subCategory) {
-      errors.subCategory = 'Sub Category is required';
+    if (!formData.subcategory_id) {
+      errors.subcategory_id = 'Sub Category is required';
     }
 
-    if (!formData.shortDescription.trim()) {
-      errors.shortDescription = 'Short description is required';
-    } else if (formData.shortDescription.length < 10) {
-      errors.shortDescription = 'Short description must be at least 10 characters';
+    if (!formData.short_description.trim()) {
+      errors.short_description = 'Short description is required';
+    } else if (formData.short_description.length < 10) {
+      errors.short_description = 'Short description must be at least 10 characters';
     }
 
     if (!formData.description.trim()) {
@@ -223,34 +346,71 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setShowCancelMessage(false);
 
     try {
-      const incidentData: Partial<Incident> = {
-        ...formData,
-        reportedBy: userEmail,
-        reportedByName: userRole,
-        status: 'pending'
+      // Get current user for user_id
+      const currentUser = getCurrentUser();
+
+      // Ensure we have a valid user ID
+      if (!currentUser?.id) {
+        throw new Error('User not authenticated. Please log in again.');
+      }
+
+      const parsedUserId = parseInt(currentUser.id, 10);
+      if (isNaN(parsedUserId)) {
+        throw new Error('Invalid user ID. Please log in again.');
+      }
+
+      // Validate that required fields have values
+      if (!formData.category_id || !formData.subcategory_id) {
+        throw new Error('Category and Sub Category are required');
+      }
+
+      // Prepare data in the format expected by your backend API
+      const incidentData = {
+        user_id: parsedUserId,
+        incidentstate_id: 1, // New
+        urgency_id: parseInt(formData.urgency_id, 10),
+        category_id: parseInt(formData.category_id, 10),
+        subcategory_id: parseInt(formData.subcategory_id, 10),
+        contact_type_id: parseInt(formData.contact_type_id, 10),
+        impact_id: parseInt(formData.impact_id, 10),
+        short_description: formData.short_description,
+        description: formData.description,
+        address: formData.address,
+        postcode: formData.postcode,
+        lat: formData.latitude || null,        // Backend expects 'lat'
+        lng: formData.longitude || null        // Backend expects 'lng'
       };
 
-      const createdIncident = await createIncidentAPI(incidentData);
+      console.log('Form Data:', formData);
+      console.log('Sending incident data:', incidentData);
+
+      const createdIncident = await createIncident(incidentData);
+
+      console.log('Successfully created incident:', createdIncident);
 
       if (onIncidentCreated) {
         onIncidentCreated(createdIncident);
       }
 
+      // Reset form
       setFormData({
-        number: generateIncidentNumber(),
+        incident_no: generateIncidentNumber(),
         caller: userName || '',
-        category: '',
-        subCategory: '',
-        shortDescription: '',
-        contactType: 'Email',
-        impact: 'Moderate',
-        urgency: 'Medium',
+        category_id: '',
+        subcategory_id: '',
+        short_description: '',
+        contact_type_id: '3',
+        impact_id: '1',
+        urgency_id: '2',
         description: '',
         address: '',
-        postcode: ''
+        postcode: '',
+        latitude: '',
+        longitude: ''
       });
 
       setValidationErrors({});
+      setLocationStatus('');
       setShowSuccess(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -262,6 +422,7 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
       }, 5000);
 
     } catch (error: any) {
+      console.error('Create incident error:', error);
       setError(error.message || 'Failed to create incident. Please try again.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
@@ -273,20 +434,23 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setShowConfirmModal(false);
 
     setFormData({
-      number: generateIncidentNumber(),
+      incident_no: generateIncidentNumber(),
       caller: userName || '',
-      category: '',
-      subCategory: '',
-      shortDescription: '',
-      contactType: 'Email',
-      impact: 'Moderate',
-      urgency: 'Medium',
+      category_id: '',
+      subcategory_id: '',
+      short_description: '',
+      contact_type_id: '3',
+      impact_id: '1',
+      urgency_id: '2',
       description: '',
       address: '',
-      postcode: ''
+      postcode: '',
+      latitude: '',
+      longitude: ''
     });
 
     setValidationErrors({});
+    setLocationStatus('');
     setShowCancelMessage(true);
     setShowSuccess(false);
     setError(null);
@@ -298,10 +462,30 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   };
 
   const getSubCategoryOptions = () => {
-    if (!formData.category || !categoryOptions[formData.category as keyof typeof categoryOptions]) {
+    if (!formData.category_id || !subcategoryOptions[formData.category_id]) {
       return [];
     }
-    return categoryOptions[formData.category as keyof typeof categoryOptions];
+    return subcategoryOptions[formData.category_id];
+  };
+
+  const getCategoryName = (id: string) => {
+    const category = categoryOptions.find(cat => cat.id === id);
+    return category?.name || '';
+  };
+
+  const getSubCategoryName = (id: string) => {
+    const subCat = getSubCategoryOptions().find(sub => sub.id === id);
+    return subCat?.name || '';
+  };
+
+  const getImpactName = (id: string) => {
+    const impact = impactOptions.find(imp => imp.id === id);
+    return impact?.name || '';
+  };
+
+  const getUrgencyName = (id: string) => {
+    const urgency = urgencyOptions.find(urg => urg.id === id);
+    return urgency?.name || '';
   };
 
   return (
@@ -352,12 +536,12 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="number">Incident Number *</Label>
+                  <Label for="incident_no">Incident Number *</Label>
                   <Input
                     type="text"
-                    id="number"
-                    name="number"
-                    value={formData.number}
+                    id="incident_no"
+                    name="incident_no"
+                    value={formData.incident_no}
                     onChange={handleInputChange}
                     disabled
                     className="bg-light text-dark fw-bold"
@@ -367,19 +551,18 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
               </Col>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="contactType">Contact Type *</Label>
+                  <Label for="contact_type_id">Contact Type *</Label>
                   <Input
                     type="select"
-                    id="contactType"
-                    name="contactType"
-                    value={formData.contactType}
+                    id="contact_type_id"
+                    name="contact_type_id"
+                    value={formData.contact_type_id}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="Email">Email</option>
-                    <option value="Phone">Phone</option>
-                    <option value="Web">Web Portal</option>
-                    <option value="Walk-in">Walk-in</option>
+                    {contactTypeOptions.map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
                   </Input>
                 </FormGroup>
               </Col>
@@ -406,23 +589,23 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
               </Col>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="category">Category *</Label>
+                  <Label for="category_id">Category *</Label>
                   <Input
                     type="select"
-                    id="category"
-                    name="category"
-                    value={formData.category}
+                    id="category_id"
+                    name="category_id"
+                    value={formData.category_id}
                     onChange={handleInputChange}
                     required
-                    invalid={!!validationErrors.category}
+                    invalid={!!validationErrors.category_id}
                   >
                     <option value="">Select Category</option>
-                    {Object.keys(categoryOptions).map(category => (
-                      <option key={category} value={category}>{category}</option>
+                    {categoryOptions.map(category => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
                     ))}
                   </Input>
-                  {validationErrors.category && (
-                    <div className="invalid-feedback">{validationErrors.category}</div>
+                  {validationErrors.category_id && (
+                    <div className="invalid-feedback">{validationErrors.category_id}</div>
                   )}
                 </FormGroup>
               </Col>
@@ -431,41 +614,41 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="subCategory">Sub Category *</Label>
+                  <Label for="subcategory_id">Sub Category *</Label>
                   <Input
                     type="select"
-                    id="subCategory"
-                    name="subCategory"
-                    value={formData.subCategory}
+                    id="subcategory_id"
+                    name="subcategory_id"
+                    value={formData.subcategory_id}
                     onChange={handleInputChange}
                     required
-                    disabled={!formData.category}
-                    invalid={!!validationErrors.subCategory}
+                    disabled={!formData.category_id}
+                    invalid={!!validationErrors.subcategory_id}
                   >
                     <option value="">Select Sub Category</option>
                     {getSubCategoryOptions().map(subCat => (
-                      <option key={subCat} value={subCat}>{subCat}</option>
+                      <option key={subCat.id} value={subCat.id}>{subCat.name}</option>
                     ))}
                   </Input>
-                  {validationErrors.subCategory && (
-                    <div className="invalid-feedback">{validationErrors.subCategory}</div>
+                  {validationErrors.subcategory_id && (
+                    <div className="invalid-feedback">{validationErrors.subcategory_id}</div>
                   )}
                 </FormGroup>
               </Col>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="impact">Impact *</Label>
+                  <Label for="impact_id">Impact *</Label>
                   <Input
                     type="select"
-                    id="impact"
-                    name="impact"
-                    value={formData.impact}
+                    id="impact_id"
+                    name="impact_id"
+                    value={formData.impact_id}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="Significant">Significant</option>
-                    <option value="Moderate">Moderate</option>
-                    <option value="Low">Low</option>
+                    {impactOptions.map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
                   </Input>
                 </FormGroup>
               </Col>
@@ -474,18 +657,18 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="urgency">Urgency *</Label>
+                  <Label for="urgency_id">Urgency *</Label>
                   <Input
                     type="select"
-                    id="urgency"
-                    name="urgency"
-                    value={formData.urgency}
+                    id="urgency_id"
+                    name="urgency_id"
+                    value={formData.urgency_id}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
+                    {urgencyOptions.map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
                   </Input>
                 </FormGroup>
               </Col>
@@ -520,20 +703,47 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
               <Col md={12}>
                 <FormGroup>
                   <Label for="address">Address/Location *</Label>
-                  <Input
-                    type="text"
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Address will be auto-filled from postcode"
-                    required
-                    invalid={!!validationErrors.address}
-                  />
-                  <small className="text-muted">
+                  <div className="d-flex">
+                    <Input
+                      type="text"
+                      id="address"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      placeholder="Address will be auto-filled from postcode"
+                      required
+                      invalid={!!validationErrors.address}
+                      className="flex-grow-1 me-2"
+                    />
+                    <Button
+                      type="button"
+                      color="primary"
+                      onClick={getCurrentLocation}
+                      disabled={loadingLocation}
+                      className="d-flex align-items-center"
+                      style={{ minWidth: '150px' }}
+                    >
+                      {loadingLocation ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          📍 Get Location
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {locationStatus && (
+                    <small className={`${locationStatus.includes('captured') || locationStatus.includes('postcode') ? 'text-success' : 'text-info'}`}>
+                      {locationStatus}
+                    </small>
+                  )}
+                  <small className="text-muted d-block mt-1">
                     {formData.postcode ?
-                      'Address will be auto-filled from postcode' :
-                      'Enter postcode above for auto-detection'
+                      'Address will be auto-filled from postcode, or click "Get Location" to use your current location' :
+                      'Enter postcode above for auto-detection or click "Get Location" to use your current location'
                     }
                   </small>
                   {validationErrors.address && (
@@ -543,26 +753,40 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
               </Col>
             </Row>
 
+            {/* Location coordinates display (for debugging/confirmation) */}
+            {(formData.latitude && formData.longitude) && (
+              <Row>
+                <Col md={12}>
+                  <div className="bg-light p-2 rounded mb-3">
+                    <small className="text-muted">
+                      <strong>Location Coordinates:</strong> {formData.latitude.substring(0, 10)}, {formData.longitude.substring(0, 10)}
+                      <span className="text-success ms-2">✓ Location will be pinned on map</span>
+                    </small>
+                  </div>
+                </Col>
+              </Row>
+            )}
+
             <Row>
               <Col md={12}>
                 <FormGroup>
-                  <Label for="shortDescription">Short Description *</Label>
+                  <Label for="short_description">Short Description *</Label>
                   <Input
                     type="text"
-                    id="shortDescription"
-                    name="shortDescription"
-                    value={formData.shortDescription}
+                    id="short_description"
+                    name="short_description"
+                    value={formData.short_description}
                     onChange={handleInputChange}
                     placeholder="Brief summary of the incident (min 10 characters)"
                     required
                     maxLength={100}
-                    invalid={!!validationErrors.shortDescription}
+                    invalid={!!validationErrors.short_description}
                   />
                   <small className="text-muted">
-                    {formData.shortDescription.length}/100 characters
+                    {formData.short_description.length}/100 characters
                   </small>
-                  {validationErrors.shortDescription && (
-                    <div className="invalid-feedback">{validationErrors.shortDescription}</div>
+                  {validationErrors.short_description && (
+                    <div className="invalid-feedback">{validationErrors.short_description}</div>
                   )}
                 </FormGroup>
               </Col>
@@ -635,18 +859,24 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                 <div className="bg-light p-3 rounded">
                   <div className="row text-black">
                     <div className="col-6">
-                      <strong>Category:</strong> {formData.category}<br/>
-                      <strong>Sub Category:</strong> {formData.subCategory}<br/>
+                      <strong>Category:</strong> {getCategoryName(formData.category_id)}<br/>
+                      <strong>Sub Category:</strong> {getSubCategoryName(formData.subcategory_id)}<br/>
                     </div>
                     <div className="col-6">
-                      <strong>Impact:</strong> {formData.impact}<br/>
-                      <strong>Urgency:</strong> {formData.urgency}<br/>
+                      <strong>Impact:</strong> {getImpactName(formData.impact_id)}<br/>
+                      <strong>Urgency:</strong> {getUrgencyName(formData.urgency_id)}<br/>
                       <strong>Location:</strong> {formData.address}
                     </div>
                   </div>
                   <div className="mt-2 text-black">
-                    <strong>Description:</strong> {formData.shortDescription}
+                    <strong>Description:</strong> {formData.short_description}
                   </div>
+                  {(formData.latitude && formData.longitude) && (
+                    <div className="mt-2 text-black">
+                      <strong>Coordinates:</strong> {formData.latitude.substring(0, 8)}, {formData.longitude.substring(0, 8)}
+                      <span className="text-success ms-2">📍 Will be pinned on map</span>
+                    </div>
+                  )}
                 </div>
                 <small className="text-black mt-2 d-block">
                   Once submitted, this incident will be assigned a tracking number and sent to the appropriate team for processing.

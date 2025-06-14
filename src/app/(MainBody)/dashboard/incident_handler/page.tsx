@@ -1,155 +1,771 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
+import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Nav, NavItem, NavLink, TabContent, TabPane, Form, FormGroup, Label, Input, Table } from 'reactstrap'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import {
-  fetchIncidentsAPI,
-  getIncidentStats,
-  formatDate,
-  getStatusColor,
-  getPriorityColor,
-  Incident
-} from '../../services/incidentService';
-
 import {
   getCurrentUser,
   isAuthenticated,
   clearUserData
 } from '../../services/userService';
 
+import {
+  fetchHandlerIncidents,
+  getIncidentStats,
+  getStatusColor,
+  getPriorityColor,
+  type Incident
+} from '../../services/incidentService';
+
+// Import the unified AllIncidents component
+import AllIncidents from '../../../../Components/AllIncidents';
+
+// Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const IncidentHandlerDashboard = () => {
   const router = useRouter();
 
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [userInfo, setUserInfo] = useState({
-    name: '',
-    team: '',
-    email: ''
+  const [dashboardData, setDashboardData] = useState({
+    myIncidents: [] as Incident[],
+    totalIncidents: 0,
+    solvedIncidents: 0,
+    inProgressIncidents: 0,
+    pendingIncidents: 0,
+    closedIncidents: 0,
+    loading: true,
+    error: null as string | null
   });
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const [user, setUser] = useState({
+    name: '',
+    team: '',
+    email: '',
+    userId: ''
+  });
 
-        // Check authentication first
+  const [showAllIncidents, setShowAllIncidents] = useState(false);
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const [activeTab, setActiveTab] = useState('edit');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+
+        // Check authentication
         if (!isAuthenticated()) {
           router.replace('/auth/login');
           return;
         }
 
-        // Get user info from localStorage
-        const user = getCurrentUser();
-        setUserInfo({
-          name: user.name || 'Handler',
-          team: user.team || 'Incident Handler',
-          email: user.email || ''
+        // Get current user
+        const currentUser = getCurrentUser();
+        setUser({
+          name: currentUser?.name || 'Handler',
+          team: currentUser?.team || 'Incident Handler',
+          email: currentUser?.email || '',
+          userId: currentUser?.id || ''
         });
 
-        // Fetch incidents for this handler
-        const incidentsData = await fetchIncidentsAPI();
-        setIncidents(incidentsData);
+        // Fetch incidents assigned to this handler using unified service
+        const userIncidents = await fetchHandlerIncidents();
+        const stats = getIncidentStats(userIncidents);
 
-      } catch (err: any) {
-        console.error('Error loading dashboard data:', err);
-        setError(err.message || 'Failed to load dashboard data');
-      } finally {
-        setLoading(false);
+        setDashboardData({
+          myIncidents: userIncidents,
+          totalIncidents: stats.total,
+          solvedIncidents: stats.resolved,
+          inProgressIncidents: stats.inProgress,
+          pendingIncidents: stats.pending,
+          closedIncidents: stats.closed,
+          loading: false,
+          error: null
+        });
+
+      } catch (error: any) {
+        console.error('Dashboard fetch error:', error);
+        setDashboardData(prev => ({
+          ...prev,
+          loading: false,
+          error: error.message || 'Failed to load dashboard data'
+        }));
       }
     };
 
-    loadDashboardData();
+    fetchData();
   }, [router]);
 
-  const stats = getIncidentStats(incidents);
-
-  // Convert incidents to tasks for display
-  const assignedTasks = incidents.map((incident) => ({
-    id: incident.id,
-    title: incident.shortDescription,
-    priority: incident.priority === '1 - Critical' ? 'high' :
-              incident.priority === '2 - High' ? 'high' :
-              incident.priority === '3 - Medium' ? 'medium' : 'low',
-    dueDate: new Date(incident.createdAt).toLocaleDateString(),
-    status: incident.status === 'resolved' ? 'completed' :
-            incident.status === 'in_progress' ? 'active' : 'pending',
-    incident: incident
-  }));
-
-  // Donut chart for task distribution
-  const donutChartOptions = {
-    chart: {
-      type: 'donut' as const,
-      height: 350
-    },
-    labels: ['Completed', 'Active', 'Pending'],
-    colors: ['#10b981', '#3b82f6', '#f59e0b'],
-    legend: {
-      position: 'bottom' as const
-    },
-    plotOptions: {
-      pie: {
-        donut: {
-          size: '70%'
-        }
-      }
+  // Format date for display
+  const formatDateLocal = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Unknown';
     }
   };
 
-  const donutChartSeries = [
-    stats.resolved,
-    stats.inProgress,
-    stats.pending
+  // Pie chart configuration
+  const pieChartSeries = [
+    dashboardData.solvedIncidents,
+    dashboardData.inProgressIncidents,
+    dashboardData.pendingIncidents,
+    dashboardData.closedIncidents
   ];
 
-  // Line chart for performance over time
-  const lineChartOptions = {
+  // Only show non-zero values
+  const nonZeroData: number[] = [];
+  const nonZeroLabels: string[] = [];
+  const allLabels = ['Completed', 'In Progress', 'Pending', 'Closed'];
+  const allColors = ['#10b981', '#3b82f6', '#f59e0b', '#6b7280'];
+  const nonZeroColors: string[] = [];
+
+  pieChartSeries.forEach((value, index) => {
+    if (value > 0) {
+      nonZeroData.push(value);
+      nonZeroLabels.push(allLabels[index]);
+      nonZeroColors.push(allColors[index]);
+    }
+  });
+
+  const pieChartOptions: any = {
     chart: {
-      type: 'line' as const,
-      height: 350,
-      zoom: {
-        enabled: false
+      type: 'pie',
+      height: 350
+    },
+    labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
+    colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
+    legend: {
+      position: 'bottom'
+    },
+    responsive: [{
+      breakpoint: 480,
+      options: {
+        chart: {
+          width: 200
+        },
+        legend: {
+          position: 'bottom'
+        }
       }
+    }]
+  };
+
+  // Monthly trends calculation
+  const getMonthlyTrends = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+    const monthlyData = months.map((month, index) => {
+      const monthIncidents = dashboardData.myIncidents.filter(incident => {
+        try {
+          const incidentMonth = new Date(incident.createdAt).getMonth();
+          return incidentMonth === index;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      return {
+        assigned: monthIncidents.length,
+        completed: monthIncidents.filter(i => i.status === 'resolved').length,
+        inProgress: monthIncidents.filter(i => i.status === 'in_progress').length
+      };
+    });
+
+    return {
+      months,
+      assigned: monthlyData.map(d => d.assigned),
+      completed: monthlyData.map(d => d.completed),
+      inProgress: monthlyData.map(d => d.inProgress)
+    };
+  };
+
+  const { months, assigned, completed, inProgress } = getMonthlyTrends();
+
+  const barChartOptions: any = {
+    chart: {
+      type: 'bar',
+      height: 350
+    },
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        columnWidth: '55%',
+      },
     },
     dataLabels: {
       enabled: false
     },
     stroke: {
-      curve: 'smooth' as const,
-      width: 3
-    },
-    title: {
-      text: 'My Task Completion Trend',
-      align: 'left' as const
-    },
-    grid: {
-      row: {
-        colors: ['#f3f3f3', 'transparent'],
-        opacity: 0.5
-      },
+      show: true,
+      width: 2,
+      colors: ['transparent']
     },
     xaxis: {
-      categories: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6'],
+      categories: months,
     },
-    colors: ['#10b981', '#3b82f6']
+    yaxis: {
+      title: {
+        text: 'Number of Incidents'
+      }
+    },
+    fill: {
+      opacity: 1
+    },
+    colors: ['#3b82f6', '#10b981', '#f59e0b']
   };
 
-  const lineChartSeries = [{
-    name: "Tasks Completed",
-    data: [2, 3, 4, 2, 3, stats.resolved || 0]
+  const barChartSeries = [{
+    name: 'Assigned',
+    data: assigned
   }, {
-    name: "Tasks Assigned",
-    data: [3, 4, 3, 5, 4, stats.total || 0]
+    name: 'Completed',
+    data: completed
+  }, {
+    name: 'In Progress',
+    data: inProgress
   }];
 
+  // Navigation handlers
+  const handleCreateIncident = () => {
+    router.push('/dashboard?tab=create-incident');
+  };
+
   const handleViewAllIncidents = () => {
-    router.push('/dashboard?tab=all-incidents');
+    setShowAllIncidents(true);
+  };
+
+  const handleBackToDashboard = () => {
+    setShowAllIncidents(false);
+  };
+
+  const handleEditIncident = (incident: Incident) => {
+    setEditingIncident(incident);
+    setActiveTab('edit');
+  };
+
+  const handleCloseEdit = () => {
+    setEditingIncident(null);
+    setActiveTab('edit');
+  };
+
+  const handleUpdateIncident = () => {
+    // Handle incident update logic here
+    console.log('Updating incident:', editingIncident);
+    // You would typically make an API call here to update the incident
+    setEditingIncident(null);
+  };
+
+  // If showing all incidents, render the unified AllIncidents component
+  if (showAllIncidents) {
+    return (
+      <AllIncidents
+        userType="handler"
+        onBack={handleBackToDashboard}
+      />
+    );
+  }
+
+  // If editing an incident, show the edit modal
+  if (editingIncident) {
+    return (
+      <Container fluid>
+        <Row>
+          <Col xs={12}>
+            <Card className="mt-4">
+              <CardHeader>
+                <div className="d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0">Edit Incident</h5>
+                  <Button color="secondary" size="sm" onClick={handleCloseEdit}>
+                    ← Back
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardBody>
+                {/* Navigation Tabs */}
+                <Nav tabs className="mb-4">
+                  <NavItem>
+                    <NavLink
+                      className={activeTab === 'edit' ? 'active' : ''}
+                      onClick={() => setActiveTab('edit')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Edit
+                    </NavLink>
+                  </NavItem>
+                  <NavItem>
+                    <NavLink
+                      className={activeTab === 'evidence' ? 'active' : ''}
+                      onClick={() => setActiveTab('evidence')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Evidence
+                    </NavLink>
+                  </NavItem>
+                  <NavItem>
+                    <NavLink
+                      className={activeTab === 'action' ? 'active' : ''}
+                      onClick={() => setActiveTab('action')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      Action
+                    </NavLink>
+                  </NavItem>
+                </Nav>
+
+                {/* Tab Content */}
+                <TabContent activeTab={activeTab}>
+                  {/* Edit Tab */}
+                  <TabPane tabId="edit">
+                    <h5>Edit Incident</h5>
+                    <Form>
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="incidentNo">Incident No</Label>
+                            <Input
+                              type="text"
+                              id="incidentNo"
+                              value={editingIncident.number}
+                              disabled
+                            />
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="contactType">Contact Type</Label>
+                            <Input
+                              type="select"
+                              id="contactType"
+                              defaultValue="SelfService"
+                            >
+                              <option value="SelfService">SelfService</option>
+                              <option value="Phone">Phone</option>
+                              <option value="Email">Email</option>
+                              <option value="Walk-in">Walk-in</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="category">Category</Label>
+                            <Input
+                              type="select"
+                              id="category"
+                              defaultValue={editingIncident.category}
+                            >
+                              <option value="">Select Category</option>
+                              <option value="Hardware">Hardware</option>
+                              <option value="Software">Software</option>
+                              <option value="Network">Network</option>
+                              <option value="Security">Security</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="subCategory">Sub Category</Label>
+                            <Input
+                              type="select"
+                              id="subCategory"
+                              defaultValue={editingIncident.subCategory}
+                            >
+                              <option value="">Select Sub Category</option>
+                              <option value="Desktop">Desktop</option>
+                              <option value="Laptop">Laptop</option>
+                              <option value="Server">Server</option>
+                              <option value="Printer">Printer</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="shortDescription">Short Description</Label>
+                            <Input
+                              type="textarea"
+                              id="shortDescription"
+                              rows="3"
+                              defaultValue={editingIncident.shortDescription}
+                            />
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="description">Description</Label>
+                            <Input
+                              type="textarea"
+                              id="description"
+                              rows="3"
+                              defaultValue={editingIncident.description}
+                            />
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="site">Site <span className="text-danger">*</span></Label>
+                            <Input
+                              type="select"
+                              id="site"
+                              required
+                            >
+                              <option value="">Select Site</option>
+                              <option value="Main Office">Main Office</option>
+                              <option value="Branch 1">Branch 1</option>
+                              <option value="Branch 2">Branch 2</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="asset">Asset <span className="text-danger">*</span></Label>
+                            <Input
+                              type="select"
+                              id="asset"
+                              required
+                            >
+                              <option value="">Select Asset</option>
+                              <option value="Computer">Computer</option>
+                              <option value="Server">Server</option>
+                              <option value="Network Device">Network Device</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="impact">Impact <span className="text-danger">*</span></Label>
+                            <Input
+                              type="select"
+                              id="impact"
+                              required
+                            >
+                              <option value="">Select Impact</option>
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="urgency">Urgency <span className="text-danger">*</span></Label>
+                            <Input
+                              type="select"
+                              id="urgency"
+                              defaultValue={editingIncident.priority}
+                            >
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="incidentState">Incident State <span className="text-danger">*</span></Label>
+                            <Input
+                              type="select"
+                              id="incidentState"
+                              defaultValue={editingIncident.status}
+                            >
+                              <option value="New">New</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="closed">Closed</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="narration">Narration <span className="text-danger">*</span></Label>
+                            <Input
+                              type="textarea"
+                              id="narration"
+                              rows="4"
+                              placeholder="Add your narration here..."
+                            />
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <div className="text-end">
+                        <Button color="primary" onClick={handleUpdateIncident}>
+                          Update Incident
+                        </Button>
+                      </div>
+                    </Form>
+                  </TabPane>
+
+                  {/* Evidence Tab */}
+                  <TabPane tabId="evidence">
+                    <h5>Upload Photo</h5>
+                    <Form className="mb-4">
+                      <FormGroup>
+                        <Label for="photoUpload">Select Photo</Label>
+                        <div className="d-flex align-items-center gap-3">
+                          <Input
+                            type="file"
+                            id="photoUpload"
+                            accept="image/*"
+                            style={{ maxWidth: '300px' }}
+                          />
+                          <Button color="primary">Upload Photo</Button>
+                        </div>
+                      </FormGroup>
+                    </Form>
+
+                    <div className="table-responsive">
+                      <Table>
+                        <thead>
+                          <tr>
+                            <th>Id</th>
+                            <th>Image</th>
+                            <th>Uploaded at</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td colSpan={3} className="text-center text-muted">
+                              No photos uploaded yet
+                            </td>
+                          </tr>
+                        </tbody>
+                      </Table>
+                    </div>
+
+                    <hr className="my-4" />
+
+                    <h5>Ammonia Reading</h5>
+                    <Form className="mb-4">
+                      <Row>
+                        <Col md={4}>
+                          <FormGroup>
+                            <Label for="type">Type</Label>
+                            <Input
+                              type="select"
+                              id="type"
+                              defaultValue="Upstream"
+                            >
+                              <option value="Upstream">Upstream</option>
+                              <option value="Downstream">Downstream</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={4}>
+                          <FormGroup>
+                            <Label for="date">Date</Label>
+                            <Input
+                              type="date"
+                              id="date"
+                              placeholder="dd.mm.yyyy"
+                            />
+                          </FormGroup>
+                        </Col>
+                        <Col md={4}>
+                          <FormGroup>
+                            <Label for="reading">Reading</Label>
+                            <div className="d-flex align-items-center gap-2">
+                              <Input
+                                type="number"
+                                id="reading"
+                                placeholder="Enter reading"
+                              />
+                              <Button color="primary">Submit</Button>
+                            </div>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+                    </Form>
+
+                    <div className="table-responsive">
+                      <Table>
+                        <thead>
+                          <tr>
+                            <th>Id</th>
+                            <th>Type</th>
+                            <th>Reading</th>
+                            <th>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td colSpan={4} className="text-center text-muted">
+                              No readings recorded yet
+                            </td>
+                          </tr>
+                        </tbody>
+                      </Table>
+                    </div>
+                  </TabPane>
+
+                  {/* Action Tab */}
+                  <TabPane tabId="action">
+                    <h5>Action</h5>
+                    <Form className="mb-4">
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="actionType">Action Type</Label>
+                            <Input
+                              type="select"
+                              id="actionType"
+                            >
+                              <option value="">Select Action Type</option>
+                              <option value="Investigation">Investigation</option>
+                              <option value="Resolution">Resolution</option>
+                              <option value="Follow-up">Follow-up</option>
+                              <option value="Escalation">Escalation</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="actionStatus">Action Status</Label>
+                            <Input
+                              type="select"
+                              id="actionStatus"
+                            >
+                              <option value="">Select Action Status</option>
+                              <option value="Open">Open</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="priority">Priority</Label>
+                            <Input
+                              type="select"
+                              id="priority"
+                            >
+                              <option value="">Select Priority</option>
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </Input>
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="raisedOn">Raised On</Label>
+                            <Input
+                              type="date"
+                              id="raisedOn"
+                              placeholder="dd.mm.yyyy"
+                            />
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <Row>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label for="details">Details</Label>
+                            <Input
+                              type="textarea"
+                              id="details"
+                              rows="4"
+                              placeholder="Enter action details..."
+                            />
+                          </FormGroup>
+                        </Col>
+                        <Col md={6}>
+                          <FormGroup>
+                            <Label>
+                              <Input
+                                type="checkbox"
+                                className="me-2"
+                              />
+                              Is Complete
+                            </Label>
+                          </FormGroup>
+                        </Col>
+                      </Row>
+
+                      <div className="text-end">
+                        <Button color="primary">Submit</Button>
+                      </div>
+                    </Form>
+
+                    <hr className="my-4" />
+
+                    <h5>Actions</h5>
+                    <div className="table-responsive">
+                      <Table>
+                        <thead>
+                          <tr>
+                            <th>Action</th>
+                            <th>Raised</th>
+                            <th>Complete</th>
+                            <th>Age</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Detail</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td colSpan={9} className="text-center text-muted">
+                              No actions recorded yet
+                            </td>
+                          </tr>
+                        </tbody>
+                      </Table>
+                    </div>
+                  </TabPane>
+                </TabContent>
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
+      </Container>
+    );
+  }
+
+  const handleRefreshData = async () => {
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+      const userIncidents = await fetchHandlerIncidents();
+      const stats = getIncidentStats(userIncidents);
+
+      setDashboardData({
+        myIncidents: userIncidents,
+        totalIncidents: stats.total,
+        solvedIncidents: stats.resolved,
+        inProgressIncidents: stats.inProgress,
+        pendingIncidents: stats.pending,
+        closedIncidents: stats.closed,
+        loading: false,
+        error: null
+      });
+    } catch (error: any) {
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to refresh data'
+      }));
+    }
   };
 
   const handleLogout = () => {
@@ -157,43 +773,24 @@ const IncidentHandlerDashboard = () => {
     router.replace('/auth/login');
   };
 
-  const getPriorityBadgeClass = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'badge-danger';
-      case 'medium': return 'badge-warning';
-      case 'low': return 'badge-success';
-      default: return 'badge-secondary';
-    }
-  };
-
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'completed': return 'badge-success';
-      case 'active': return 'badge-primary';
-      case 'pending': return 'badge-secondary';
-      default: return 'badge-secondary';
-    }
-  };
-
-  if (loading) {
+  if (dashboardData.loading) {
     return (
       <Container fluid>
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">Loading your dashboard...</span>
           </div>
-          <p className="mt-2 text-muted">Loading your assigned incidents...</p>
         </div>
       </Container>
     );
   }
 
-  if (error) {
+  if (dashboardData.error) {
     return (
       <Container fluid>
         <div className="alert alert-danger mt-3">
-          <strong>Error:</strong> {error}
-          <Button color="link" onClick={() => window.location.reload()} className="p-0 ms-2">
+          <strong>Error:</strong> {dashboardData.error}
+          <Button color="link" onClick={handleRefreshData} className="p-0 ms-2">
             Try again
           </Button>
         </div>
@@ -207,22 +804,11 @@ const IncidentHandlerDashboard = () => {
         {/* Welcome Header */}
         <Row>
           <Col xs={12}>
-            <Card className="mb-4 mt-4 border-success">
-              <CardBody className="bg-success bg-opacity-10">
+            <Card className="mb-4 mt-4">
+              <CardBody>
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h4 className="mb-1 text-success">🔧 Incident Handler Dashboard</h4>
-                    <p className="text-muted mb-0">
-                      Welcome back, <strong>{userInfo.name}</strong>! You are responsible for investigating and resolving incidents.
-                    </p>
-                  </div>
-                  <div>
-                    <Button color="success" onClick={handleViewAllIncidents} className="me-2">
-                      View My Assignments
-                    </Button>
-                    <Button color="outline-danger" size="sm" onClick={handleLogout}>
-                      Logout
-                    </Button>
+                    <h4 className="mb-1">Welcome back, {user.name}!</h4>
                   </div>
                 </div>
               </CardBody>
@@ -232,13 +818,13 @@ const IncidentHandlerDashboard = () => {
 
         {/* Statistics Cards */}
         <Row>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-success">
+          <Col xl={3} md={6} className="box-col-6 mt-3">
+            <Card className="o-hidden">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{stats.total}</h5>
+                      <h5 className="mb-0 counter">{dashboardData.totalIncidents}</h5>
                       <span className="f-light">My Total Assignments</span>
                     </div>
                   </div>
@@ -246,42 +832,42 @@ const IncidentHandlerDashboard = () => {
               </CardBody>
             </Card>
           </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-primary">
+          <Col xl={3} md={6} className="box-col-6 mt-3">
+            <Card className="o-hidden">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-primary">{stats.inProgress}</h5>
-                      <span className="f-light">Active Tasks</span>
+                      <h5 className="mb-0 counter">{dashboardData.solvedIncidents}</h5>
+                      <span className="f-light">Completed</span>
                     </div>
                   </div>
                 </div>
               </CardBody>
             </Card>
           </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-success">
+          <Col xl={3} md={6} className="box-col-6 mt-3">
+            <Card className="o-hidden">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{stats.resolved}</h5>
-                      <span className="f-light">Completed Tasks</span>
+                      <h5 className="mb-0 counter">{dashboardData.inProgressIncidents}</h5>
+                      <span className="f-light">In Progress</span>
                     </div>
                   </div>
                 </div>
               </CardBody>
             </Card>
           </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-warning">
+          <Col xl={3} md={6} className="box-col-6 mt-3">
+            <Card className="o-hidden">
               <CardBody className="b-r-4 card-body">
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-warning">{stats.pending}</h5>
-                      <span className="f-light">Pending Tasks</span>
+                      <h5 className="mb-0 counter">{dashboardData.pendingIncidents}</h5>
+                      <span className="f-light">Pending</span>
                     </div>
                   </div>
                 </div>
@@ -290,19 +876,24 @@ const IncidentHandlerDashboard = () => {
           </Col>
         </Row>
 
+        {/* Main Content */}
         <Row>
           <Col lg={8}>
             <Card>
               <CardHeader className="pb-0">
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5>🚰 My Assigned Water Pollution Incidents</h5>
-                  <Button color="outline-success" size="sm" onClick={handleViewAllIncidents}>
-                    View All
-                  </Button>
+                  <h5>My Assigned Incidents</h5>
+                  <div>
+                    {dashboardData.totalIncidents > 0 && (
+                      <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
+                        View All
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardBody>
-                {assignedTasks.length === 0 ? (
+                {dashboardData.myIncidents.length === 0 ? (
                   <div className="text-center py-5">
                     <div className="mb-3">
                       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
@@ -318,43 +909,53 @@ const IncidentHandlerDashboard = () => {
                   </div>
                 ) : (
                   <div className="table-responsive">
-                    <table className="table table-hover">
-                      <thead className="table-light">
+                    <table className="table table-bordernone">
+                      <thead>
                         <tr>
-                          <th scope="col">Incident Details</th>
-                          <th scope="col">Priority Level</th>
-                          <th scope="col">Reported Date</th>
-                          <th scope="col">Current Status</th>
+                          <th scope="col">Incident</th>
+                          <th scope="col">Description</th>
+                          <th scope="col">Priority</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Assigned Date</th>
                           <th scope="col">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {assignedTasks.slice(0, 10).map((task, index) => (
-                          <tr key={index}>
+                        {dashboardData.myIncidents.slice(0, 3).map((incident) => (
+                          <tr key={incident.id}>
+                            <td>
+                              <span className="fw-medium text-primary">{incident.number}</span>
+                            </td>
                             <td>
                               <div>
-                                <div className="fw-medium">{task.title}</div>
-                                <small className="text-muted">
-                                  {task.incident.number} - {task.incident.category}
-                                </small>
+                                <div className="fw-medium">{incident.shortDescription}</div>
                               </div>
                             </td>
                             <td>
-                              <span className={`badge ${getPriorityBadgeClass(task.priority)}`}>
-                                {task.priority} Priority
-                              </span>
-                            </td>
-                            <td>{task.dueDate}</td>
-                            <td>
-                              <span className={`badge ${getStatusBadgeClass(task.status)}`}>
-                                {task.status}
+                              <span
+                                className="badge"
+                                style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}
+                              >
+                                {incident.priority}
                               </span>
                             </td>
                             <td>
-                              <div className="btn-group" role="group">
-                                <button className="btn btn-sm btn-outline-primary">View</button>
-                                <button className="btn btn-sm btn-primary">Work On</button>
-                              </div>
+                              <span
+                                className="badge"
+                                style={{ backgroundColor: getStatusColor(incident.status || 'pending'), color: 'white' }}
+                              >
+                                {(incident.status || 'pending').replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td>{formatDateLocal(incident.createdAt)}</td>
+                            <td>
+                              <Button
+                                color="primary"
+                                size="sm"
+                                onClick={() => handleEditIncident(incident)}
+                              >
+                                Edit
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -368,15 +969,15 @@ const IncidentHandlerDashboard = () => {
 
           <Col lg={4}>
             <Card>
-              <CardHeader className="pb-0">
-                <h5>📊 My Task Distribution</h5>
+              <CardHeader className="pb-3 pt-3">
+                <h5>Task Overview</h5>
               </CardHeader>
               <CardBody>
-                {stats.total > 0 ? (
+                {dashboardData.totalIncidents > 0 ? (
                   <Chart
-                    options={donutChartOptions}
-                    series={donutChartSeries}
-                    type="donut"
+                    options={pieChartOptions}
+                    series={nonZeroData.length > 0 ? nonZeroData : [1]}
+                    type="pie"
                     height={300}
                   />
                 ) : (
@@ -390,62 +991,27 @@ const IncidentHandlerDashboard = () => {
           </Col>
         </Row>
 
+        {/* Monthly Trends */}
         <Row>
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
-                <h5>📈 My Performance Overview</h5>
+                <h5>My Monthly Performance Trends</h5>
               </CardHeader>
               <CardBody>
-                <Chart
-                  options={lineChartOptions}
-                  series={lineChartSeries}
-                  type="line"
-                  height={350}
-                />
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Quick Actions */}
-        <Row>
-          <Col lg={12}>
-            <Card>
-              <CardHeader className="pb-0">
-                <h5>🚀 Quick Actions</h5>
-              </CardHeader>
-              <CardBody>
-                <div className="row">
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="success" onClick={handleViewAllIncidents}>
-                        📋 View All My Incidents
-                      </Button>
-                    </div>
+                {dashboardData.totalIncidents > 0 ? (
+                  <Chart
+                    options={barChartOptions}
+                    series={barChartSeries}
+                    type="bar"
+                    height={350}
+                  />
+                ) : (
+                  <div className="text-center py-5">
+                    <p className="text-muted">No trend data available yet</p>
+                    <small className="text-muted">No assignments to show trends</small>
                   </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="info">
-                        📊 Generate My Report
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="warning">
-                        🔔 View Notifications
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="secondary">
-                        ⚙️ Update Profile
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </CardBody>
             </Card>
           </Col>

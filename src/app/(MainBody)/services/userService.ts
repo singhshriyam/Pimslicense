@@ -45,8 +45,7 @@ export const mapTeamToRole = (team: string): string => {
   if (teamLower.includes('admin')) return 'ADMINISTRATOR';
   if (teamLower.includes('incident') && teamLower.includes('manager')) return 'INCIDENT_MANAGER';
   if (teamLower.includes('incident') && teamLower.includes('handler')) return 'INCIDENT_HANDLER';
-  if (teamLower.includes('developer')) return 'DEVELOPER';
-  if (teamLower.includes('sla')) return 'SLA_MANAGER';
+  if (teamLower.includes('sla') && teamLower.includes('manager')) return 'SLA_MANAGER';
 
   return 'USER';
 };
@@ -58,8 +57,7 @@ export const getUserDashboard = (team: string): string => {
   if (teamLower.includes('admin')) return '/dashboard/admin';
   if (teamLower.includes('incident') && teamLower.includes('manager')) return '/dashboard/incident_manager';
   if (teamLower.includes('incident') && teamLower.includes('handler')) return '/dashboard/incident_handler';
-  if (teamLower.includes('developer')) return '/dashboard/developer';
-  if (teamLower.includes('sla')) return '/dashboard/developer';
+  if (teamLower.includes('sla') && teamLower.includes('manager')) return '/dashboard/developer';
 
   return '/dashboard/enduser';
 };
@@ -84,7 +82,6 @@ export const filterIncidentsByRole = (incidents: any[], userEmail: string, userT
       return incidents.filter(incident => incident.reportedBy === userEmail);
 
     case 'incident_handler':
-    case 'incident_handeller':
       return incidents.filter(incident => incident.assignedToEmail === userEmail);
 
     case 'administrator':
@@ -97,36 +94,36 @@ export const filterIncidentsByRole = (incidents: any[], userEmail: string, userT
   }
 };
 
-// Test API connection
-export const testAPIConnection = async (): Promise<{ success: boolean; message: string }> => {
-  try {
-    const token = getStoredToken();
+// // Test API connection
+// export const testAPIConnection = async (): Promise<{ success: boolean; message: string }> => {
+//   try {
+//     const token = getStoredToken();
 
-    if (!token) {
-      return { success: false, message: 'No authentication token found' };
-    }
+//     if (!token) {
+//       return { success: false, message: 'No authentication token found' };
+//     }
 
-    const userId = getStoredUserId();
-    const formData = new FormData();
-    formData.append('user_id', userId || '13');
+//     const userId = getStoredUserId();
+//     const formData = new FormData();
+//     formData.append('user_id', userId || '13');
 
-    const response = await fetch('https://apexwpc.apextechno.co.uk/api/end-user/incident-list', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    });
+//     const response = await fetch('https://apexwpc.apextechno.co.uk/api/end-user/incident-list', {
+//       method: 'POST',
+//       headers: {
+//         'Authorization': `Bearer ${token}`
+//       },
+//       body: formData
+//     });
 
-    if (response.ok) {
-      return { success: true, message: 'API connection successful' };
-    } else {
-      return { success: false, message: `API returned status: ${response.status}` };
-    }
-  } catch (error: any) {
-    return { success: false, message: `Connection failed: ${error.message}` };
-  }
-};
+//     if (response.ok) {
+//       return { success: true, message: 'API connection successful' };
+//     } else {
+//       return { success: false, message: `API returned status: ${response.status}` };
+//     }
+//   } catch (error: any) {
+//     return { success: false, message: `Connection failed: ${error.message}` };
+//   }
+// };
 
 // Get current user info from localStorage
 export const getCurrentUser = () => {

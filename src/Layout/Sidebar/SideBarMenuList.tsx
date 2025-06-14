@@ -1,14 +1,12 @@
-// Components/Layout/SideBarMenuList.tsx - Production Ready Version
 import { useAppSelector } from "@/Redux/Hooks";
 import { Fragment, useState, useEffect } from "react";
 import {
   getMenuByRole,
   getGuestMenu,
   useUserRole,
-  filterMenuByPermissions,
-  type MenuItem,
-  type UserRole
+  filterMenuByPermissions
 } from "@/Data/Layout/Menu";
+import { MenuItem } from "@/Types/Layout.type";
 import Menulist from "./Menulist";
 import { useTranslation } from "react-i18next";
 import { Alert } from "reactstrap";
@@ -16,10 +14,9 @@ import { Alert } from "reactstrap";
 const SidebarMenuList = () => {
   const [activeMenu, setActiveMenu] = useState<string[]>([]);
   const [currentMenu, setCurrentMenu] = useState<MenuItem[]>([]);
-  const [menuError, setMenuError] = useState<string | null>(null);
   const { pinedMenu } = useAppSelector((state) => state.layout);
+  const { t } = useTranslation("common");
 
-  // Get user role and authentication status
   const {
     currentRole,
     isLoading,
@@ -27,66 +24,30 @@ const SidebarMenuList = () => {
     error: roleError
   } = useUserRole();
 
-  const { t } = useTranslation("common");
-
-  // Helper function to check if menu should be hidden
   const shouldHideMenu = (mainMenu: MenuItem): boolean => {
-    if (!mainMenu?.Items) return true;
-
-    return mainMenu.Items.every((item) =>
+    return !mainMenu?.Items || mainMenu.Items.every((item: MenuItem) =>
       pinedMenu.includes(item.title || "")
     );
   };
 
-  // Effect to load menu based on authentication and role
   useEffect(() => {
-    const loadMenu = () => {
-      try {
-        setMenuError(null);
+    if (isLoading) return;
 
-        if (isLoading) {
-          // Don't update menu while loading
-          return;
-        }
+    try {
+      let menu: MenuItem[];
 
-        if (roleError) {
-          setMenuError(roleError);
-          setCurrentMenu(getGuestMenu());
-          return;
-        }
-
-        if (!isAuthenticated) {
-          // Show guest menu for unauthenticated users
-          setCurrentMenu(getGuestMenu());
-          return;
-        }
-
-        // Get role-based menu for authenticated users
+      if (!isAuthenticated || roleError) {
+        menu = getGuestMenu();
+      } else {
         const roleBasedMenu = getMenuByRole(currentRole);
-
-        if (!roleBasedMenu || roleBasedMenu.length === 0) {
-          throw new Error(`No menu available for role: ${currentRole}`);
-        }
-
-        // Filter menu based on user permissions
-        const filteredMenu = filterMenuByPermissions(roleBasedMenu, currentRole);
-
-        if (filteredMenu.length === 0) {
-          throw new Error('No accessible menu items found for your role');
-        }
-
-        setCurrentMenu(filteredMenu);
-
-      } catch (error: any) {
-        console.error('Menu loading error:', error);
-        setMenuError(error.message || 'Failed to load menu');
-
-        // Fallback to guest menu on error
-        setCurrentMenu(getGuestMenu());
+        menu = filterMenuByPermissions(roleBasedMenu, currentRole);
       }
-    };
 
-    loadMenu();
+      setCurrentMenu(menu);
+    } catch (error) {
+      console.error('Menu loading error:', error);
+      setCurrentMenu(getGuestMenu());
+    }
   }, [currentRole, isLoading, isAuthenticated, roleError]);
 
   // Loading state
@@ -104,42 +65,20 @@ const SidebarMenuList = () => {
   }
 
   // Error state
-  if (menuError) {
+  if (roleError) {
     return (
-      <>
-        <li className="sidebar-main-title">
-          <div>
-            <Alert color="warning" className="p-2 mb-2">
-              <small>Menu Error: {menuError}</small>
-            </Alert>
-          </div>
-        </li>
-        {/* Still show whatever menu we have */}
-        {currentMenu.map((mainMenu: MenuItem, index) => (
-          <Fragment key={`error-menu-${index}`}>
-            <li className={`sidebar-main-title ${shouldHideMenu(mainMenu) ? "d-none" : ""}`}>
-              <div>
-                <h6 className={mainMenu.lanClass || ""}>
-                  {t(mainMenu.title)}
-                </h6>
-              </div>
-            </li>
-            {mainMenu.Items && (
-              <Menulist
-                menu={mainMenu.Items}
-                activeMenu={activeMenu}
-                setActiveMenu={setActiveMenu}
-                level={0}
-              />
-            )}
-          </Fragment>
-        ))}
-      </>
+      <li className="sidebar-main-title">
+        <div>
+          <Alert color="warning" className="p-2 mb-2">
+            <small>Menu Error: {roleError}</small>
+          </Alert>
+        </div>
+      </li>
     );
   }
 
   // No menu available
-  if (!currentMenu || currentMenu.length === 0) {
+  if (!currentMenu?.length) {
     return (
       <li className="sidebar-main-title">
         <div>
@@ -151,49 +90,13 @@ const SidebarMenuList = () => {
     );
   }
 
-  // Authentication status indicator for unauthenticated users
-  if (!isAuthenticated) {
-    return (
-      <>
-        <li className="sidebar-main-title">
-          <div>
-            <h6 className="text-muted">Please sign in</h6>
-          </div>
-        </li>
-        {currentMenu.map((mainMenu: MenuItem, index) => (
-          <Fragment key={`guest-menu-${index}`}>
-            <li className={`sidebar-main-title ${shouldHideMenu(mainMenu) ? "d-none" : ""}`}>
-              <div>
-                <h6 className={mainMenu.lanClass || ""}>
-                  {t(mainMenu.title)}
-                </h6>
-              </div>
-            </li>
-            {mainMenu.Items && (
-              <Menulist
-                menu={mainMenu.Items}
-                activeMenu={activeMenu}
-                setActiveMenu={setActiveMenu}
-                level={0}
-              />
-            )}
-          </Fragment>
-        ))}
-      </>
-    );
-  }
-
-  // Normal authenticated menu rendering
   return (
     <>
       {currentMenu.map((mainMenu: MenuItem, index) => {
-        // Skip empty menu sections
-        if (!mainMenu.Items || mainMenu.Items.length === 0) {
-          return null;
-        }
+        if (!mainMenu.Items?.length) return null;
 
         return (
-          <Fragment key={`menu-section-${index}-${mainMenu.title}`}>
+          <Fragment key={`menu-${index}-${mainMenu.title}`}>
             <li className={`sidebar-main-title ${shouldHideMenu(mainMenu) ? "d-none" : ""}`}>
               <div>
                 <h6 className={mainMenu.lanClass || ""}>
@@ -210,17 +113,6 @@ const SidebarMenuList = () => {
           </Fragment>
         );
       })}
-
-      {/* Role indicator for debugging in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <li className="sidebar-main-title mt-3">
-          <div>
-            <small className="text-muted">
-              Role: {currentRole}
-            </small>
-          </div>
-        </li>
-      )}
     </>
   );
 };

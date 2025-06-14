@@ -1,11 +1,10 @@
-// Data/Layout/Menu.tsx - Complete Version without NextAuth
+// Data/Layout/Menu.tsx - Simplified Version
 import { MenuItem } from "@/Types/Layout.type";
 import { useState, useEffect } from 'react';
-
 import { getStoredUserTeam, mapTeamToRole, isAuthenticated } from "../../app/(MainBody)/services/userService";
 
 // User role type definition
-export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'USER' | 'SLA_MANAGER' | 'DEVELOPER';
+export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'USER' | 'SLA_MANAGER';
 
 export interface User {
   id?: string;
@@ -14,7 +13,7 @@ export interface User {
   team?: string;
 }
 
-// Enhanced useUserRole hook with localStorage (no NextAuth)
+// Enhanced useUserRole hook with localStorage
 export const useUserRole = () => {
   const [currentRole, setCurrentRole] = useState<UserRole>('USER');
   const [isLoading, setIsLoading] = useState(true);
@@ -26,27 +25,17 @@ export const useUserRole = () => {
         setIsLoading(true);
         setError(null);
 
-        // Check if user is authenticated using localStorage
         if (!isAuthenticated()) {
           setCurrentRole('USER');
           setIsLoading(false);
           return;
         }
 
-        // Get role from stored data
         const storedTeam = getStoredUserTeam();
-
-        if (!storedTeam) {
-          console.warn('No team/role information found, defaulting to USER');
-          setCurrentRole('USER');
-        } else {
-          const mappedRole = mapTeamToRole(storedTeam);
-          setCurrentRole(mappedRole as UserRole);
-        }
-
+        const mappedRole = storedTeam ? mapTeamToRole(storedTeam) : 'USER';
+        setCurrentRole(mappedRole as UserRole);
         setIsLoading(false);
       } catch (error: any) {
-        console.error('Error determining user role:', error);
         setError(error.message || 'Failed to determine user role');
         setCurrentRole('USER');
         setIsLoading(false);
@@ -54,7 +43,7 @@ export const useUserRole = () => {
     };
 
     determineUserRole();
-  }, []); // No session dependency
+  }, []);
 
   return {
     currentRole,
@@ -72,383 +61,220 @@ export const useUserRole = () => {
       }
       return null;
     },
-    getTeamName: () => {
-      const storedTeam = getStoredUserTeam();
-      return storedTeam || 'Unknown Team';
-    }
+    getTeamName: () => getStoredUserTeam() || 'Unknown Team'
   };
 };
 
 // Role utilities with comprehensive permission system
 export const RoleUtils = {
-  // Get dashboard path based on role
   getDefaultDashboard: (role: UserRole): string => {
     const dashboardMap: Record<UserRole, string> = {
       'ADMINISTRATOR': '/dashboard/admin',
       'INCIDENT_MANAGER': '/dashboard/incident_manager',
       'INCIDENT_HANDLER': '/dashboard/incident_handler',
-      'SLA_MANAGER': '/dashboard/sla_manager',
-      'DEVELOPER': '/dashboard/developer',
+      'SLA_MANAGER': '/dashboard/slamanager',
       'USER': '/dashboard/enduser'
     };
-
     return dashboardMap[role] || '/dashboard/enduser';
   },
 
-  // Permission checks
   canAccessAdmin: (role: UserRole): boolean => role === 'ADMINISTRATOR',
-
   canManageUsers: (role: UserRole): boolean => role === 'ADMINISTRATOR',
+  canManageIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER'].includes(role),
+  canHandleIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER'].includes(role),
+  canViewAllIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
+  canCreateIncidents: (role: UserRole): boolean => true,
+  canManageSLA: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
+  canViewReports: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
 
-  canManageIncidents: (role: UserRole): boolean =>
-    ['ADMINISTRATOR', 'INCIDENT_MANAGER'].includes(role),
-
-  canHandleIncidents: (role: UserRole): boolean =>
-    ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER'].includes(role),
-
-  canViewAllIncidents: (role: UserRole): boolean =>
-    ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
-
-  canCreateIncidents: (role: UserRole): boolean => true, // All users can create incidents
-
-  canManageSLA: (role: UserRole): boolean =>
-    ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
-
-  canViewReports: (role: UserRole): boolean =>
-    ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
-
-  // Get role display name
   getRoleDisplayName: (role: UserRole): string => {
     const displayNames: Record<UserRole, string> = {
       'ADMINISTRATOR': 'Administrator',
       'INCIDENT_MANAGER': 'Incident Manager',
       'INCIDENT_HANDLER': 'Incident Handler',
       'SLA_MANAGER': 'SLA Manager',
-      'DEVELOPER': 'Developer',
       'USER': 'End User'
     };
-
     return displayNames[role] || 'User';
   }
 };
 
-// Menu definitions - Production ready with proper validation
+// Helper functions to create menu items with proper typing
+const createMenuItem = (title: string, path: string, icon?: string): MenuItem => ({
+  title,
+  path,
+  icon,
+  type: "link"
+});
+
+const createMenuSection = (title: string, items: MenuItem[]): MenuItem => ({
+  title,
+  Items: items,
+  type: "section"
+});
+
 const AdminMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "Admin Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/admin"
-      }
-    ]
-  },
-  {
-    title: "User Management",
-    Items: [
-      {
-        title: "Users",
-        icon: "user",
-        children: [
-          { title: "All Users", path: "/dashboard/admin/users" },
-          { title: "Create User", path: "/dashboard/admin/users/create" }
-        ]
-      },
-      {
-        title: "Roles & Permissions",
-        icon: "shield",
-        path: "/dashboard/admin/permissions"
-      }
-    ]
-  },
-  {
-    title: "Incident Management",
-    Items: [
-      {
-        title: "Incidents",
-        icon: "alert-triangle",
-        children: [
-          { title: "All Incidents", path: "/dashboard?tab=all-incidents" },
-          { title: "Create Incident", path: "/dashboard?tab=create-incident" },
-          { title: "Reports", path: "/dashboard/admin/reports" }
-        ]
-      }
-    ]
-  },
-  {
-    title: "System",
-    Items: [
-      {
-        title: "Settings",
-        icon: "settings",
-        path: "/dashboard/admin/settings"
-      },
-      {
-        title: "System Health",
-        icon: "activity",
-        path: "/dashboard/admin/health"
-      }
-    ]
-  }
+  createMenuSection("Dashboard", [
+    createMenuItem("Admin Dashboard", "/dashboard/admin")
+  ]),
+  createMenuSection("Management", [
+    {
+      title: "Groups",
+      type: "submenu",
+      children: [
+        createMenuItem("All Groups", "/dashboard?tab=all-groups"),
+        createMenuItem("Create Group", "/dashboard?tab=create-group")
+      ]
+    },
+    {
+      title: "Users",
+      type: "submenu",
+      children: [
+        createMenuItem("All Users", "/dashboard?tab=users")
+      ]
+    },
+    {
+      title: "Roles & Permissions",
+      type: "submenu",
+      children: [
+        createMenuItem("All Roles", "/dashboard?tab=all-roles"),
+        createMenuItem("Create Roles", "/dashboard?tab=create-roles"),
+        createMenuItem("All Permissions", "/dashboard?tab=all-permissions"),
+        createMenuItem("Create Permission", "/dashboard?tab=create-permission")
+      ]
+    }
+  ]),
+  createMenuSection("Incidents", [
+    {
+      title: "Incidents",
+      type: "submenu",
+      children: [
+        createMenuItem("All Incidents", "/dashboard/admin?tab=all-incidents&view=all-incidents"),
+        createMenuItem("Create Incident", "/dashboard?tab=create-incident"),
+        createMenuItem("Manager Registration", "/dashboard?tab=create-manager"),
+        createMenuItem("Handler Registration", "/dashboard?tab=create-handler")
+      ]
+    }
+  ]),
+  createMenuSection("Configuration", [
+    {
+      title: "Master Settings",
+      type: "submenu",
+      children: [
+        createMenuItem("Sub-Category", "/dashboard?tab=subcategory"),
+        createMenuItem("Contact Type", "/dashboard?tab=contact-type"),
+        createMenuItem("Incident State", "/dashboard?tab=state"),
+        createMenuItem("Impact", "/dashboard?tab=impact"),
+        createMenuItem("Urgency", "/dashboard?tab=urgency")
+      ]
+    },
+    {
+      title: "Asset Management",
+      type: "submenu",
+      children: [
+        createMenuItem("Asset State", "/dashboard?tab=asset-state"),
+        createMenuItem("Asset Sub State", "/dashboard?tab=asset-substate"),
+        createMenuItem("Asset Function", "/dashboard?tab=asset-function"),
+        createMenuItem("Asset Location", "/dashboard?tab=asset-location"),
+        createMenuItem("Department", "/dashboard?tab=department"),
+        createMenuItem("Company", "/dashboard?tab=company"),
+        createMenuItem("Stock Room", "/dashboard?tab=stock-room"),
+        createMenuItem("Aisle", "/dashboard?tab=aisle"),
+        createMenuItem("Add Asset", "/dashboard?tab=add-asset")
+      ]
+    },
+    {
+      title: "Site Management",
+      type: "submenu",
+      children: [
+        createMenuItem("Site Type", "/dashboard/admin?tab=site-type"),
+        createMenuItem("Sites", "/dashboard/admin?tab=sites")
+      ]
+    },
+    {
+      title: "SLA Management",
+      type: "submenu",
+      children: [
+        createMenuItem("SLA Definitions", "/dashboard/admin?tab=sla-definitions"),
+        createMenuItem("SLA Conditions", "/dashboard/admin?tab=ssla-conditions")
+      ]
+    }
+  ])
 ];
 
 const IncidentManagerMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "Manager Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/incident_manager"
-      }
-    ]
-  },
-  {
-    title: "Incident Management",
-    Items: [
-      {
-        title: "All Incidents",
-        icon: "alert-triangle",
-        path: "/dashboard?tab=all-incidents"
-      },
-      {
-        title: "Create Incident",
-        icon: "plus-circle",
-        path: "/dashboard?tab=create-incident"
-      },
-      {
-        title: "Assign Incidents",
-        icon: "user-check",
-        path: "/dashboard/management/assign"
-      }
-    ]
-  },
-  {
-    title: "SLA Management",
-    Items: [
-      {
-        title: "Define SLA",
-        icon: "clock",
-        path: "/dashboard/management/sla/define"
-      },
-      {
-        title: "SLA Reports",
-        icon: "bar-chart",
-        path: "/dashboard/management/sla/reports"
-      }
-    ]
-  },
-  {
-    title: "Reports",
-    Items: [
-      {
-        title: "Incident Reports",
-        icon: "file-text",
-        path: "/dashboard/management/reports"
-      }
-    ]
-  }
+  createMenuSection("Dashboard", [
+    createMenuItem("Manager Dashboard", "/dashboard/incident_manager", "dashboard")
+  ]),
+  createMenuSection("Incident Management", [
+    createMenuItem("All Incidents", "/dashboard?tab=all-incidents", "alert-triangle"),
+    createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
+    createMenuItem("Assign Incidents", "/dashboard?tab=assign-incident", "user-check"),
+    createMenuItem("Pending EA approvals", "/dashboard?tab=pending-approval", "alert-triangle")
+  ]),
+  createMenuSection("SLA Management", [
+    createMenuItem("Define SLA", "/dashboard?tab=sla-define", "clock"),
+    createMenuItem("SLA Reports", "/dashboard?tab=sla-report", "bar-chart")
+  ])
 ];
 
 const IncidentHandlerMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "Handler Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/incident_handler"
-      }
-    ]
-  },
-  {
-    title: "My Tasks",
-    Items: [
-      {
-        title: "Assigned Incidents",
-        icon: "list",
-        path: "/dashboard?tab=all-incidents"
-      },
-      {
-        title: "Create Incident",
-        icon: "plus-circle",
-        path: "/dashboard?tab=create-incident"
-      }
-    ]
-  },
-  {
-    title: "Knowledge Base",
-    Items: [
-      {
-        title: "Procedures",
-        icon: "book",
-        path: "/dashboard/handler/procedures"
-      },
-      {
-        title: "FAQ",
-        icon: "help-circle",
-        path: "/dashboard/handler/faq"
-      }
-    ]
-  }
+  createMenuSection("Dashboard", [
+    createMenuItem("Handler Dashboard", "/dashboard/incident_handler", "dashboard")
+  ]),
+  createMenuSection("My Tasks", [
+    createMenuItem("My Incidents", "/dashboard?tab=all-incidents", "list"),
+    createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
+    createMenuItem("Assign to Others", "/dashboard?tab=assign-incident", "plus-circle")
+  ])
 ];
 
 const SLAManagerMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "SLA Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/sla_manager"
-      }
-    ]
-  },
-  {
-    title: "SLA Management",
-    Items: [
-      {
-        title: "All Incidents",
-        icon: "alert-triangle",
-        path: "/dashboard?tab=all-incidents"
-      },
-      {
-        title: "SLA Monitoring",
-        icon: "clock",
-        path: "/dashboard/sla/monitoring"
-      },
-      {
-        title: "SLA Reports",
-        icon: "bar-chart",
-        path: "/dashboard/sla/reports"
-      }
-    ]
-  }
-];
-
-const DeveloperMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "Developer Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/developer"
-      }
-    ]
-  },
-  {
-    title: "Development",
-    Items: [
-      {
-        title: "All Incidents",
-        icon: "alert-triangle",
-        path: "/dashboard?tab=all-incidents"
-      },
-      {
-        title: "Create Incident",
-        icon: "plus-circle",
-        path: "/dashboard?tab=create-incident"
-      },
-      {
-        title: "System Logs",
-        icon: "terminal",
-        path: "/dashboard/developer/logs"
-      }
-    ]
-  }
+  createMenuSection("Dashboard", [
+    createMenuItem("SLA Dashboard", "/dashboard/developer", "dashboard")
+  ]),
+  createMenuSection("SLA Management", [
+    createMenuItem("All Incidents", "/dashboard?tab=all-incidents", "alert-triangle"),
+    createMenuItem("SLA Monitoring", "/dashboard?tab=sla-monitoring", "clock"),
+    createMenuItem("SLA Reports", "/dashboard?tab=sla-reports", "bar-chart")
+  ])
 ];
 
 const EndUserMenuList: MenuItem[] = [
-  {
-    title: "Dashboard",
-    Items: [
-      {
-        title: "My Dashboard",
-        icon: "dashboard",
-        path: "/dashboard/enduser"
-      }
-    ]
-  },
-  {
-    title: "My Incidents",
-    Items: [
-      {
-        title: "Create Incident",
-        icon: "plus-circle",
-        path: "/dashboard?tab=create-incident"
-      },
-      {
-        title: "My Incidents",
-        icon: "list",
-        path: "/dashboard?tab=all-incidents"
-      }
-    ]
-  },
-  {
-    title: "Support",
-    Items: [
-      {
-        title: "Help Center",
-        icon: "help-circle",
-        path: "/dashboard/enduser/help"
-      },
-      {
-        title: "Contact Support",
-        icon: "mail",
-        path: "/dashboard/enduser/contact"
-      }
-    ]
-  }
+  createMenuSection("Dashboard", [
+    createMenuItem("My Dashboard", "/dashboard/enduser", "dashboard")
+  ]),
+  createMenuSection("Incidents", [
+    createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
+    createMenuItem("All Incidents", "/dashboard/enduser?view=all-incidents", "list")
+  ]),
+  createMenuSection("Support", [
+    createMenuItem("Help Center", "/dashboard?view=help", "help-circle"),
+    createMenuItem("Contact Support", "/dashboard?view=support", "mail")
+  ])
 ];
 
-// Guest menu for unauthenticated users
 const GuestMenuList: MenuItem[] = [
-  {
-    title: "Authentication",
-    Items: [
-      {
-        title: "Login",
-        icon: "log-in",
-        path: "/auth/login",
-      },
-      {
-        title: "Register",
-        icon: "user-plus",
-        path: "/auth/register",
-      }
-    ]
-  }
+  createMenuSection("Authentication", [
+    createMenuItem("Login", "/auth/login", "log-in"),
+    createMenuItem("Register", "/auth/register", "user-plus")
+  ])
 ];
 
-// Function to get menu based on user role with validation
+// Main functions
 export const getMenuByRole = (userRole: UserRole): MenuItem[] => {
   const menuMap: Record<UserRole, MenuItem[]> = {
     'ADMINISTRATOR': AdminMenuList,
     'INCIDENT_MANAGER': IncidentManagerMenuList,
     'INCIDENT_HANDLER': IncidentHandlerMenuList,
     'SLA_MANAGER': SLAManagerMenuList,
-    'DEVELOPER': DeveloperMenuList,
     'USER': EndUserMenuList
   };
-
-  const menu = menuMap[userRole];
-
-  if (!menu) {
-    console.warn(`No menu found for role: ${userRole}, defaulting to EndUser menu`);
-    return EndUserMenuList;
-  }
-
-  return menu;
+  return menuMap[userRole] || EndUserMenuList;
 };
 
-// Function to get menu for unauthenticated users
-export const getGuestMenu = (): MenuItem[] => {
-  return GuestMenuList;
-};
+export const getGuestMenu = (): MenuItem[] => GuestMenuList;
 
-// Function to get menu with localStorage data (no NextAuth)
 export const getMenuByUser = (): MenuItem[] => {
   if (!isAuthenticated()) {
     return getGuestMenu();
@@ -461,7 +287,6 @@ export const getMenuByUser = (): MenuItem[] => {
   return getMenuByRole(role);
 };
 
-// Menu validation function
 export const validateMenuItem = (item: MenuItem): boolean => {
   if (!item.title) return false;
 
@@ -476,29 +301,22 @@ export const validateMenuItem = (item: MenuItem): boolean => {
   return true;
 };
 
-// Function to filter menu items based on permissions
 export const filterMenuByPermissions = (menu: MenuItem[], userRole: UserRole): MenuItem[] => {
   return menu.filter(menuSection => {
     if (!validateMenuItem(menuSection)) {
-      console.warn(`Invalid menu item found: ${menuSection.title}`);
       return false;
     }
 
-    // Filter menu items based on role permissions
     const filteredItems = menuSection.Items?.filter(item => {
-      // Basic permission checks
       if (item.path?.includes('/admin/') && !RoleUtils.canAccessAdmin(userRole)) {
         return false;
       }
-
       if (item.path?.includes('/management/') && !RoleUtils.canManageIncidents(userRole)) {
         return false;
       }
-
       if (item.path?.includes('/sla/') && !RoleUtils.canManageSLA(userRole)) {
         return false;
       }
-
       return true;
     });
 
@@ -506,31 +324,26 @@ export const filterMenuByPermissions = (menu: MenuItem[], userRole: UserRole): M
   }).map(menuSection => ({
     ...menuSection,
     Items: menuSection.Items?.filter(item => {
-      // Apply the same filters to the mapped items
       if (item.path?.includes('/admin/') && !RoleUtils.canAccessAdmin(userRole)) {
         return false;
       }
-
       if (item.path?.includes('/management/') && !RoleUtils.canManageIncidents(userRole)) {
         return false;
       }
-
       if (item.path?.includes('/sla/') && !RoleUtils.canManageSLA(userRole)) {
         return false;
       }
-
       return true;
     })
   }));
 };
 
-// Export individual menus for backward compatibility and testing
+// Export individual menus for backward compatibility
 export {
   AdminMenuList,
   IncidentManagerMenuList,
   IncidentHandlerMenuList,
   SLAManagerMenuList,
-  DeveloperMenuList,
   EndUserMenuList,
   GuestMenuList
 };

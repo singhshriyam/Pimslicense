@@ -29,7 +29,7 @@ const UserForm = () => {
     }
 
     try {
-      // Create FormData as your API expects
+      // Create FormData as API expects
       const formData = new FormData();
       formData.append('email', email.trim());
       formData.append('password', password);
@@ -45,8 +45,6 @@ const UserForm = () => {
       });
 
       const responseText = await response.text();
-      console.log("Raw response:", responseText);
-
       let data;
       try {
         data = JSON.parse(responseText);
@@ -79,7 +77,7 @@ const UserForm = () => {
           dashboardRoute = "/dashboard/incident_manager";
         } else if (userTeam.includes("incident") && userTeam.includes("handler")) {
           dashboardRoute = "/dashboard/incident_handler";
-        } else if (userTeam.includes("developer")) {
+        } else if (userTeam.includes("SLA Manager")) {
           dashboardRoute = "/dashboard/developer";
         }
 

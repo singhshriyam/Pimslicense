@@ -3,10 +3,8 @@ import UserForm from "@/Components/Auth/UserForm";
 import { useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Col, Container, Row } from "reactstrap";
-// Add the correct import for localStorage functions
 import { isAuthenticated, getStoredUserTeam } from "../../(MainBody)/services/userService";
 
-// Enhanced team to dashboard mapping with exact matching
 const getTeamDashboard = (team: string): string => {
   if (!team) return '/dashboard/enduser';
 
@@ -29,7 +27,7 @@ const getTeamDashboard = (team: string): string => {
     return '/dashboard/admin';
   }
 
-  if (teamLower === 'developer' || teamLower === 'dev') {
+  if (teamLower === 'sla manager' || teamLower === 'dev') {
     return '/dashboard/developer';
   }
 
@@ -37,12 +35,9 @@ const getTeamDashboard = (team: string): string => {
 };
 
 const UserLogin = memo(() => {
-  // Remove NextAuth useSession
-  // const { data: session, status } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    // Check authentication using localStorage instead of session
     if (isAuthenticated()) {
       const userTeam = getStoredUserTeam() || 'user';
       const dashboardRoute = getTeamDashboard(userTeam);

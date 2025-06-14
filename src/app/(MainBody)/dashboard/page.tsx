@@ -9,9 +9,7 @@ import {
   getCurrentUser
 } from "../services/userService";
 
-
 import IncidentCreationForm from "../../../Components/Forms/IncidentCreationForm";
-import AllIncidents from "../../../Components/all-incidents";
 
 const DashboardContent = () => {
   const router = useRouter();
@@ -36,9 +34,18 @@ const DashboardContent = () => {
     console.log("User team:", userTeam);
     console.log("Current path:", currentPath);
 
-    // If we have a tab parameter, don't redirect - show the tab content
-    if (activeTab === 'create-incident' || activeTab === 'all-incidents') {
+    // If we have a tab parameter, handle it appropriately
+    if (activeTab === 'create-incident') {
       setLoading(false);
+      return;
+    }
+
+    // For 'all-incidents' tab, redirect to appropriate dashboard
+    // The individual dashboards now handle their own "View All" functionality
+    if (activeTab === 'all-incidents') {
+      const dashboardRoute = getUserDashboard(userTeam);
+      console.log("Redirecting from all-incidents tab to:", dashboardRoute);
+      router.replace(dashboardRoute);
       return;
     }
 
@@ -96,11 +103,6 @@ const DashboardContent = () => {
         compactMode={false}
       />
     );
-  }
-
-  // Show All Incidents if tab is active
-  if (activeTab === 'all-incidents') {
-    return <AllIncidents />;
   }
 
   // Default redirecting state

@@ -1,149 +1,232 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
-import { useRouter } from 'next/navigation'
+import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table } from 'reactstrap'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+import InteractiveIncidentMap from '../../../../Components/InteractiveIncidentMap';
+
 import {
-  fetchIncidentsAPI,
+  fetchAllIncidents,
+  fetchIncidentsByUserRole,
   getIncidentStats,
   formatDate,
-  getStatusBadge,
-  getPriorityBadge,
-  getPriorityColor,
   getStatusColor,
-  Incident,
-  getCategoryStats
+  getPriorityColor,
+  type Incident
 } from '../../../(MainBody)/services/incidentService';
 
 import {
-  fetchAllUsers,
   getCurrentUser,
-  isAuthenticated,
-  clearUserData,
-  mapTeamToRole,
-  getUserStats as getAPIUserStats,
-  User
+  isAuthenticated
 } from '../../../(MainBody)/services/userService';
 
+import AllIncidents from '../../../../Components/AllIncidents';
+
+// Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  team: string;
+  lastActivity?: string;
+}
 
 const AdminDashboard = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [userInfo, setUserInfo] = useState({
+  const viewParam = searchParams.get('view');
+  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents');
+
+  const [dashboardData, setDashboardData] = useState({
+    incidents: [] as Incident[],
+    totalIncidents: 0,
+    resolvedIncidents: 0,
+    inProgressIncidents: 0,
+    pendingIncidents: 0,
+    closedIncidents: 0,
+    loading: true,
+    error: null as string | null
+  });
+
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [user, setUser] = useState({
     name: '',
     team: '',
     email: '',
     userId: ''
   });
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const [loggedInUsers] = useState<User[]>([]);
 
-        // Check authentication
-        if (!isAuthenticated()) {
-          router.replace('/auth/login');
-          return;
-        }
+  // Fetch data
+  const fetchData = async () => {
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
 
-        // Get current user
-        const currentUser = getCurrentUser();
-        setUserInfo({
-          name: currentUser.name || 'Administrator',
-          team: currentUser.team || 'Administrator',
-          email: currentUser.email || '',
-          userId: currentUser.id || ''
-        });
-
-        // Fetch all incidents (admins can see all)
-        const userRole = mapTeamToRole(currentUser.team || 'admin');
-        const incidentsData = await fetchIncidentsAPI(currentUser.email, userRole);
-        setIncidents(incidentsData);
-
-        // Fetch all users for admin management
-        const usersData = await fetchAllUsers();
-        setUsers(usersData);
-
-      } catch (err: any) {
-        console.error('Error loading dashboard data:', err);
-        setError(err.message || 'Failed to load dashboard data');
-      } finally {
-        setLoading(false);
+      if (!isAuthenticated()) {
+        router.replace('/auth/login');
+        return;
       }
-    };
 
-    loadDashboardData();
+      const currentUser = getCurrentUser();
+      setUser({
+        name: currentUser?.name || 'Administrator',
+        team: currentUser?.team || 'Administrator',
+        email: currentUser?.email || '',
+        userId: currentUser?.id || ''
+      });
+
+      // Admin should see ALL incidents - same logic as manager
+      const allIncidents = await fetchAllIncidents();
+      const stats = getIncidentStats(allIncidents);
+
+      setDashboardData({
+        incidents: allIncidents,
+        totalIncidents: stats.total,
+        resolvedIncidents: stats.resolved,
+        inProgressIncidents: stats.inProgress,
+        pendingIncidents: stats.pending,
+        closedIncidents: stats.closed,
+        loading: false,
+        error: null
+      });
+
+    } catch (error: any) {
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to load dashboard data'
+      }));
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
   }, [router]);
 
-  const stats = getIncidentStats(incidents);
-  const categoryStats = getCategoryStats(incidents);
-  const userStats = getAPIUserStats(users);
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view');
+    setShowAllIncidents(currentViewParam === 'all-incidents');
+  }, [searchParams]);
 
-  // System overview chart
-  const systemChartOptions = {
+  // Priority data for pie chart
+  const getPriorityData = () => {
+    const highPriority = dashboardData.incidents.filter(inc =>
+      inc.priority?.toLowerCase().includes('high') ||
+      inc.priority?.toLowerCase().includes('critical')
+    ).length;
+
+    const mediumPriority = dashboardData.incidents.filter(inc =>
+      inc.priority?.toLowerCase().includes('medium') ||
+      inc.priority?.toLowerCase().includes('moderate')
+    ).length;
+
+    const lowPriority = dashboardData.incidents.filter(inc =>
+      inc.priority?.toLowerCase().includes('low')
+    ).length;
+
+    return { high: highPriority, medium: mediumPriority, low: lowPriority };
+  };
+
+  const { high, medium, low } = getPriorityData();
+
+  const priorityData: number[] = [];
+  const priorityLabels: string[] = [];
+  const priorityColors: string[] = [];
+
+  if (high > 0) {
+    priorityData.push(high);
+    priorityLabels.push('High Priority');
+    priorityColors.push('#dc3545');
+  }
+  if (medium > 0) {
+    priorityData.push(medium);
+    priorityLabels.push('Medium Priority');
+    priorityColors.push('#ffc107');
+  }
+  if (low > 0) {
+    priorityData.push(low);
+    priorityLabels.push('Low Priority');
+    priorityColors.push('#28a745');
+  }
+
+  const priorityPieChartOptions = {
     chart: {
-      type: 'area' as const,
+      type: 'pie' as const,
       height: 350
     },
+    labels: priorityLabels.length > 0 ? priorityLabels : ['No Data'],
+    colors: priorityColors.length > 0 ? priorityColors : ['#6b7280'],
+    legend: {
+      position: 'bottom' as const
+    },
     dataLabels: {
-      enabled: false
-    },
-    stroke: {
-      curve: 'smooth' as const
-    },
-    xaxis: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    },
-    colors: ['#3b82f6', '#10b981', '#f59e0b']
+      enabled: true,
+      formatter: function (val: number) {
+        return Math.round(val) + '%'
+      }
+    }
   };
 
-  const systemChartSeries = [{
-    name: 'Total Incidents',
-    data: [31, 40, 28, 51, 42, stats.total || 35]
-  }, {
-    name: 'Resolved',
-    data: [11, 32, 45, 32, 34, stats.resolved || 25]
-  }, {
-    name: 'Pending',
-    data: [15, 11, 32, 18, 9, stats.pending || 10]
-  }];
+  // Event handlers
+  const handlePinClick = (incident: Incident) => {
+    setSelectedIncident(incident);
+  };
+
+  const closeIncidentDetails = () => {
+    setSelectedIncident(null);
+  };
 
   const handleViewAllIncidents = () => {
-    router.push('/dashboard?tab=all-incidents');
+    setShowAllIncidents(true);
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'all-incidents');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
-  const handleCreateIncident = () => {
-    router.push('/dashboard?tab=create-incident');
+  const handleBackToDashboard = () => {
+    setShowAllIncidents(false);
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('view');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
-  if (loading) {
+  const formatDateLocal = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Unknown';
+    }
+  };
+
+  if (dashboardData.loading) {
     return (
       <Container fluid>
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">Loading admin dashboard...</span>
           </div>
-          <p className="mt-2 text-muted">Loading admin dashboard...</p>
         </div>
       </Container>
     );
   }
 
-  if (error) {
+  if (dashboardData.error) {
     return (
       <Container fluid>
         <div className="alert alert-danger mt-3">
-          <strong>Error:</strong> {error}
+          <strong>Error:</strong> {dashboardData.error}
+          <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
         </div>
       </Container>
     );
+  }
+
+  if (showAllIncidents) {
+    return <AllIncidents userType="admin" onBack={handleBackToDashboard} />;
   }
 
   return (
@@ -152,22 +235,11 @@ const AdminDashboard = () => {
         {/* Welcome Header */}
         <Row>
           <Col xs={12}>
-            <Card className="mb-4 mt-4 border-primary">
-              <CardBody className="bg-primary bg-opacity-10">
+            <Card className="mb-4 mt-4">
+              <CardBody>
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
-                    <h4 className="mb-1 text-primary">🛡️ Administrator Dashboard</h4>
-                    <p className="text-muted mb-0">
-                      Welcome back, <strong>{userInfo.name}</strong>! You have full system access and oversight.
-                    </p>
-                  </div>
-                  <div>
-                    <Button color="primary" onClick={handleCreateIncident} className="me-2">
-                      Create Incident
-                    </Button>
-                    <Button color="outline-primary" onClick={handleViewAllIncidents}>
-                      Manage All Incidents
-                    </Button>
+                    <h4 className="mb-1">Welcome {user.name}!</h4>
                   </div>
                 </div>
               </CardBody>
@@ -175,159 +247,267 @@ const AdminDashboard = () => {
           </Col>
         </Row>
 
-        {/* Statistics Cards */}
-        <Row>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-primary">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-primary">{stats.total}</h5>
-                      <span className="f-light">Total System Incidents</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-info">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-info">{userStats.total}</h5>
-                      <span className="f-light">Total System Users</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-success">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{userStats.active}</h5>
-                      <span className="f-light">Active Users</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6">
-            <Card className="o-hidden border-success">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter text-success">{stats.resolved}</h5>
-                      <span className="f-light">Resolved This Month</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        <Row>
-          <Col lg={8}>
-            <Card>
-              <CardHeader className="pb-0">
-                <h5>🏢 System Overview</h5>
-              </CardHeader>
-              <CardBody>
-                <Chart
-                  options={systemChartOptions}
-                  series={systemChartSeries}
-                  type="area"
-                  height={350}
-                />
-              </CardBody>
-            </Card>
-          </Col>
-
+        {/* Priority Chart and Currently Logged In Users Row */}
+        <Row className="mb-4">
+          {/* Incidents by Priority Pie Chart */}
           <Col lg={4}>
-            <Card>
+            <Card className="h-100">
               <CardHeader className="pb-0">
-                <h5>👥 User Distribution</h5>
+                <h5>Incidents by Priority</h5>
               </CardHeader>
               <CardBody>
-                <div className="mb-3 p-3 bg-primary bg-opacity-10 rounded">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <strong>Admins</strong>
-                      <small className="d-block text-muted">System administrators</small>
-                    </div>
-                    <span className="h4 mb-0 text-primary">{userStats.admins || 1}</span>
+                {dashboardData.totalIncidents > 0 ? (
+                  <Chart
+                    options={priorityPieChartOptions}
+                    series={priorityData.length > 0 ? priorityData : [1]}
+                    type="pie"
+                    height={350}
+                  />
+                ) : (
+                  <div className="text-center py-5">
+                    <p className="text-muted">No priority data available</p>
                   </div>
-                </div>
-                <div className="mb-3 p-3 bg-warning bg-opacity-10 rounded">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <strong>Managers</strong>
-                      <small className="d-block text-muted">Incident managers</small>
-                    </div>
-                    <span className="h4 mb-0 text-warning">{userStats.managers}</span>
-                  </div>
-                </div>
-                <div className="mb-3 p-3 bg-success bg-opacity-10 rounded">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <strong>Handlers</strong>
-                      <small className="d-block text-muted">Incident handlers</small>
-                    </div>
-                    <span className="h4 mb-0 text-success">{userStats.handlers}</span>
-                  </div>
-                </div>
-                <div className="p-3 bg-info bg-opacity-10 rounded">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <strong>End Users</strong>
-                      <small className="d-block text-muted">Regular users</small>
-                    </div>
-                    <span className="h4 mb-0 text-info">{userStats.endUsers}</span>
-                  </div>
+                )}
+              </CardBody>
+            </Card>
+          </Col>
+
+          {/* Currently Logged In Users */}
+          <Col lg={8}>
+            <Card className="h-100">
+              <CardHeader className="pb-0">
+                <h5>Currently Logged In Users</h5>
+              </CardHeader>
+              <CardBody>
+                <div className="table-responsive">
+                  <Table hover className="table-borderless">
+                    <thead className="table-light">
+                      <tr>
+                        <th>User Id</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Group</th>
+                        <th>Last Activity at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loggedInUsers.length > 0 ? (
+                        loggedInUsers.map((loggedUser) => (
+                          <tr key={loggedUser.id}>
+                            <td>{loggedUser.id}</td>
+                            <td className="fw-medium">{loggedUser.name}</td>
+                            <td className="text-muted">{loggedUser.email}</td>
+                            <td>{loggedUser.team}</td>
+                            <td className="text-muted">
+                              {loggedUser.lastActivity ? new Date(loggedUser.lastActivity).toLocaleString() : new Date().toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="text-center text-muted">No active users found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </Table>
                 </div>
               </CardBody>
             </Card>
           </Col>
         </Row>
 
-        {/* Recent System Activities */}
+        {/* Map Section */}
+        <InteractiveIncidentMap
+          incidents={dashboardData.incidents}
+          onPinClick={handlePinClick}
+          height="400px"
+        />
+
+        {/* Incident Details Modal */}
+        {selectedIncident && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onClick={closeIncidentDetails}
+          >
+            <div
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '8px',
+                padding: '0',
+                maxWidth: '600px',
+                width: '90%',
+                maxHeight: '80vh',
+                overflow: 'auto',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Card className="m-0">
+                <CardHeader className="bg-primary text-white">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <h5 className="mb-0 text-white">📍 Incident Details</h5>
+                    <Button
+                      color="link"
+                      className="text-white p-0"
+                      onClick={closeIncidentDetails}
+                      style={{ fontSize: '24px', textDecoration: 'none' }}
+                    >
+                      ×
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardBody>
+                  <Row>
+                    <Col md={6}>
+                      <div className="mb-3">
+                        <strong>Incident ID:</strong>
+                        <div className="text-primary fs-5 fw-bold">{selectedIncident.number}</div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Category:</strong>
+                        <div>{selectedIncident.category}</div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Sub Category:</strong>
+                        <div>{selectedIncident.subCategory}</div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Priority:</strong>
+                        <div>
+                          <Badge style={{ backgroundColor: getPriorityColor(selectedIncident.priority), color: 'white' }} className="fs-6">
+                            {selectedIncident.priority}
+                          </Badge>
+                        </div>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="mb-3">
+                        <strong>Status:</strong>
+                        <div>
+                          <Badge style={{ backgroundColor: getStatusColor(selectedIncident.status), color: 'white' }} className="fs-6">
+                            {selectedIncident.status?.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Impact:</strong>
+                        <div>{selectedIncident.impact || 'Not specified'}</div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Urgency:</strong>
+                        <div>{selectedIncident.urgency || 'Not specified'}</div>
+                      </div>
+                      <div className="mb-3">
+                        <strong>Created:</strong>
+                        <div>{formatDateLocal(selectedIncident.createdAt)}</div>
+                      </div>
+                    </Col>
+                  </Row>
+
+                  <div className="mb-3">
+                    <strong>Description:</strong>
+                    <div className="mt-1 p-2 bg-light rounded">
+                      {selectedIncident.shortDescription || 'No description available'}
+                    </div>
+                  </div>
+
+                  {selectedIncident.description && selectedIncident.description !== selectedIncident.shortDescription && (
+                    <div className="mb-3">
+                      <strong>Detailed Description:</strong>
+                      <div className="mt-1 p-2 bg-light rounded">
+                        {selectedIncident.description}
+                      </div>
+                    </div>
+                  )}
+
+                  <Row>
+                    <Col md={6}>
+                      <div className="mb-3">
+                        <strong>Reported By:</strong>
+                        <div>{selectedIncident.reportedByName || selectedIncident.caller}</div>
+                        <small className="text-muted">{selectedIncident.reportedBy}</small>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="mb-3">
+                        <strong>Assigned To:</strong>
+                        <div>{selectedIncident.assignedTo || 'Unassigned'}</div>
+                        {selectedIncident.assignedToEmail && (
+                          <small className="text-muted">{selectedIncident.assignedToEmail}</small>
+                        )}
+                      </div>
+                    </Col>
+                  </Row>
+
+                  {(selectedIncident.address || selectedIncident.postcode || (selectedIncident.latitude && selectedIncident.longitude)) && (
+                    <div className="mb-3">
+                      <strong>Location:</strong>
+                      <div className="mt-1 p-2 bg-light rounded">
+                        <div>{selectedIncident.address || 'Address not specified'}</div>
+                        {selectedIncident.postcode && (
+                          <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>
+                        )}
+                        {(selectedIncident.latitude && selectedIncident.longitude) && (
+                          <div>
+                            <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
+                            <span className="text-success ms-2">📍 Precise Location</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <strong>Contact Type:</strong>
+                    <div>{selectedIncident.contactType}</div>
+                  </div>
+
+                  <div className="text-center mt-4">
+                    <Button color="primary" className="me-2">Edit Incident</Button>
+                    <Button color="outline-secondary" onClick={closeIncidentDetails}>Close</Button>
+                  </div>
+                </CardBody>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Recent Incidents */}
         <Row>
           <Col lg={12}>
             <Card>
               <CardHeader className="pb-0">
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5>🔄 Recent System Activities</h5>
-                  <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
-                    View All
-                  </Button>
+                  <h5>Recent Incidents</h5>
+                  <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>View All</Button>
                 </div>
               </CardHeader>
               <CardBody>
-                {incidents.length > 0 ? (
+                {dashboardData.incidents.length > 0 ? (
                   <div className="table-responsive">
-                    <table className="table table-hover">
+                    <Table hover className="table-borderless">
                       <thead className="table-light">
                         <tr>
-                          <th>Incident #</th>
-                          <th>Category</th>
-                          <th>Reporter</th>
-                          <th>Priority</th>
-                          <th>Status</th>
-                          <th>Created</th>
-                          <th>Actions</th>
+                          <th>ID</th>
+                          <th>Description</th>
+                          <th>Impact</th>
+                          <th>Location</th>
+                          <th>Created At</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {incidents.slice(0, 5).map((incident) => (
+                        {dashboardData.incidents.slice(0, 5).map((incident) => (
                           <tr key={incident.id}>
                             <td>
                               <span className="fw-medium text-primary">{incident.number}</span>
@@ -335,115 +515,27 @@ const AdminDashboard = () => {
                             <td>
                               <div>
                                 <div className="fw-medium">{incident.category}</div>
-                                <small className="text-muted">{incident.subCategory}</small>
                               </div>
                             </td>
                             <td>
-                              <span className="text-muted">{incident.reportedByName}</span>
+                              <Badge color="secondary">{incident.impact || 'Medium'}</Badge>
                             </td>
                             <td>
-                              <span
-                                className="badge"
-                                style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}
-                              >
-                                {incident.priority}
-                              </span>
+                              <div>
+                                <span className="text-muted">{incident.address || 'Not specified'}</span>
+                              </div>
                             </td>
-                            <td>
-                              <span
-                                className="badge"
-                                style={{ backgroundColor: getStatusColor(incident.status || 'pending'), color: 'white' }}
-                              >
-                                {(incident.status || 'pending').replace('_', ' ')}
-                              </span>
-                            </td>
-                            <td>{formatDate(incident.createdAt)}</td>
-                            <td>
-                              <Button color="outline-primary" size="sm">
-                                Manage
-                              </Button>
-                            </td>
+                            <td>{formatDateLocal(incident.createdAt)}</td>
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </Table>
                   </div>
                 ) : (
                   <div className="text-center py-3">
-                    <p className="text-muted mb-0">No recent activities</p>
+                    <p className="text-muted mb-0">No recent incidents</p>
                   </div>
                 )}
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Admin Actions */}
-        <Row>
-          <Col lg={12}>
-            <Card>
-              <CardHeader className="pb-0">
-                <h5>⚙️ Administrative Actions</h5>
-              </CardHeader>
-              <CardBody>
-                <div className="row">
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="primary" onClick={handleViewAllIncidents}>
-                        📋 Manage All Incidents
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="success">
-                        👥 User Management
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="info">
-                        📊 System Reports
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="warning">
-                        ⚙️ System Settings
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="danger">
-                        🔒 Security Center
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="secondary">
-                        💾 Backup Management
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="dark">
-                        📈 Analytics Dashboard
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="col-md-3 mb-3">
-                    <div className="d-grid">
-                      <Button color="outline-primary" onClick={handleCreateIncident}>
-                        ➕ Create Incident
-                      </Button>
-                    </div>
-                  </div>
-                </div>
               </CardBody>
             </Card>
           </Col>
