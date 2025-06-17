@@ -14,7 +14,7 @@ export const ExpirationDate: string = "Expiration Date";
 export const Cod: string = "COD";
 export const Emi: string = "EMI";
 export const NetBankings: string = "Net Banking";
-export const Postcode: string = "Postcode";
+export const PostCode: string = "Postcode";
 export const Mobile: string = "Mobile";
 
 //Ecommerce - Orders History
