@@ -9,11 +9,13 @@ export const PaymentDetails: string = "Payment Details";
 export const CreditCards: string = "Credit Card";
 export const DebitCards: string = "Debit Card";
 export const CVC: string = "CVC";
-export const Postcode: string = "Postcode";
+export const Pincode: string = "Pincode";
 export const ExpirationDate: string = "Expiration Date";
 export const Cod: string = "COD";
 export const Emi: string = "EMI";
 export const NetBankings: string = "Net Banking";
+export const Postcode: string = "Postcode";
+export const Mobile: string = "Mobile";
 
 //Ecommerce - Orders History
 export const NewOrder: string = "New Orders";
@@ -445,7 +447,7 @@ export const FullNameJob: string = "Full name";
 export const EmailJob: string = "Email";
 export const PasswordJob: string = "Password";
 export const RepeatPasswordJob = "Repeat Password";
-export const Mobile: string = "Mobile";
+export const PhoneNumberJob: string = "Phone Number";
 export const CollegeNameJob: string = "College Name";
 export const PeriodJob: string = "Period";
 export const DegreeLevelJob: string = "Degree Level";
