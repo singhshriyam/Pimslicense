@@ -633,7 +633,6 @@ const IncidentManagerDashboard = () => {
                               <td>
                                 <div>
                                   <div className="fw-medium">{incident.category}</div>
-                                  <small className="text-muted">{incident.subCategory}</small>
                                 </div>
                               </td>
                               <td>

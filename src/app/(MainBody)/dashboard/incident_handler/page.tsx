@@ -154,6 +154,25 @@ const IncidentHandlerDashboard = () => {
     }
   };
 
+  const [photos, setPhotos] = useState([
+    // Sample starting data
+    { id: 1, url: "https://via.placeholder.com/100", uploadedAt: "2024-01-01" },
+  ]);
+
+  const handleMockPhotoUpload = () => {
+    const newPhoto = {
+      id: Date.now(),
+      url: "https://via.placeholder.com/100", // Placeholder
+      uploadedAt: new Date().toISOString().split("T")[0],
+    };
+    setPhotos((prev) => [...prev, newPhoto]);
+  };
+
+  const handleMockPhotoDelete = (id: number) => {
+    setPhotos((prev) => prev.filter((photo) => photo.id !== id));
+  };
+
+
   // Render different views based on current view
   if (currentView === 'all-incidents') {
     return <AllIncidents userType="handler" onBack={handleBackToDashboard} />;
@@ -187,7 +206,7 @@ const IncidentHandlerDashboard = () => {
                       onClick={() => setActiveTab('edit')}
                       style={{ cursor: 'pointer' }}
                     >
-                      Edit
+                      Incident detail
                     </NavLink>
                   </NavItem>
                   <NavItem>
@@ -435,11 +454,26 @@ const IncidentHandlerDashboard = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr>
-                            <td colSpan={3} className="text-center text-muted">
-                              No photos uploaded yet
-                            </td>
-                          </tr>
+                          {photos.length > 0 ? (
+                            photos.map((photo) => (
+                              <tr key={photo.id}>
+                                <td>{photo.id}</td>
+                                <td><img src={photo.url} alt="Uploaded" width="80" /></td>
+                                <td>{photo.uploadedAt}</td>
+                                <td>
+                                  <Button color="danger" size="sm" onClick={() => handleMockPhotoDelete(photo.id)}>
+                                    Delete
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="text-center text-muted">
+                                No photos uploaded yet
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </Table>
                     </div>

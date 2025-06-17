@@ -989,19 +989,16 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                               <td>
                                 <div>
                                   <span className="fw-medium text-primary">{incident.number}</span>
-                                  <div className="small text-muted">{incident.shortDescription}</div>
                                 </div>
                               </td>
                               <td>
                                 <div>
                                   <div className="fw-medium">{incident.category}</div>
-                                  <small className="text-muted">{incident.subCategory}</small>
                                 </div>
                               </td>
                               <td>
                                 <div>
                                   <div className="fw-medium">{incident.caller}</div>
-                                  <small className="text-muted">{incident.reportedBy}</small>
                                 </div>
                               </td>
                               <td>
@@ -1020,9 +1017,6 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                               <td>
                                 <div>
                                   <span className="text-muted">{incident.address || 'Not specified'}</span>
-                                  {incident.postcode && (
-                                    <div className="small text-muted">{incident.postcode}</div>
-                                  )}
                                 </div>
                               </td>
                               <td>
