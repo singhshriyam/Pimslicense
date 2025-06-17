@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Nav, NavItem, NavLink, TabContent, TabPane, Form, FormGroup, Label, Input, Table } from 'reactstrap'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
   getCurrentUser,
@@ -19,12 +19,17 @@ import {
 
 // Import the unified AllIncidents component
 import AllIncidents from '../../../../Components/AllIncidents';
+import AssignIncidents from '../../../../Components/AssignIncidents';
 
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
 const IncidentHandlerDashboard = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const viewParam = searchParams.get('view');
+  const [currentView, setCurrentView] = useState(viewParam || 'dashboard');
 
   const [dashboardData, setDashboardData] = useState({
     myIncidents: [] as Incident[],
@@ -44,7 +49,6 @@ const IncidentHandlerDashboard = () => {
     userId: ''
   });
 
-  const [showAllIncidents, setShowAllIncidents] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   const [activeTab, setActiveTab] = useState('edit');
 
@@ -96,147 +100,32 @@ const IncidentHandlerDashboard = () => {
     fetchData();
   }, [router]);
 
-  // Format date for display
-  const formatDateLocal = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString();
-    } catch (error) {
-      return 'Unknown';
-    }
-  };
-
-  // Pie chart configuration
-  const pieChartSeries = [
-    dashboardData.solvedIncidents,
-    dashboardData.inProgressIncidents,
-    dashboardData.pendingIncidents,
-    dashboardData.closedIncidents
-  ];
-
-  // Only show non-zero values
-  const nonZeroData: number[] = [];
-  const nonZeroLabels: string[] = [];
-  const allLabels = ['Completed', 'In Progress', 'Pending', 'Closed'];
-  const allColors = ['#10b981', '#3b82f6', '#f59e0b', '#6b7280'];
-  const nonZeroColors: string[] = [];
-
-  pieChartSeries.forEach((value, index) => {
-    if (value > 0) {
-      nonZeroData.push(value);
-      nonZeroLabels.push(allLabels[index]);
-      nonZeroColors.push(allColors[index]);
-    }
-  });
-
-  const pieChartOptions: any = {
-    chart: {
-      type: 'pie',
-      height: 350
-    },
-    labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
-    colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
-    legend: {
-      position: 'bottom'
-    },
-    responsive: [{
-      breakpoint: 480,
-      options: {
-        chart: {
-          width: 200
-        },
-        legend: {
-          position: 'bottom'
-        }
-      }
-    }]
-  };
-
-  // Monthly trends calculation
-  const getMonthlyTrends = () => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
-
-    const monthlyData = months.map((month, index) => {
-      const monthIncidents = dashboardData.myIncidents.filter(incident => {
-        try {
-          const incidentMonth = new Date(incident.createdAt).getMonth();
-          return incidentMonth === index;
-        } catch (error) {
-          return false;
-        }
-      });
-
-      return {
-        assigned: monthIncidents.length,
-        completed: monthIncidents.filter(i => i.status === 'resolved').length,
-        inProgress: monthIncidents.filter(i => i.status === 'in_progress').length
-      };
-    });
-
-    return {
-      months,
-      assigned: monthlyData.map(d => d.assigned),
-      completed: monthlyData.map(d => d.completed),
-      inProgress: monthlyData.map(d => d.inProgress)
-    };
-  };
-
-  const { months, assigned, completed, inProgress } = getMonthlyTrends();
-
-  const barChartOptions: any = {
-    chart: {
-      type: 'bar',
-      height: 350
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: '55%',
-      },
-    },
-    dataLabels: {
-      enabled: false
-    },
-    stroke: {
-      show: true,
-      width: 2,
-      colors: ['transparent']
-    },
-    xaxis: {
-      categories: months,
-    },
-    yaxis: {
-      title: {
-        text: 'Number of Incidents'
-      }
-    },
-    fill: {
-      opacity: 1
-    },
-    colors: ['#3b82f6', '#10b981', '#f59e0b']
-  };
-
-  const barChartSeries = [{
-    name: 'Assigned',
-    data: assigned
-  }, {
-    name: 'Completed',
-    data: completed
-  }, {
-    name: 'In Progress',
-    data: inProgress
-  }];
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view');
+    setCurrentView(currentViewParam || 'dashboard');
+  }, [searchParams]);
 
   // Navigation handlers
-  const handleCreateIncident = () => {
-    router.push('/dashboard?tab=create-incident');
+  const handleViewAllIncidents = () => {
+    setCurrentView('all-incidents');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'all-incidents');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
-  const handleViewAllIncidents = () => {
-    setShowAllIncidents(true);
+  const handleViewAssignIncidents = () => {
+    setCurrentView('assign-incidents');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'assign-incidents');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
   const handleBackToDashboard = () => {
-    setShowAllIncidents(false);
+    setCurrentView('dashboard');
+    setEditingIncident(null);
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('view');
+    window.history.pushState({}, '', newUrl.toString());
   };
 
   const handleEditIncident = (incident: Incident) => {
@@ -252,18 +141,26 @@ const IncidentHandlerDashboard = () => {
   const handleUpdateIncident = () => {
     // Handle incident update logic here
     console.log('Updating incident:', editingIncident);
-    // You would typically make an API call here to update the incident
+    // make an API call here to update the incident
     setEditingIncident(null);
   };
 
-  // If showing all incidents, render the unified AllIncidents component
-  if (showAllIncidents) {
-    return (
-      <AllIncidents
-        userType="handler"
-        onBack={handleBackToDashboard}
-      />
-    );
+  // Format date for display
+  const formatDateLocal = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      return 'Unknown';
+    }
+  };
+
+  // Render different views based on current view
+  if (currentView === 'all-incidents') {
+    return <AllIncidents userType="handler" onBack={handleBackToDashboard} />;
+  }
+
+  if (currentView === 'assign-incidents') {
+    return <AssignIncidents userType="handler" onBack={handleBackToDashboard} />;
   }
 
   // If editing an incident, show the edit modal
@@ -743,6 +640,127 @@ const IncidentHandlerDashboard = () => {
     );
   }
 
+  // Pie chart configuration
+  const pieChartSeries = [
+    dashboardData.solvedIncidents,
+    dashboardData.inProgressIncidents,
+    dashboardData.pendingIncidents,
+    dashboardData.closedIncidents
+  ];
+
+  // Only show non-zero values
+  const nonZeroData: number[] = [];
+  const nonZeroLabels: string[] = [];
+  const allLabels = ['Completed', 'In Progress', 'Pending', 'Closed'];
+  const allColors = ['#10b981', '#3b82f6', '#f59e0b', '#6b7280'];
+  const nonZeroColors: string[] = [];
+
+  pieChartSeries.forEach((value, index) => {
+    if (value > 0) {
+      nonZeroData.push(value);
+      nonZeroLabels.push(allLabels[index]);
+      nonZeroColors.push(allColors[index]);
+    }
+  });
+
+  const pieChartOptions: any = {
+    chart: {
+      type: 'pie',
+      height: 350
+    },
+    labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
+    colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
+    legend: {
+      position: 'bottom'
+    },
+    responsive: [{
+      breakpoint: 480,
+      options: {
+        chart: {
+          width: 200
+        },
+        legend: {
+          position: 'bottom'
+        }
+      }
+    }]
+  };
+
+  // Monthly trends calculation
+  const getMonthlyTrends = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+    const monthlyData = months.map((month, index) => {
+      const monthIncidents = dashboardData.myIncidents.filter(incident => {
+        try {
+          const incidentMonth = new Date(incident.createdAt).getMonth();
+          return incidentMonth === index;
+        } catch (error) {
+          return false;
+        }
+      });
+
+      return {
+        assigned: monthIncidents.length,
+        completed: monthIncidents.filter(i => i.status === 'resolved').length,
+        inProgress: monthIncidents.filter(i => i.status === 'in_progress').length
+      };
+    });
+
+    return {
+      months,
+      assigned: monthlyData.map(d => d.assigned),
+      completed: monthlyData.map(d => d.completed),
+      inProgress: monthlyData.map(d => d.inProgress)
+    };
+  };
+
+  const { months, assigned, completed, inProgress } = getMonthlyTrends();
+
+  const barChartOptions: any = {
+    chart: {
+      type: 'bar',
+      height: 350
+    },
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        columnWidth: '55%',
+      },
+    },
+    dataLabels: {
+      enabled: false
+    },
+    stroke: {
+      show: true,
+      width: 2,
+      colors: ['transparent']
+    },
+    xaxis: {
+      categories: months,
+    },
+    yaxis: {
+      title: {
+        text: 'Number of Incidents'
+      }
+    },
+    fill: {
+      opacity: 1
+    },
+    colors: ['#3b82f6', '#10b981', '#f59e0b']
+  };
+
+  const barChartSeries = [{
+    name: 'Assigned',
+    data: assigned
+  }, {
+    name: 'Completed',
+    data: completed
+  }, {
+    name: 'In Progress',
+    data: inProgress
+  }];
+
   const handleRefreshData = async () => {
     try {
       setDashboardData(prev => ({ ...prev, loading: true, error: null }));
@@ -816,7 +834,7 @@ const IncidentHandlerDashboard = () => {
           </Col>
         </Row>
 
-        {/* Statistics Cards */}
+        {/* Statistics Cards - ORIGINAL STYLE */}
         <Row>
           <Col xl={3} md={6} className="box-col-6 mt-3">
             <Card className="o-hidden">
@@ -913,22 +931,22 @@ const IncidentHandlerDashboard = () => {
                       <thead>
                         <tr>
                           <th scope="col">Incident</th>
-                          <th scope="col">Description</th>
-                          <th scope="col">Priority</th>
+                          <th scope="col">Category</th>
                           <th scope="col">Status</th>
-                          <th scope="col">Assigned Date</th>
-                          <th scope="col">Actions</th>
+                          <th scope="col">Assigned</th>
+                          <th scope="col">Date</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dashboardData.myIncidents.slice(0, 3).map((incident) => (
+                        {dashboardData.myIncidents.slice(0, 4).map((incident) => (
                           <tr key={incident.id}>
                             <td>
                               <span className="fw-medium text-primary">{incident.number}</span>
                             </td>
                             <td>
                               <div>
-                                <div className="fw-medium">{incident.shortDescription}</div>
+                                <div className="fw-medium">{incident.category}</div>
+                                <small className="text-muted">Caller: {incident.caller}</small>
                               </div>
                             </td>
                             <td>
@@ -948,15 +966,6 @@ const IncidentHandlerDashboard = () => {
                               </span>
                             </td>
                             <td>{formatDateLocal(incident.createdAt)}</td>
-                            <td>
-                              <Button
-                                color="primary"
-                                size="sm"
-                                onClick={() => handleEditIncident(incident)}
-                              >
-                                Edit
-                              </Button>
-                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -991,7 +1000,7 @@ const IncidentHandlerDashboard = () => {
           </Col>
         </Row>
 
-        {/* Monthly Trends */}
+        {/* Monthly Trends - ORIGINAL STYLE */}
         <Row>
           <Col lg={12}>
             <Card>

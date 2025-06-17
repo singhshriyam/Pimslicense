@@ -266,22 +266,26 @@ export const fetchEndUserIncidents = async (): Promise<Incident[]> => {
   }
 };
 
-// Fetch incidents for Handlers
 export const fetchHandlerIncidents = async (): Promise<Incident[]> => {
   const endpoint = `${API_BASE_URL}/incident-handeler/incident-list`;
   const token = getStoredToken();
+  const currentUser = getCurrentUser();
 
   if (!token) {
     throw new Error('Authentication required. Please log in again.');
   }
 
   try {
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
-      }
+      },
+      body: JSON.stringify({
+        assigned_to_id: currentUser?.id
+      })
     });
 
     if (!response.ok) {
@@ -289,7 +293,9 @@ export const fetchHandlerIncidents = async (): Promise<Incident[]> => {
     }
 
     const result = await response.json();
+
     return (result.data || []).map(transformIncidentFromBackend);
+
   } catch (error: any) {
     throw error;
   }

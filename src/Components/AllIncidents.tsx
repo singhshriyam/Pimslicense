@@ -21,7 +21,7 @@ import {
 } from '../app/(MainBody)/services/incidentService';
 
 interface AllIncidentsProps {
-  userType?: 'enduser' | 'handler' | 'admin';
+  userType?: 'enduser' | 'handler' | 'admin' | 'manager';
   onBack?: () => void;
 }
 
@@ -54,12 +54,13 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
     description: ''
   });
 
-  // Advanced edit form for handlers/managers
+  // Advanced edit form for handlers/managers/admins
   const [advancedEditForm, setAdvancedEditForm] = useState({
     shortDescription: '',
     description: '',
     category: '',
     subCategory: '',
+    contactType: '',
     impact: '',
     urgency: '',
     status: '',
@@ -68,6 +69,59 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
 
   // Tab state for advanced editing
   const [activeTab, setActiveTab] = useState('edit');
+
+  // Category and subcategory mapping (same as creation form)
+  const categoryOptions = [
+    { id: '1', name: 'Inside home' },
+    { id: '2', name: 'Street Pavement' },
+    { id: '3', name: 'SP site' },
+    { id: '4', name: 'Outside drive way /garden' },
+    { id: '5', name: 'River strem or lake' }
+  ];
+
+  const subcategoryOptions: Record<string, Array<{id: string, name: string}>> = {
+    '1': [ // Inside home
+      { id: '1', name: 'Leak from my pipe' },
+      { id: '2', name: 'Toilet/sink /shower issues' },
+      { id: '3', name: 'Sewage spillout' },
+      { id: '4', name: 'Cover or lid is damaged' },
+      { id: '5', name: 'Sewage smell in my home' },
+      { id: '6', name: 'Blocked alarm' }
+    ],
+    '2': [ // Street Pavement
+      { id: '7', name: 'Manhole blocked /smelly' },
+      { id: '8', name: 'Cover or lid is damaged' },
+      { id: '9', name: 'Smelly sewage over flowing on the street' },
+      { id: '10', name: 'Roadside drain or gully that is blocked' }
+    ],
+    '3': [ // SP site
+      { id: '11', name: 'Mark the site in the map or list of SP sites' }
+    ],
+    '4': [ // Outside drive way /garden
+      { id: '12', name: 'Leak on my property outside' },
+      { id: '13', name: 'Blocked /smelly manhole on my property' },
+      { id: '14', name: 'Sewage overflow on my property' },
+      { id: '15', name: 'Blocked drain on my property' },
+      { id: '16', name: 'Sewage odour outside my home' }
+    ],
+    '5': [ // River stream or lake
+      // Add subcategories if available
+    ]
+  };
+
+  // Helper functions to get category/subcategory by name
+  const getCategoryIdByName = (name: string) => {
+    const category = categoryOptions.find(cat => cat.name === name);
+    return category?.id || '';
+  };
+
+  const getSubCategoryOptions = (categoryName: string) => {
+    const categoryId = getCategoryIdByName(categoryName);
+    if (!categoryId || !subcategoryOptions[categoryId]) {
+      return [];
+    }
+    return subcategoryOptions[categoryId];
+  };
 
   // Check if user has advanced edit permissions
   const hasAdvancedEditPermissions = () => {
@@ -78,6 +132,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
            userTeam.includes('manager') ||
            userTeam.includes('admin') ||
            currentUserType.includes('handler') ||
+           currentUserType.includes('manager') ||
            currentUserType.includes('admin');
   };
 
@@ -95,32 +150,37 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
 
       setUser(currentUser);
 
+      console.log('🔍 AllIncidents: Fetching data...');
+      console.log('👤 User Type (prop):', userType);
+      console.log('👤 User Team:', currentUser?.team);
+
       const actualUserType = userType || currentUser?.team?.toLowerCase() || 'enduser';
       let fetchedIncidents: Incident[] = [];
 
       // Admin and Manager see ALL incidents - same logic
       if (actualUserType.includes('admin') || actualUserType.includes('manager')) {
-        console.log('AllIncidents - Admin/Manager detected, fetching ALL incidents');
+        console.log('📊 Fetching ALL incidents for admin/manager...');
         fetchedIncidents = await fetchAllIncidents();
       }
       // Handler sees handler incidents
       else if (actualUserType.includes('handler')) {
-        console.log('AllIncidents - Handler detected, fetching handler incidents');
+        console.log('📊 Fetching handler incidents...');
         fetchedIncidents = await fetchHandlerIncidents();
       }
       // End user sees their own incidents
       else {
-        console.log('AllIncidents - End user detected, fetching user incidents');
+        console.log('📊 Fetching end user incidents...');
         fetchedIncidents = await fetchEndUserIncidents();
       }
 
-      console.log('AllIncidents - Fetched incidents:', fetchedIncidents.length);
+      console.log('✅ AllIncidents: Received', fetchedIncidents.length, 'incidents');
+
       setIncidents(fetchedIncidents);
       setFilteredIncidents(fetchedIncidents);
       setCurrentPage(1);
 
     } catch (error: any) {
-      console.error('Fetch incidents error:', error);
+      console.error('❌ Fetch incidents error:', error);
       setError(error.message || 'Failed to load incidents');
     } finally {
       setLoading(false);
@@ -185,14 +245,15 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
     setActiveTab('edit'); // Reset to first tab
 
     if (hasAdvancedEditPermissions()) {
-      // Advanced edit form for handlers/managers
+      // Advanced edit form for handlers/managers/admins
       setAdvancedEditForm({
         shortDescription: incident.shortDescription || '',
         description: incident.description || '',
         category: incident.category || '',
         subCategory: incident.subCategory || '',
+        contactType: incident.contactType || '',
         impact: incident.impact || '',
-        urgency: incident.priority || '',
+        urgency: incident.priority || incident.urgency || '',
         status: incident.status || '',
         narration: ''
       });
@@ -259,9 +320,21 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
   };
 
   const stats = getIncidentStats(filteredIncidents);
-  const isHandler = userType?.includes('handler') || userType?.includes('admin') || userType?.includes('manager') ||
-                   user?.team?.toLowerCase().includes('handler') || user?.team?.toLowerCase().includes('admin') ||
-                   user?.team?.toLowerCase().includes('manager');
+
+  // Check if user has elevated permissions (handler, manager, admin)
+  const hasElevatedPermissions = () => {
+    const userTeam = user?.team?.toLowerCase() || '';
+    const currentUserType = userType?.toLowerCase() || '';
+
+    return userTeam.includes('handler') ||
+           userTeam.includes('manager') ||
+           userTeam.includes('admin') ||
+           currentUserType.includes('handler') ||
+           currentUserType.includes('manager') ||
+           currentUserType.includes('admin');
+  };
+
+  const isHandler = hasElevatedPermissions();
 
   // Pagination buttons
   const renderPaginationButtons = () => {
@@ -339,7 +412,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
     </Modal>
   );
 
-  // Render advanced edit modal for handlers/managers
+  // Render advanced edit modal for handlers/managers/admins
   const renderAdvancedEditModal = () => (
     <Modal isOpen={showEditModal} toggle={() => setShowEditModal(false)} size="xl">
       <ModalHeader toggle={() => setShowEditModal(false)}>
@@ -401,12 +474,15 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                     <Input
                       type="select"
                       id="contactType"
-                      defaultValue="SelfService"
+                      value={advancedEditForm.contactType}
+                      onChange={(e) => setAdvancedEditForm({...advancedEditForm, contactType: e.target.value})}
                     >
+                      <option value="">Select Contact Type</option>
                       <option value="SelfService">SelfService</option>
                       <option value="Phone">Phone</option>
                       <option value="Email">Email</option>
                       <option value="Walk-in">Walk-in</option>
+                      <option value="Walking">Walking</option>
                     </Input>
                   </FormGroup>
                 </Col>
@@ -420,13 +496,19 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                       type="select"
                       id="category"
                       value={advancedEditForm.category}
-                      onChange={(e) => setAdvancedEditForm({...advancedEditForm, category: e.target.value})}
+                      onChange={(e) => {
+                        const newCategory = e.target.value;
+                        setAdvancedEditForm({
+                          ...advancedEditForm,
+                          category: newCategory,
+                          subCategory: '' // Reset subcategory when category changes
+                        });
+                      }}
                     >
                       <option value="">Select Category</option>
-                      <option value="Hardware">Hardware</option>
-                      <option value="Software">Software</option>
-                      <option value="Network">Network</option>
-                      <option value="Security">Security</option>
+                      {categoryOptions.map(category => (
+                        <option key={category.id} value={category.name}>{category.name}</option>
+                      ))}
                     </Input>
                   </FormGroup>
                 </Col>
@@ -438,12 +520,12 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                       id="subCategory"
                       value={advancedEditForm.subCategory}
                       onChange={(e) => setAdvancedEditForm({...advancedEditForm, subCategory: e.target.value})}
+                      disabled={!advancedEditForm.category}
                     >
                       <option value="">Select Sub Category</option>
-                      <option value="Desktop">Desktop</option>
-                      <option value="Laptop">Laptop</option>
-                      <option value="Server">Server</option>
-                      <option value="Printer">Printer</option>
+                      {getSubCategoryOptions(advancedEditForm.category).map(subCat => (
+                        <option key={subCat.id} value={subCat.name}>{subCat.name}</option>
+                      ))}
                     </Input>
                   </FormGroup>
                 </Col>
@@ -488,8 +570,8 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                       required
                     >
                       <option value="">Select Impact</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
+                      <option value="Significant">Significant</option>
+                      <option value="Moderate">Moderate</option>
                       <option value="Low">Low</option>
                     </Input>
                   </FormGroup>
@@ -521,7 +603,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                       value={advancedEditForm.status}
                       onChange={(e) => setAdvancedEditForm({...advancedEditForm, status: e.target.value})}
                     >
-                      <option value="New">New</option>
+                      <option value="pending">New</option>
                       <option value="in_progress">In Progress</option>
                       <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
@@ -813,7 +895,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                   <div>
                     <h4 className="mb-1">All Incidents</h4>
                     <small className="text-muted">
-                      View and track all reported incidents
+                      View and track all reported incidents ({filteredIncidents.length} total)
                     </small>
                   </div>
                   <div>
@@ -841,7 +923,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                     <label>Search</label>
                     <Input
                       type="text"
-                      placeholder="Search by number, caller..."
+                      placeholder="Search by number, caller, description..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -850,7 +932,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                     <label>Status</label>
                     <Input type="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                       <option value="all">All Statuses</option>
-                      <option value="pending">New/Pending</option>
+                      <option value="pending">Pending</option>
                       <option value="in_progress">In Progress</option>
                       <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
@@ -868,7 +950,9 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
             <Card>
               <CardHeader>
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5>{isHandler ? 'All System Incidents' : 'My Incidents'} ({filteredIncidents.length})</h5>
+                  <h5>
+                    {isHandler ? 'All System Incidents' : 'My Incidents'} ({filteredIncidents.length})
+                  </h5>
                   <div>
                     <small className="text-muted">
                       Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredIncidents.length)} of {filteredIncidents.length}
@@ -880,6 +964,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                 {filteredIncidents.length === 0 ? (
                   <div className="text-center py-4">
                     <p className="text-muted">No incidents found matching your criteria.</p>
+                    <Button color="primary" onClick={fetchData}>Refresh Data</Button>
                   </div>
                 ) : (
                   <>
@@ -891,6 +976,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                             <th>Category</th>
                             <th>Caller</th>
                             <th>Status</th>
+                            <th>Priority</th>
                             <th>Assigned</th>
                             <th>Location</th>
                             <th>Created</th>
@@ -901,12 +987,21 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                           {currentIncidents.map((incident) => (
                             <tr key={incident.id}>
                               <td>
-                                <span className="fw-medium text-primary">{incident.number}</span>
+                                <div>
+                                  <span className="fw-medium text-primary">{incident.number}</span>
+                                  <div className="small text-muted">{incident.shortDescription}</div>
+                                </div>
                               </td>
-                              <td>{incident.category}</td>
+                              <td>
+                                <div>
+                                  <div className="fw-medium">{incident.category}</div>
+                                  <small className="text-muted">{incident.subCategory}</small>
+                                </div>
+                              </td>
                               <td>
                                 <div>
                                   <div className="fw-medium">{incident.caller}</div>
+                                  <small className="text-muted">{incident.reportedBy}</small>
                                 </div>
                               </td>
                               <td>
@@ -915,11 +1010,19 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                                 </Badge>
                               </td>
                               <td>
-                                <small>{incident.assignedTo || 'Unassigned'}</small>
+                                <Badge style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}>
+                                  {incident.priority || 'Medium'}
+                                </Badge>
+                              </td>
+                              <td>
+                                <small className="text-muted">{incident.assignedTo || 'Unassigned'}</small>
                               </td>
                               <td>
                                 <div>
                                   <span className="text-muted">{incident.address || 'Not specified'}</span>
+                                  {incident.postcode && (
+                                    <div className="small text-muted">{incident.postcode}</div>
+                                  )}
                                 </div>
                               </td>
                               <td>
@@ -968,6 +1071,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                 <div className="mb-3"><strong>Category:</strong> <span className="ms-2">{selectedIncident.category}</span></div>
                 <div className="mb-3"><strong>Sub Category:</strong> <span className="ms-2">{selectedIncident.subCategory}</span></div>
                 <div className="mb-3"><strong>Caller:</strong> <span className="ms-2">{selectedIncident.caller}</span></div>
+                <div className="mb-3"><strong>Contact Type:</strong> <span className="ms-2">{selectedIncident.contactType}</span></div>
               </Col>
               <Col md={6}>
                 <div className="mb-3">
@@ -982,22 +1086,30 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                     {(selectedIncident.status || 'pending').replace('_', ' ')}
                   </Badge>
                 </div>
+                <div className="mb-3"><strong>Impact:</strong> <span className="ms-2">{selectedIncident.impact || 'Not specified'}</span></div>
+                <div className="mb-3"><strong>Urgency:</strong> <span className="ms-2">{selectedIncident.urgency || 'Not specified'}</span></div>
                 <div className="mb-3"><strong>Reported By:</strong> <span className="ms-2">{selectedIncident.reportedByName}</span></div>
-                <div className="mb-3"><strong>Assigned To:</strong> <span className="ms-2">{selectedIncident.assignedTo}</span></div>
+                <div className="mb-3"><strong>Assigned To:</strong> <span className="ms-2">{selectedIncident.assignedTo || 'Unassigned'}</span></div>
                 <div className="mb-3"><strong>Created:</strong> <span className="ms-2">{formatDate(selectedIncident.createdAt)}</span></div>
               </Col>
               <Col xs={12}>
                 <hr />
                 <div className="mb-3">
                   <strong>Detailed Description:</strong>
-                  <p className="mt-2 p-3 bg-light rounded text-dark">{selectedIncident.description}</p>
+                  <p className="mt-2 p-3 bg-light rounded text-dark">{selectedIncident.description || selectedIncident.shortDescription}</p>
                 </div>
-                {(selectedIncident.address || (selectedIncident.latitude && selectedIncident.longitude)) && (
+                {(selectedIncident.address || selectedIncident.postcode || (selectedIncident.latitude && selectedIncident.longitude)) && (
                   <div className="mb-3">
                     <strong>Location:</strong>
                     <div className="mt-1 p-2 bg-light rounded text-dark">
                       {selectedIncident.address && <div>{selectedIncident.address}</div>}
                       {selectedIncident.postcode && <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>}
+                      {(selectedIncident.latitude && selectedIncident.longitude) && (
+                        <div>
+                          <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
+                          <span className="text-success ms-2">📍 Precise Location</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

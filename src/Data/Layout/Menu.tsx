@@ -1,4 +1,4 @@
-// Data/Layout/Menu.tsx - Simplified Version
+// Data/Layout/Menu.tsx - Complete Fixed Version
 import { MenuItem } from "@/Types/Layout.type";
 import { useState, useEffect } from 'react';
 import { getStoredUserTeam, mapTeamToRole, isAuthenticated } from "../../app/(MainBody)/services/userService";
@@ -149,8 +149,9 @@ const AdminMenuList: MenuItem[] = [
       title: "Incidents",
       type: "submenu",
       children: [
-        createMenuItem("All Incidents", "/dashboard/admin?tab=all-incidents&view=all-incidents"),
+        createMenuItem("All Incidents", "/dashboard/admin?view=all-incidents"),
         createMenuItem("Create Incident", "/dashboard?tab=create-incident"),
+        createMenuItem("Assign Incidents", "/dashboard/admin?view=assign-incidents"),
         createMenuItem("Manager Registration", "/dashboard?tab=create-manager"),
         createMenuItem("Handler Registration", "/dashboard?tab=create-handler")
       ]
@@ -207,9 +208,9 @@ const IncidentManagerMenuList: MenuItem[] = [
     createMenuItem("Manager Dashboard", "/dashboard/incident_manager", "dashboard")
   ]),
   createMenuSection("Incident Management", [
-    createMenuItem("All Incidents", "/dashboard?tab=all-incidents", "alert-triangle"),
+    createMenuItem("All Incidents", "/dashboard/incident_manager?view=all-incidents", "alert-triangle"),
     createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
-    createMenuItem("Assign Incidents", "/dashboard?tab=assign-incident", "user-check"),
+    createMenuItem("Assign Incidents", "/dashboard/incident_manager?view=assign-incidents", "user-check"),
     createMenuItem("Pending EA approvals", "/dashboard?tab=pending-approval", "alert-triangle")
   ]),
   createMenuSection("SLA Management", [
@@ -223,9 +224,9 @@ const IncidentHandlerMenuList: MenuItem[] = [
     createMenuItem("Handler Dashboard", "/dashboard/incident_handler", "dashboard")
   ]),
   createMenuSection("My Tasks", [
-    createMenuItem("My Incidents", "/dashboard?tab=all-incidents", "list"),
+    createMenuItem("My Incidents", "/dashboard/incident_handler?view=all-incidents", "list"),
     createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
-    createMenuItem("Assign to Others", "/dashboard?tab=assign-incident", "plus-circle")
+    createMenuItem("Assign to Others", "/dashboard/incident_handler?view=assign-incidents", "user-check")
   ])
 ];
 

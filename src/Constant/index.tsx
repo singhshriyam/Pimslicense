@@ -9,7 +9,7 @@ export const PaymentDetails: string = "Payment Details";
 export const CreditCards: string = "Credit Card";
 export const DebitCards: string = "Debit Card";
 export const CVC: string = "CVC";
-export const Pincode: string = "Pincode";
+export const Postcode: string = "Postcode";
 export const ExpirationDate: string = "Expiration Date";
 export const Cod: string = "COD";
 export const Emi: string = "EMI";
@@ -370,7 +370,7 @@ export const LossSupportTicket: string = "Loss";
 export const DeleteSupportTicket: string = "Delete";
 export const DeleteData: string = "Delete Selected Data..!";
 
- 
+
 
 //Miscellaneous - FAQ
 export const FAQ: string = "FAQ";
@@ -445,7 +445,7 @@ export const FullNameJob: string = "Full name";
 export const EmailJob: string = "Email";
 export const PasswordJob: string = "Password";
 export const RepeatPasswordJob = "Repeat Password";
-export const PhoneNumberJob: string = "Phone Number";
+export const Mobile: string = "Mobile";
 export const CollegeNameJob: string = "College Name";
 export const PeriodJob: string = "Period";
 export const DegreeLevelJob: string = "Degree Level";
@@ -485,7 +485,7 @@ export const Page: string = "Pages";
 export const SamplePage: string = "Sample Page";
 export const SampleCard: string = "Sample Card";
 
- 
+
 
 //Pages - Authentication
 export const SignInToAccount: string = "Sign in to account";
@@ -1179,7 +1179,7 @@ export const BusinessVerticalTitle: string = "Business vertical wizard";
 export const CustomVerticalTitle: string = "Custom vertical wizard";
 export const BusinessWizardTitle: string = "Business horizontal wizard";
 export const Email: string = "Email";
-export const Website: string = "Website"; 
+export const Website: string = "Website";
 export const ContactNo: string = "ContactNo";
 //Two Factor
 export const TwoFactorTitle: string = "Two Factor";

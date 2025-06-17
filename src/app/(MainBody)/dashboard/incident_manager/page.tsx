@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import InteractiveIncidentMap from '../../../../Components/InteractiveIncidentMap';
 
 import {
+  fetchAllIncidents,
   fetchEndUserIncidents,
   fetchHandlerIncidents,
   getIncidentStats,
@@ -20,6 +21,7 @@ import {
 } from '../../services/userService';
 
 import AllIncidents from '../../../../Components/AllIncidents';
+import AssignIncidents from '../../../../Components/AssignIncidents';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
@@ -28,7 +30,7 @@ const IncidentManagerDashboard = () => {
   const searchParams = useSearchParams();
 
   const viewParam = searchParams.get('view');
-  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents');
+  const [currentView, setCurrentView] = useState(viewParam || 'dashboard');
 
   const [dashboardData, setDashboardData] = useState({
     managedIncidents: [] as Incident[],
@@ -63,26 +65,25 @@ const IncidentManagerDashboard = () => {
         userId: currentUser?.id || ''
       });
 
-      // Fetch both types of incidents and combine
-      const [endUserIncidents, handlerIncidents] = await Promise.all([
-        fetchEndUserIncidents().catch(() => []),
-        fetchHandlerIncidents().catch(() => [])
-      ]);
+      console.log('🔍 Manager Dashboard: Fetching incidents...');
+      console.log('👤 Current user:', currentUser);
 
-      // Combine and deduplicate by ID
-      const allIncidents = [...endUserIncidents, ...handlerIncidents];
-      const uniqueIncidents = allIncidents.filter((incident, index, self) =>
-        index === self.findIndex(i => i.id === incident.id)
-      );
+      // MANAGER SHOULD SEE ALL INCIDENTS - same as admin
+      const allIncidents = await fetchAllIncidents();
+
+      console.log('📊 Manager Dashboard: Received incidents:', allIncidents);
+      console.log('📊 Total incidents count:', allIncidents.length);
 
       setDashboardData({
-        managedIncidents: uniqueIncidents,
+        managedIncidents: allIncidents,
         loading: false,
         error: null
       });
 
+      console.log('✅ Manager Dashboard data updated successfully');
+
     } catch (error: any) {
-      console.error('Dashboard fetch error:', error);
+      console.error('❌ Manager Dashboard fetch error:', error);
       setDashboardData(prev => ({
         ...prev,
         loading: false,
@@ -97,11 +98,13 @@ const IncidentManagerDashboard = () => {
 
   useEffect(() => {
     const currentViewParam = searchParams.get('view');
-    setShowAllIncidents(currentViewParam === 'all-incidents');
+    setCurrentView(currentViewParam || 'dashboard');
   }, [searchParams]);
 
   // Calculate stats
   const stats = getIncidentStats(dashboardData.managedIncidents);
+
+  console.log('📊 Manager Dashboard Stats:', stats);
 
   // SLA Status calculation
   const getSLAStatus = (incident: Incident) => {
@@ -117,6 +120,79 @@ const IncidentManagerDashboard = () => {
       return hoursSinceCreated > 24 ? 'Breached' : 'Within SLA';
     }
   };
+
+  // Navigation handlers
+  const handleViewAllIncidents = () => {
+    setCurrentView('all-incidents');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'all-incidents');
+    window.history.pushState({}, '', newUrl.toString());
+  };
+
+  const handleViewAssignIncidents = () => {
+    setCurrentView('assign-incidents');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('view', 'assign-incidents');
+    window.history.pushState({}, '', newUrl.toString());
+  };
+
+  const handleBackToDashboard = () => {
+    setCurrentView('dashboard');
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('view');
+    window.history.pushState({}, '', newUrl.toString());
+  };
+
+  // Event handlers
+  const handlePinClick = (incident: Incident) => {
+    setSelectedIncident(incident);
+  };
+
+  const closeIncidentDetails = () => {
+    setSelectedIncident(null);
+  };
+
+  const formatDateLocal = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return 'Unknown';
+    }
+  };
+
+  // Render different views based on current view
+  if (currentView === 'all-incidents') {
+    return <AllIncidents userType="manager" onBack={handleBackToDashboard} />;
+  }
+
+  if (currentView === 'assign-incidents') {
+    return <AssignIncidents userType="manager" onBack={handleBackToDashboard} />;
+  }
+
+  // Loading state
+  if (dashboardData.loading) {
+    return (
+      <Container fluid>
+        <div className="text-center py-5">
+          <div className="spinner-border text-warning" role="status">
+            <span className="visually-hidden">Loading manager dashboard...</span>
+          </div>
+        </div>
+      </Container>
+    );
+  }
+
+  // Error state
+  if (dashboardData.error) {
+    return (
+      <Container fluid>
+        <div className="alert alert-danger mt-3">
+          <strong>Error:</strong> {dashboardData.error}
+          <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
+        </div>
+      </Container>
+    );
+  }
 
   // SLA Breach Distribution data for donut chart
   const getSLABreachData = () => {
@@ -160,10 +236,6 @@ const IncidentManagerDashboard = () => {
       if (hoursSinceCreated > resolutionTimeLimit && incident.status !== 'resolved') {
         breachStats.resolutionTime++;
       }
-
-      // For availability and quality breaches, we only count real data
-      // These would need to be tracked in additional database fields
-      // For now, we'll leave them at 0 until proper tracking is implemented
     });
 
     const data = [];
@@ -276,6 +348,8 @@ const IncidentManagerDashboard = () => {
       .filter(h => h.total > 0)
       .sort((a, b) => b.total - a.total);
 
+    console.log('📊 Handler Performance Data:', sortedHandlers);
+
     // Ensure minimum 10 handlers for better bar visualization
     const minHandlers = 10;
     const actualHandlers = sortedHandlers.length;
@@ -383,8 +457,8 @@ const IncidentManagerDashboard = () => {
     fill: { opacity: 1 },
     colors: ['#ffc107', '#ef4444', '#10b981'], // yellow, red, green
     legend: {
-      position: 'top',
-      horizontalAlign: 'center'
+      position: 'top' as const,
+      horizontalAlign: 'center' as const
     },
     tooltip: {
       y: {
@@ -400,67 +474,6 @@ const IncidentManagerDashboard = () => {
     { name: 'SLA Breached', data: breached },
     { name: 'Resolved', data: resolved }
   ];
-
-  // Event handlers
-  const handlePinClick = (incident: Incident) => {
-    setSelectedIncident(incident);
-  };
-
-  const closeIncidentDetails = () => {
-    setSelectedIncident(null);
-  };
-
-  const handleViewAllIncidents = () => {
-    setShowAllIncidents(true);
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.set('view', 'all-incidents');
-    window.history.pushState({}, '', newUrl.toString());
-  };
-
-  const handleBackToDashboard = () => {
-    setShowAllIncidents(false);
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete('view');
-    window.history.pushState({}, '', newUrl.toString());
-  };
-
-  const formatDateLocal = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString();
-    } catch {
-      return 'Unknown';
-    }
-  };
-
-  // Loading state
-  if (dashboardData.loading) {
-    return (
-      <Container fluid>
-        <div className="text-center py-5">
-          <div className="spinner-border text-warning" role="status">
-            <span className="visually-hidden">Loading manager dashboard...</span>
-          </div>
-        </div>
-      </Container>
-    );
-  }
-
-  // Error state
-  if (dashboardData.error) {
-    return (
-      <Container fluid>
-        <div className="alert alert-danger mt-3">
-          <strong>Error:</strong> {dashboardData.error}
-          <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
-        </div>
-      </Container>
-    );
-  }
-
-  // Show all incidents view
-  if (showAllIncidents) {
-    return <AllIncidents userType="handler" onBack={handleBackToDashboard} />;
-  }
 
   // Main dashboard view
   return (
@@ -582,13 +595,13 @@ const IncidentManagerDashboard = () => {
             <Card>
               <CardHeader>
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5 className="mb-0">⏳ Recent Incidents</h5>
+                  <h5 className="mb-0">⏳ Recent Incidents ({dashboardData.managedIncidents.length} total)</h5>
                   <div>
                     <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents} className="me-2">
                       View All Incidents
                     </Button>
-                    <Button color="outline-secondary" size="sm" onClick={fetchData}>
-                      🔄 Refresh
+                    <Button color="outline-warning" size="sm" onClick={handleViewAssignIncidents}>
+                      Assign Incidents
                     </Button>
                   </div>
                 </div>
@@ -604,6 +617,7 @@ const IncidentManagerDashboard = () => {
                           <th>Priority</th>
                           <th>Status</th>
                           <th>SLA Status</th>
+                          <th>Assigned To</th>
                           <th>Created</th>
                           <th>Action</th>
                         </tr>
@@ -644,6 +658,9 @@ const IncidentManagerDashboard = () => {
                                 </Badge>
                               </td>
                               <td>
+                                <small className="text-muted">{incident.assignedTo || 'Unassigned'}</small>
+                              </td>
+                              <td>
                                 <small>{formatDateLocal(incident.createdAt)}</small>
                               </td>
                               <td>
@@ -673,6 +690,9 @@ const IncidentManagerDashboard = () => {
                     </div>
                     <p className="text-muted mb-0">No incidents found</p>
                     <small className="text-muted">Incidents will appear here as they are created and assigned</small>
+                    <div className="mt-3">
+                      <Button color="primary" onClick={fetchData}>Refresh Data</Button>
+                    </div>
                   </div>
                 )}
               </CardBody>
@@ -727,6 +747,10 @@ const IncidentManagerDashboard = () => {
                       <div>{selectedIncident.category}</div>
                     </div>
                     <div className="mb-3">
+                      <strong>Sub Category:</strong>
+                      <div>{selectedIncident.subCategory}</div>
+                    </div>
+                    <div className="mb-3">
                       <strong>Priority:</strong>
                       <div>
                         <Badge
@@ -759,6 +783,10 @@ const IncidentManagerDashboard = () => {
                       </div>
                     </div>
                     <div className="mb-3">
+                      <strong>Assigned To:</strong>
+                      <div>{selectedIncident.assignedTo || 'Unassigned'}</div>
+                    </div>
+                    <div className="mb-3">
                       <strong>Created:</strong>
                       <div>{formatDateLocal(selectedIncident.createdAt)}</div>
                     </div>
@@ -781,15 +809,17 @@ const IncidentManagerDashboard = () => {
                   </div>
                 )}
 
-                {(selectedIncident.address || (selectedIncident.latitude && selectedIncident.longitude)) && (
+                {(selectedIncident.address || selectedIncident.postcode || (selectedIncident.latitude && selectedIncident.longitude)) && (
                   <div className="mb-3">
                     <strong>Location:</strong>
                     <div className="mt-1 p-2 bg-light rounded">
-                      {selectedIncident.address && <div>{selectedIncident.address}</div>}
-                      {selectedIncident.postcode && <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>}
+                      <div>{selectedIncident.address || 'Address not specified'}</div>
+                      {selectedIncident.postcode && (
+                        <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>
+                      )}
                       {(selectedIncident.latitude && selectedIncident.longitude) && (
                         <div>
-                          <strong>GPS:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
+                          <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
                           <span className="text-success ms-2">📍 Precise Location</span>
                         </div>
                       )}
@@ -797,8 +827,25 @@ const IncidentManagerDashboard = () => {
                   </div>
                 )}
 
+                <Row>
+                  <Col md={6}>
+                    <div className="mb-3">
+                      <strong>Reported By:</strong>
+                      <div>{selectedIncident.reportedByName || selectedIncident.caller}</div>
+                      <small className="text-muted">{selectedIncident.reportedBy}</small>
+                    </div>
+                  </Col>
+                  <Col md={6}>
+                    <div className="mb-3">
+                      <strong>Contact Type:</strong>
+                      <div>{selectedIncident.contactType}</div>
+                    </div>
+                  </Col>
+                </Row>
+
                 <div className="text-center mt-4">
-                  <Button color="primary" className="me-2">Manage Incident</Button>
+                  <Button color="warning" className="me-2">Assign Handler</Button>
+                  <Button color="primary" className="me-2">Edit Incident</Button>
                   <Button color="outline-secondary" onClick={closeIncidentDetails}>Close</Button>
                 </div>
               </CardBody>
