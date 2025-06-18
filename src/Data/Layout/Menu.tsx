@@ -1,10 +1,10 @@
-// Data/Layout/Menu.tsx - Complete Fixed Version
+// Data/Layout/Menu.tsx - Complete Fixed Version with Field Engineer
 import { MenuItem } from "@/Types/Layout.type";
 import { useState, useEffect } from 'react';
 import { getStoredUserTeam, mapTeamToRole, isAuthenticated } from "../../app/(MainBody)/services/userService";
 
-// User role type definition
-export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'USER' | 'SLA_MANAGER';
+// User role type definition - UPDATED to include Field Engineer
+export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'FIELD_ENGINEER' | 'WATER_POLLUTION_EXPERT' | 'USER' | 'SLA_MANAGER';
 
 export interface User {
   id?: string;
@@ -65,13 +65,15 @@ export const useUserRole = () => {
   };
 };
 
-// Role utilities with comprehensive permission system
+// Role utilities with comprehensive permission system - UPDATED
 export const RoleUtils = {
   getDefaultDashboard: (role: UserRole): string => {
     const dashboardMap: Record<UserRole, string> = {
       'ADMINISTRATOR': '/dashboard/admin',
       'INCIDENT_MANAGER': '/dashboard/incident_manager',
       'INCIDENT_HANDLER': '/dashboard/incident_handler',
+      'FIELD_ENGINEER': '/dashboard/field_engineer',
+      'WATER_POLLUTION_EXPERT': '/dashboard/water_pollution_expert',
       'SLA_MANAGER': '/dashboard/slamanager',
       'USER': '/dashboard/enduser'
     };
@@ -81,7 +83,7 @@ export const RoleUtils = {
   canAccessAdmin: (role: UserRole): boolean => role === 'ADMINISTRATOR',
   canManageUsers: (role: UserRole): boolean => role === 'ADMINISTRATOR',
   canManageIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER'].includes(role),
-  canHandleIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER'].includes(role),
+  canHandleIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER', 'FIELD_ENGINEER', 'WATER_POLLUTION_EXPERT'].includes(role),
   canViewAllIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
   canCreateIncidents: (role: UserRole): boolean => true,
   canManageSLA: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
@@ -92,6 +94,8 @@ export const RoleUtils = {
       'ADMINISTRATOR': 'Administrator',
       'INCIDENT_MANAGER': 'Incident Manager',
       'INCIDENT_HANDLER': 'Incident Handler',
+      'FIELD_ENGINEER': 'Field Engineer',
+      'WATER_POLLUTION_EXPERT': 'Water Pollution Expert',
       'SLA_MANAGER': 'SLA Manager',
       'USER': 'End User'
     };
@@ -230,6 +234,28 @@ const IncidentHandlerMenuList: MenuItem[] = [
   ])
 ];
 
+// NEW - Field Engineer Menu
+const FieldEngineerMenuList: MenuItem[] = [
+  createMenuSection("Dashboard", [
+    createMenuItem("Field Dashboard", "/dashboard/field_engineer", "map-pin")
+  ]),
+  createMenuSection("Field Work", [
+    createMenuItem("My Assignments", "/dashboard/field_engineer?view=all-incidents", "clipboard-list"),
+    createMenuItem("Site Inspections", "/dashboard/field_engineer", "search")
+  ])
+];
+
+// NEW - Water Pollution Expert Menu
+const WaterPollutionExpertMenuList: MenuItem[] = [
+  createMenuSection("Dashboard", [
+    createMenuItem("Expert Dashboard", "/dashboard/water_pollution_expert", "droplets")
+  ]),
+  createMenuSection("Water Quality", [
+    createMenuItem("My Cases", "/dashboard/water_pollution_expert?view=all-incidents", "beaker"),
+    createMenuItem("Water Testing", "/dashboard/water_pollution_expert", "flask")
+  ])
+];
+
 const SLAManagerMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
     createMenuItem("SLA Dashboard", "/dashboard/developer", "dashboard")
@@ -262,12 +288,14 @@ const GuestMenuList: MenuItem[] = [
   ])
 ];
 
-// Main functions
+// Main functions - UPDATED to include new roles
 export const getMenuByRole = (userRole: UserRole): MenuItem[] => {
   const menuMap: Record<UserRole, MenuItem[]> = {
     'ADMINISTRATOR': AdminMenuList,
     'INCIDENT_MANAGER': IncidentManagerMenuList,
     'INCIDENT_HANDLER': IncidentHandlerMenuList,
+    'FIELD_ENGINEER': FieldEngineerMenuList,
+    'WATER_POLLUTION_EXPERT': WaterPollutionExpertMenuList,
     'SLA_MANAGER': SLAManagerMenuList,
     'USER': EndUserMenuList
   };
@@ -339,11 +367,13 @@ export const filterMenuByPermissions = (menu: MenuItem[], userRole: UserRole): M
   }));
 };
 
-// Export individual menus for backward compatibility
+// Export individual menus for backward compatibility - UPDATED
 export {
   AdminMenuList,
   IncidentManagerMenuList,
   IncidentHandlerMenuList,
+  FieldEngineerMenuList,
+  WaterPollutionExpertMenuList,
   SLAManagerMenuList,
   EndUserMenuList,
   GuestMenuList

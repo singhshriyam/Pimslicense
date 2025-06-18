@@ -31,9 +31,6 @@ const DashboardContent = () => {
     const userTeam = currentUser.team || "user";
     const currentPath = window.location.pathname;
 
-    console.log("User team:", userTeam);
-    console.log("Current path:", currentPath);
-
     // If we have a tab parameter, handle it appropriately
     if (activeTab === 'create-incident') {
       setLoading(false);
@@ -44,7 +41,6 @@ const DashboardContent = () => {
     // The individual dashboards now handle their own "View All" functionality
     if (activeTab === 'all-incidents') {
       const dashboardRoute = getUserDashboard(userTeam);
-      console.log("Redirecting from all-incidents tab to:", dashboardRoute);
       router.replace(dashboardRoute);
       return;
     }
@@ -52,7 +48,6 @@ const DashboardContent = () => {
     // If on exact '/dashboard' path, redirect to appropriate dashboard
     if (currentPath === '/dashboard') {
       const dashboardRoute = getUserDashboard(userTeam);
-      console.log("Redirecting to:", dashboardRoute);
       router.replace(dashboardRoute);
       return;
     }

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button, Form, FormGroup, Input, Label, Alert } from "reactstrap";
 import Image from "next/image";
 import Link from "next/link";
+import { getUserDashboard } from "../../app/(MainBody)/services/userService";
 
 const ApexLogo = "/assets/images/logo/apex-logo.png";
 
@@ -66,22 +67,9 @@ const UserForm = () => {
 
         console.log("Login successful, redirecting...");
 
-        // Determine dashboard route based on team
-        const userTeam = (user?.team || user?.role || "user").toLowerCase();
-
-        let dashboardRoute = "/dashboard/enduser"; // default
-
-        if (userTeam.includes("admin")) {
-          dashboardRoute = "/dashboard/admin";
-        } else if (userTeam.includes("incident") && userTeam.includes("manager")) {
-          dashboardRoute = "/dashboard/incident_manager";
-        } else if (userTeam.includes("incident") && userTeam.includes("handler")) {
-          dashboardRoute = "/dashboard/incident_handler";
-        } else if (userTeam.includes("SLA Manager")) {
-          dashboardRoute = "/dashboard/developer";
-        }
-
-        // Force redirect immediately
+        // Get dashboard route using userService and redirect
+        const userTeam = user?.team || user?.role || "User";
+        const dashboardRoute = getUserDashboard(userTeam);
         window.location.href = dashboardRoute;
 
       } else {

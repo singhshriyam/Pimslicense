@@ -225,9 +225,20 @@ export const fetchIncidentsByUserRole = async (userRole?: string): Promise<Incid
     return await fetchHandlerIncidents();
   }
 
+  // Field Engineer gets assigned incidents (similar to handler)
+  if (role.includes('field') && role.includes('engineer')) {
+    return await fetchFieldEngineerIncidents();
+  }
+
+  // Water Pollution Expert gets assigned incidents (similar to handler)
+  if (role.includes('water') && role.includes('pollution')) {
+    return await fetchFieldEngineerIncidents(); // For now, use same endpoint as field engineer
+  }
+
   // End users get their own incidents
   return await fetchEndUserIncidents();
 };
+
 export const fetchEndUserIncidents = async (): Promise<Incident[]> => {
   const endpoint = `${API_BASE_URL}/end-user/incident-list`;
   const token = getStoredToken();
@@ -298,6 +309,49 @@ export const fetchHandlerIncidents = async (): Promise<Incident[]> => {
 
   } catch (error: any) {
     throw error;
+  }
+};
+
+export const fetchFieldEngineerIncidents = async (): Promise<Incident[]> => {
+  const endpoint = `${API_BASE_URL}/field-engineer/incident-list`; // You might need to adjust this endpoint
+  const token = getStoredToken();
+  const currentUser = getCurrentUser();
+
+  if (!token) {
+    throw new Error('Authentication required. Please log in again.');
+  }
+
+  try {
+    // Try field engineer specific endpoint first
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        assigned_to_id: currentUser?.id
+      })
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      return (result.data || []).map(transformIncidentFromBackend);
+    }
+
+    // Fallback: If field engineer endpoint doesn't exist, use handler endpoint
+    // Field engineers might be assigned through the same system as handlers
+    console.log('Field engineer endpoint not available, using handler endpoint as fallback');
+    return await fetchHandlerIncidents();
+
+  } catch (error: any) {
+    console.error('Field engineer incidents fetch error:', error);
+    // Fallback to handler incidents if field engineer endpoint fails
+    try {
+      return await fetchHandlerIncidents();
+    } catch (fallbackError: any) {
+      throw new Error(`Failed to fetch field engineer incidents: ${error.message}`);
+    }
   }
 };
 
