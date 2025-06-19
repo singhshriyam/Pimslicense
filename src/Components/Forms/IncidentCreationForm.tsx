@@ -1,4 +1,4 @@
-// src/components/IncidentCreationForm.tsx - Complete with Geolocation Support
+// src/components/IncidentCreationForm.tsx - Complete Production-Ready Version
 "use client";
 import React, { useState } from 'react';
 import { Container, Row, Col, Card, CardBody, Form, FormGroup, Label, Input, Button, Alert } from 'reactstrap';
@@ -6,17 +6,14 @@ import { Container, Row, Col, Card, CardBody, Form, FormGroup, Label, Input, But
 // Import from the unified service
 import {
   createIncident,
-  generateIncidentNumber,
   type Incident
 } from '../../app/(MainBody)/services/incidentService';
-
 
 import {
   getCurrentUser
 } from '../../app/(MainBody)/services/userService';
 
 interface IncidentFormData {
-  incident_no: string;
   caller: string;
   category_id: string;
   subcategory_id: string;
@@ -53,7 +50,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   compactMode = false
 }) => {
   const [formData, setFormData] = useState<IncidentFormData>({
-    incident_no: generateIncidentNumber(),
     caller: userName || '',
     category_id: '',
     subcategory_id: '',
@@ -77,6 +73,13 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [locationStatus, setLocationStatus] = useState<string>('');
+  const [spellCheckResults, setSpellCheckResults] = useState<any[]>([]);
+  const [isSpellChecking, setIsSpellChecking] = useState(false);
+
+  // AI Description Generation states
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Category and subcategory options with IDs matching your backend
   const categoryOptions = [
@@ -140,6 +143,142 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     { id: '4', name: 'High' } // Note: Your DB shows both id 1 and 4 as "High"
   ];
 
+  // Simple debounce function
+  function debounce(func: Function, wait: number) {
+    let timeout: NodeJS.Timeout;
+    return function executedFunction(...args: any[]) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  // Simplified spell check function
+  const checkSpelling = async (text: string) => {
+    if (!text || text.length < 10) {
+      setSpellCheckResults([]);
+      return;
+    }
+
+    setIsSpellChecking(true);
+    try {
+      const response = await fetch('https://api.languagetool.org/v2/check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          text: text,
+          language: 'en-US'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSpellCheckResults(data.matches || []);
+      } else {
+        setSpellCheckResults([]);
+      }
+    } catch (error) {
+      console.log('Spell check error:', error);
+      setSpellCheckResults([]);
+    } finally {
+      setIsSpellChecking(false);
+    }
+  };
+
+  // Debounced spell check
+  const debouncedSpellCheck = React.useCallback(
+    debounce((text: string) => checkSpelling(text), 1500),
+    []
+  );
+
+  // Apply spell check suggestion
+  const applySuggestion = (errorIndex: number, suggestion: string) => {
+    const error = spellCheckResults[errorIndex];
+    if (!error) return;
+
+    const currentText = formData.description;
+    const beforeError = currentText.substring(0, error.offset);
+    const afterError = currentText.substring(error.offset + error.length);
+    const newText = beforeError + suggestion + afterError;
+
+    setFormData(prev => ({ ...prev, description: newText }));
+
+    // Re-check spelling after applying suggestion
+    setTimeout(() => checkSpelling(newText), 500);
+  };
+
+  // AI-powered description generation
+  const generateAIDescriptions = async () => {
+    if (!formData.category_id || !formData.subcategory_id) {
+      setAiError('Please select both category and subcategory first.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    setAiError(null);
+    setAiSuggestions([]);
+
+    try {
+      const categoryName = getCategoryName(formData.category_id);
+      const subcategoryName = getSubCategoryName(formData.subcategory_id);
+
+      // Simple prompt for AI
+      const prompt = `You are writing incident reports for customers reporting ${subcategoryName.toLowerCase()} issues in ${categoryName.toLowerCase()} areas.
+
+Write 3 different customer complaints. Each should be 30-60 words, direct and simple.
+
+Examples of good reports:
+- "Manhole cover on my street is broken and smells terrible. Water pooling around it."
+- "Toilet keeps backing up and overflowing. Need urgent help."
+- "Strong sewage smell from drain in my garden. Getting worse each day."
+
+Write 3 similar reports for ${subcategoryName.toLowerCase()} problems. Separate each with |||
+
+Just write the 3 reports, nothing else:`;
+
+      // Call Groq AI API endpoint
+      const response = await fetch('/api/generate-description', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Groq AI service error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Parse Groq AI response
+      let descriptions: string[] = [];
+
+      if (data.content) {
+        descriptions = data.content.split('|||')
+          .map((desc: string) => desc.trim())
+          .filter((desc: string) => desc.length > 20);
+      }
+
+      if (descriptions.length === 0) {
+        throw new Error('No valid descriptions generated');
+      }
+
+      setAiSuggestions(descriptions);
+
+    } catch (error) {
+      console.error('AI generation failed:', error);
+      setAiError('Groq AI service is currently unavailable. Please write your description manually.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   // Get current location using browser geolocation
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -194,10 +333,9 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     );
   };
 
-  // Reverse geocode coordinates to get address (using a simpler approach)
+  // Reverse geocode coordinates to get address
   const reverseGeocode = async (latitude: string, longitude: string) => {
     try {
-      // Using Nominatim (free OpenStreetMap geocoding service)
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
       );
@@ -216,7 +354,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
         }
       }
     } catch (error) {
-      // Silently fail reverse geocoding - user can still enter address manually
       console.log('Reverse geocoding failed:', error);
     }
   };
@@ -238,7 +375,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
           result.country
         ].filter(Boolean).join(', ');
 
-        // Also get latitude and longitude from postcode
         const latitude = result.latitude ? result.latitude.toString() : '';
         const longitude = result.longitude ? result.longitude.toString() : '';
 
@@ -268,10 +404,22 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
 
       if (name === 'category_id') {
         newData.subcategory_id = '';
+        setAiSuggestions([]);
+        setAiError(null);
+      }
+
+      if (name === 'subcategory_id') {
+        setAiSuggestions([]);
+        setAiError(null);
       }
 
       if (name === 'postcode' && value.length >= 5) {
         setTimeout(() => lookupPostcode(value), 500);
+      }
+
+      // Trigger spell check for description field
+      if (name === 'description') {
+        debouncedSpellCheck(value);
       }
 
       return newData;
@@ -346,10 +494,8 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setShowCancelMessage(false);
 
     try {
-      // Get current user for user_id
       const currentUser = getCurrentUser();
 
-      // Ensure we have a valid user ID
       if (!currentUser?.id) {
         throw new Error('User not authenticated. Please log in again.');
       }
@@ -359,12 +505,10 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
         throw new Error('Invalid user ID. Please log in again.');
       }
 
-      // Validate that required fields have values
       if (!formData.category_id || !formData.subcategory_id) {
         throw new Error('Category and Sub Category are required');
       }
 
-      // Prepare data in the format expected by your backend API
       const incidentData = {
         user_id: parsedUserId,
         incidentstate_id: 1, // New
@@ -377,16 +521,11 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
         description: formData.description,
         address: formData.address,
         postcode: formData.postcode,
-        lat: formData.latitude || null,        // Backend expects 'lat'
-        lng: formData.longitude || null        // Backend expects 'lng'
+        lat: formData.latitude || null,
+        lng: formData.longitude || null
       };
 
-      console.log('Form Data:', formData);
-      console.log('Sending incident data:', incidentData);
-
       const createdIncident = await createIncident(incidentData);
-
-      console.log('Successfully created incident:', createdIncident);
 
       if (onIncidentCreated) {
         onIncidentCreated(createdIncident);
@@ -394,7 +533,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
 
       // Reset form
       setFormData({
-        incident_no: generateIncidentNumber(),
         caller: userName || '',
         category_id: '',
         subcategory_id: '',
@@ -411,6 +549,9 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
 
       setValidationErrors({});
       setLocationStatus('');
+      setAiSuggestions([]);
+      setAiError(null);
+      setSpellCheckResults([]);
       setShowSuccess(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -434,7 +575,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setShowConfirmModal(false);
 
     setFormData({
-      incident_no: generateIncidentNumber(),
       caller: userName || '',
       category_id: '',
       subcategory_id: '',
@@ -451,6 +591,9 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
 
     setValidationErrors({});
     setLocationStatus('');
+    setAiSuggestions([]);
+    setAiError(null);
+    setSpellCheckResults([]);
     setShowCancelMessage(true);
     setShowSuccess(false);
     setError(null);
@@ -459,6 +602,10 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     setTimeout(() => {
       setShowCancelMessage(false);
     }, 4000);
+  };
+
+  const handleCloseModal = () => {
+    setShowConfirmModal(false);
   };
 
   const getSubCategoryOptions = () => {
@@ -536,17 +683,20 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="incident_no">Incident Number *</Label>
+                  <Label for="caller">Caller Name *</Label>
                   <Input
                     type="text"
-                    id="incident_no"
-                    name="incident_no"
-                    value={formData.incident_no}
+                    id="caller"
+                    name="caller"
+                    value={formData.caller}
                     onChange={handleInputChange}
-                    disabled
-                    className="bg-light text-dark fw-bold"
-                    style={{ color: '#000 !important' }}
+                    placeholder="Enter caller's name"
+                    required
+                    invalid={!!validationErrors.caller}
                   />
+                  {validationErrors.caller && (
+                    <div className="invalid-feedback">{validationErrors.caller}</div>
+                  )}
                 </FormGroup>
               </Col>
               <Col md={6}>
@@ -571,24 +721,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={6}>
                 <FormGroup>
-                  <Label for="caller">Caller Name *</Label>
-                  <Input
-                    type="text"
-                    id="caller"
-                    name="caller"
-                    value={formData.caller}
-                    onChange={handleInputChange}
-                    placeholder="Enter caller's name"
-                    required
-                    invalid={!!validationErrors.caller}
-                  />
-                  {validationErrors.caller && (
-                    <div className="invalid-feedback">{validationErrors.caller}</div>
-                  )}
-                </FormGroup>
-              </Col>
-              <Col md={6}>
-                <FormGroup>
                   <Label for="category_id">Category *</Label>
                   <Input
                     type="select"
@@ -609,9 +741,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   )}
                 </FormGroup>
               </Col>
-            </Row>
-
-            <Row>
               <Col md={6}>
                 <FormGroup>
                   <Label for="subcategory_id">Sub Category *</Label>
@@ -635,6 +764,10 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   )}
                 </FormGroup>
               </Col>
+            </Row>
+
+            {/* Show Impact and Urgency for all users, but make them read-only for regular users */}
+            <Row>
               <Col md={6}>
                 <FormGroup>
                   <Label for="impact_id">Impact *</Label>
@@ -645,6 +778,7 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                     value={formData.impact_id}
                     onChange={handleInputChange}
                     required
+                    disabled={userRole === 'User' || userRole === 'EndUser'}
                   >
                     {impactOptions.map(option => (
                       <option key={option.id} value={option.id}>{option.name}</option>
@@ -652,9 +786,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   </Input>
                 </FormGroup>
               </Col>
-            </Row>
-
-            <Row>
               <Col md={6}>
                 <FormGroup>
                   <Label for="urgency_id">Urgency *</Label>
@@ -665,6 +796,7 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                     value={formData.urgency_id}
                     onChange={handleInputChange}
                     required
+                    disabled={userRole === 'User' || userRole === 'EndUser'}
                   >
                     {urgencyOptions.map(option => (
                       <option key={option.id} value={option.id}>{option.name}</option>
@@ -672,6 +804,9 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   </Input>
                 </FormGroup>
               </Col>
+            </Row>
+
+            <Row>
               <Col md={6}>
                 <FormGroup>
                   <Label for="postcode">Postcode *</Label>
@@ -697,54 +832,21 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   )}
                 </FormGroup>
               </Col>
-            </Row>
-
-            <Row>
-              <Col md={12}>
+              <Col md={6}>
                 <FormGroup>
                   <Label for="address">Address/Location *</Label>
-                  <div className="d-flex">
-                    <Input
-                      type="text"
-                      id="address"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleInputChange}
-                      placeholder="Address will be auto-filled from postcode"
-                      required
-                      invalid={!!validationErrors.address}
-                      className="flex-grow-1 me-2"
-                    />
-                    <Button
-                      type="button"
-                      color="primary"
-                      onClick={getCurrentLocation}
-                      disabled={loadingLocation}
-                      className="d-flex align-items-center"
-                      style={{ minWidth: '150px' }}
-                    >
-                      {loadingLocation ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                          Getting Location...
-                        </>
-                      ) : (
-                        <>
-                          📍 Get Location
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  {locationStatus && (
-                    <small className={`${locationStatus.includes('captured') || locationStatus.includes('postcode') ? 'text-success' : 'text-info'}`}>
-                      {locationStatus}
-                    </small>
-                  )}
+                  <Input
+                    type="text"
+                    id="address"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    placeholder="Address will be auto-filled from postcode"
+                    required
+                    invalid={!!validationErrors.address}
+                  />
                   <small className="text-muted d-block mt-1">
-                    {formData.postcode ?
-                      'Address will be auto-filled from postcode, or click "Get Location" to use your current location' :
-                      'Enter postcode above for auto-detection or click "Get Location" to use your current location'
-                    }
+                    Address will be auto-filled from postcode
                   </small>
                   {validationErrors.address && (
                     <div className="invalid-feedback">{validationErrors.address}</div>
@@ -752,20 +854,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                 </FormGroup>
               </Col>
             </Row>
-
-            {/* Location coordinates display (for debugging/confirmation) */}
-            {(formData.latitude && formData.longitude) && (
-              <Row>
-                <Col md={12}>
-                  <div className="bg-light p-2 rounded mb-3">
-                    <small className="text-muted">
-                      <strong>Location Coordinates:</strong> {formData.latitude.substring(0, 10)}, {formData.longitude.substring(0, 10)}
-                      <span className="text-success ms-2">✓ Location will be pinned on map</span>
-                    </small>
-                  </div>
-                </Col>
-              </Row>
-            )}
 
             <Row>
               <Col md={12}>
@@ -795,18 +883,136 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
             <Row>
               <Col md={12}>
                 <FormGroup>
-                  <Label for="description">Detailed Description *</Label>
-                  <Input
-                    type="textarea"
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    placeholder="Provide detailed information about the incident, including location, severity, and any immediate actions taken (min 20 characters)"
-                    rows={4}
-                    required
-                    invalid={!!validationErrors.description}
-                  />
+                  <Label for="description">
+                    Detailed Description *
+                    {isSpellChecking && (
+                      <small className="text-info ms-2">
+                        <i className="fa fa-spinner fa-spin"></i> Checking spelling...
+                      </small>
+                    )}
+                    {spellCheckResults.length > 0 && !isSpellChecking && (
+                      <small className="text-warning ms-2">
+                        <i className="fa fa-exclamation-triangle"></i> {spellCheckResults.length} spelling/grammar issue(s) found
+                      </small>
+                    )}
+                  </Label>
+
+                  {/* AI-Generated Suggestions */}
+                  {formData.category_id && formData.subcategory_id && (
+                    <div className="mb-3">
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <Button
+                          type="button"
+                          color="info"
+                          size="sm"
+                          onClick={generateAIDescriptions}
+                          disabled={isGeneratingAI}
+                          className="d-flex align-items-center"
+                        >
+                          {isGeneratingAI ? (
+                            <>
+                              <i className="fa fa-spinner fa-spin me-1"></i>
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fa fa-magic me-1"></i>
+                              Generate AI Suggestions
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {aiError && (
+                        <div className="alert alert-warning alert-sm p-2 mb-2">
+                          <small>{aiError}</small>
+                        </div>
+                      )}
+
+                      {aiSuggestions.length > 0 && (
+                        <div className="border rounded p-2 bg-light">
+                          <small className="text-muted d-block mb-2">
+                            Click on any suggestion to use it as your description:
+                          </small>
+                          {aiSuggestions.map((suggestion, index) => (
+                            <div key={index} className="mb-2">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary text-start w-100"
+                                style={{
+                                  fontSize: '0.85rem',
+                                  padding: '0.5rem',
+                                  height: 'auto',
+                                  whiteSpace: 'normal',
+                                  textAlign: 'left',
+                                  lineHeight: '1.4'
+                                }}
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, description: suggestion }));
+                                  setTimeout(() => checkSpelling(suggestion), 500);
+                                }}
+                                title="Click to use this AI-generated suggestion"
+                              >
+                                <strong>Option {index + 1}:</strong><br />
+                                {suggestion}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <Input
+                      type="textarea"
+                      id="description"
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      placeholder="Provide detailed information about the incident, including location, severity, and any immediate actions taken (min 20 characters). Use the AI suggestions above for help!"
+                      rows={4}
+                      required
+                      invalid={!!validationErrors.description}
+                      spellCheck={true}
+                    />
+
+                    {/* Simple spell check suggestions below textarea */}
+                    {spellCheckResults.length > 0 && (
+                      <div className="mt-2 p-2 border rounded bg-light">
+                        <small className="text-muted d-block mb-2">
+                          <i className="fa fa-spell-check"></i> Found {spellCheckResults.length} spelling/grammar suggestion(s):
+                        </small>
+                        {spellCheckResults.slice(0, 5).map((error, index) => (
+                          <div key={index} className="mb-2 p-2 border rounded bg-white">
+                            <div className="d-flex justify-content-between align-items-start">
+                              <div>
+                                <strong className="text-danger">"{formData.description.substring(error.offset, error.offset + error.length)}"</strong>
+                                <small className="text-muted d-block">{error.message}</small>
+                              </div>
+                              <div className="ms-2">
+                                {error.replacements && error.replacements.length > 0 && (
+                                  <div className="d-flex flex-wrap gap-1">
+                                    {error.replacements.slice(0, 3).map((replacement: any, repIndex: number) => (
+                                      <Button
+                                        key={repIndex}
+                                        size="sm"
+                                        color="outline-success"
+                                        onClick={() => applySuggestion(index, replacement.value)}
+                                      >
+                                        {replacement.value}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <small className="text-muted">
                     {formData.description.length} characters (minimum 20 required)
                   </small>
@@ -853,6 +1059,22 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   <i className="fa fa-exclamation-triangle text-warning me-2"></i>
                   Confirm Incident Submission
                 </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Close"
+                  onClick={handleCloseModal}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '1.5rem',
+                    fontWeight: 'bold',
+                    opacity: 0.5,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ×
+                </button>
               </div>
               <div className="modal-body">
                 <p className="mb-3">Are you sure you want to submit this incident?</p>
@@ -871,16 +1093,13 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   <div className="mt-2 text-black">
                     <strong>Description:</strong> {formData.short_description}
                   </div>
-                  {(formData.latitude && formData.longitude) && (
-                    <div className="mt-2 text-black">
-                      <strong>Coordinates:</strong> {formData.latitude.substring(0, 8)}, {formData.longitude.substring(0, 8)}
-                      <span className="text-success ms-2">📍 Will be pinned on map</span>
-                    </div>
-                  )}
                 </div>
-                <small className="text-black mt-2 d-block">
-                  Once submitted, this incident will be assigned a tracking number and sent to the appropriate team for processing.
-                </small>
+                <div className="mt-3 p-2 bg-info bg-opacity-10 rounded">
+                  <small className="text-info">
+                    <i className="fa fa-info-circle me-1"></i>
+                    <strong>Tip:</strong> Click the × button above if you need to edit any details before submitting.
+                  </small>
+                </div>
               </div>
               <div className="modal-footer">
                 <button
@@ -897,7 +1116,7 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
                   onClick={handleConfirmSubmit}
                 >
                   <i className="fa fa-check me-1"></i>
-                  Yes, Submit
+                  Submit
                 </button>
               </div>
             </div>

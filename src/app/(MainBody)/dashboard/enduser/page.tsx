@@ -431,7 +431,7 @@ const EndUserDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {dashboardData.myIncidents.slice(0, 3).map((incident) => (
+                        {dashboardData.myIncidents.slice(0, 4).map((incident) => (
                           <tr key={incident.id}>
                             <td>
                               <span className="fw-medium text-primary">{incident.number}</span>
@@ -439,7 +439,7 @@ const EndUserDashboard = () => {
                             <td>
                               <div>
                                 <div className="fw-medium">{incident.category}</div>
-                                <small className="text-muted">{incident.subCategory}</small>
+                                {/* <small className="text-muted">{incident.subCategory}</small> */}
                               </div>
                             </td>
                             <td>

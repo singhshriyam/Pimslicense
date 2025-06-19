@@ -37,11 +37,83 @@ interface SLAStatus {
   startTime: string;
 }
 
-// Enhanced Incident type with SLA
+// Enhanced Incident type with SLA - Updated to match backend structure
 interface EnhancedIncident extends Incident {
   slaStatus: SLAStatus[];
   similarIncidents?: Incident[];
+  narration?: string;
+  incidentstate?: {
+    id: number;
+    name: string;
+  };
+  category?: {
+    id: number;
+    name: string;
+  };
+  subcategory?: {
+    id: number;
+    name: string;
+  };
+  contact_type?: {
+    id: number;
+    name: string;
+  };
+  impact?: {
+    id: number;
+    name: string;
+  };
+  urgency?: {
+    id: number;
+    name: string;
+  };
 }
+
+// Status mapping helper functions
+const mapBackendStatusToFrontend = (backendStatus: string) => {
+  const statusMap: {[key: string]: string} = {
+    'New': 'pending',
+    'InProgress': 'in_progress',
+    'Resolved': 'resolved',
+    'Closed': 'closed'
+  };
+  return statusMap[backendStatus] || 'pending';
+};
+
+const mapFrontendStatusToBackend = (frontendStatus: string) => {
+  const statusMap: {[key: string]: string} = {
+    'pending': 'New',
+    'in_progress': 'InProgress',
+    'on_hold': 'InProgress', // Map on_hold to InProgress since backend doesn't have on_hold
+    'resolved': 'Resolved',
+    'closed': 'Closed',
+    'cancelled': 'Closed' // Map cancelled to Closed since backend doesn't have cancelled
+  };
+  return statusMap[frontendStatus] || 'New';
+};
+
+// Updated getStatusColor to handle backend statuses
+const getStatusColorUpdated = (status: string) => {
+  const normalizedStatus = status?.toLowerCase();
+
+  switch (normalizedStatus) {
+    case 'new':
+    case 'pending':
+      return '#ffc107'; // Yellow
+    case 'in_progress':
+    case 'inprogress':
+      return '#17a2b8'; // Blue
+    case 'on_hold':
+      return '#6c757d'; // Gray
+    case 'resolved':
+      return '#28a745'; // Green
+    case 'closed':
+      return '#6f42c1'; // Purple
+    case 'cancelled':
+      return '#dc3545'; // Red
+    default:
+      return '#6c757d'; // Gray
+  }
+};
 
 const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
   const router = useRouter();
@@ -325,9 +397,11 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
         fetchedIncidents = await fetchEndUserIncidents();
       }
 
-      // Enhance incidents with SLA data for handlers/managers/field engineers only
+      // Enhance incidents with SLA data and map backend status
       const enhancedIncidents: EnhancedIncident[] = fetchedIncidents.map(incident => ({
         ...incident,
+        // Map backend incidentstate.name to frontend status field for filtering
+        status: mapBackendStatusToFrontend(incident.incidentstate?.name || 'New'),
         slaStatus: hasAdvancedEditPermissions() ? calculateSLA(incident) : [],
         similarIncidents: hasAdvancedEditPermissions() ? findSimilarIncidents(incident) : []
       }));
@@ -367,7 +441,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
       filtered = filtered.filter(incident =>
         incident.shortDescription?.toLowerCase().includes(term) ||
         incident.number?.toLowerCase().includes(term) ||
-        incident.category?.toLowerCase().includes(term) ||
+        incident.category?.name?.toLowerCase().includes(term) ||
         incident.caller?.toLowerCase().includes(term)
       );
     }
@@ -404,21 +478,40 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
     setActiveTab('details');
     setNarration('');
     setSpellCheckSuggestions([]);
-    setUploadedImages([]);
+
+    // Set dummy evidence data (remove this in production)
+    setUploadedImages([
+      {
+        id: 1,
+        name: 'incident_photo_1.jpg',
+        url: 'https://via.placeholder.com/150x150/007bff/ffffff?text=Photo+1',
+        uploadedAt: '2024-06-15 10:30:00',
+        size: '2.4 MB'
+      },
+      {
+        id: 2,
+        name: 'incident_photo_2.jpg',
+        url: 'https://via.placeholder.com/150x150/28a745/ffffff?text=Photo+2',
+        uploadedAt: '2024-06-15 11:15:00',
+        size: '1.8 MB'
+      }
+    ]);
 
     if (hasAdvancedEditPermissions()) {
+      // Auto-fill with actual incident data from database
       setAdvancedEditForm({
         shortDescription: incident.shortDescription || '',
         description: incident.description || '',
-        category: incident.category || '',
-        subCategory: incident.subCategory || '',
-        contactType: incident.contactType || '',
-        impact: incident.impact || '',
-        urgency: incident.priority || incident.urgency || '',
-        status: incident.status || '',
-        narration: ''
+        category: incident.category?.name || '',
+        subCategory: incident.subcategory?.name || '',
+        contactType: incident.contact_type?.name || '',
+        impact: incident.impact?.name || '',
+        urgency: incident.urgency?.name || '',
+        status: mapBackendStatusToFrontend(incident.incidentstate?.name || 'New'),
+        narration: incident.narration || ''
       });
     } else {
+      // Basic edit form for end users with actual data
       setEditForm({
         shortDescription: incident.shortDescription || '',
         description: incident.description || ''
@@ -487,11 +580,11 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
           ...editingIncident,
           shortDescription: advancedEditForm.shortDescription,
           description: advancedEditForm.description,
-          category: advancedEditForm.category,
-          subCategory: advancedEditForm.subCategory,
-          impact: advancedEditForm.impact,
-          priority: advancedEditForm.urgency,
-          status: advancedEditForm.status as any
+          category: { ...editingIncident.category, name: advancedEditForm.category } as any,
+          subcategory: { ...editingIncident.subcategory, name: advancedEditForm.subCategory } as any,
+          impact: { ...editingIncident.impact, name: advancedEditForm.impact } as any,
+          urgency: { ...editingIncident.urgency, name: advancedEditForm.urgency } as any,
+          status: advancedEditForm.status
         };
       } else {
         updatedIncident = {
@@ -716,7 +809,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                               </td>
                               <td>
                                 <div>
-                                  <div className="fw-medium text-dark">{incident.category}</div>
+                                  <div className="fw-medium text-dark">{incident.category?.name || 'Unknown'}</div>
                                 </div>
                               </td>
                               <td>
@@ -725,13 +818,13 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                                 </div>
                               </td>
                               <td>
-                                <Badge style={{ backgroundColor: getStatusColor(incident.status || 'pending'), color: 'white' }}>
-                                  {(incident.status || 'pending').replace('_', ' ')}
+                                <Badge style={{ backgroundColor: getStatusColorUpdated(incident.incidentstate?.name || incident.status || 'pending'), color: 'white' }}>
+                                  {incident.incidentstate?.name || (incident.status || 'pending').replace('_', ' ')}
                                 </Badge>
                               </td>
                               <td>
-                                <Badge style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}>
-                                  {incident.priority || 'Medium'}
+                                <Badge style={{ backgroundColor: getPriorityColor(incident.urgency?.name || incident.priority), color: 'white' }}>
+                                  {incident.urgency?.name || incident.priority || 'Medium'}
                                 </Badge>
                               </td>
                               <td>
@@ -814,26 +907,26 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                 <Col md={6}>
                   <div className="mb-3"><strong>Incident Number:</strong> <span className="ms-2 text-primary fw-medium">{selectedIncident.number}</span></div>
                   <div className="mb-3"><strong>Title:</strong> <span className="ms-2 text-dark">{selectedIncident.shortDescription}</span></div>
-                  <div className="mb-3"><strong>Category:</strong> <span className="ms-2 text-dark">{selectedIncident.category}</span></div>
-                  <div className="mb-3"><strong>Sub Category:</strong> <span className="ms-2 text-dark">{selectedIncident.subCategory}</span></div>
+                  <div className="mb-3"><strong>Category:</strong> <span className="ms-2 text-dark">{selectedIncident.category?.name}</span></div>
+                  <div className="mb-3"><strong>Sub Category:</strong> <span className="ms-2 text-dark">{selectedIncident.subcategory?.name}</span></div>
                   <div className="mb-3"><strong>Caller:</strong> <span className="ms-2 text-dark">{selectedIncident.caller}</span></div>
-                  <div className="mb-3"><strong>Contact Type:</strong> <span className="ms-2 text-dark">{selectedIncident.contactType}</span></div>
+                  <div className="mb-3"><strong>Contact Type:</strong> <span className="ms-2 text-dark">{selectedIncident.contact_type?.name}</span></div>
                 </Col>
                 <Col md={6}>
                   <div className="mb-3">
                     <strong>Priority:</strong>
-                    <Badge className="ms-2" style={{ backgroundColor: getPriorityColor(selectedIncident.priority), color: 'white' }}>
-                      {selectedIncident.priority}
+                    <Badge className="ms-2" style={{ backgroundColor: getPriorityColor(selectedIncident.urgency?.name || selectedIncident.priority), color: 'white' }}>
+                      {selectedIncident.urgency?.name || selectedIncident.priority}
                     </Badge>
                   </div>
                   <div className="mb-3">
                     <strong>Status:</strong>
-                    <Badge className="ms-2" style={{ backgroundColor: getStatusColor(selectedIncident.status || 'pending'), color: 'white' }}>
-                      {(selectedIncident.status || 'pending').replace('_', ' ')}
+                    <Badge className="ms-2" style={{ backgroundColor: getStatusColorUpdated(selectedIncident.incidentstate?.name || selectedIncident.status || 'pending'), color: 'white' }}>
+                      {selectedIncident.incidentstate?.name || (selectedIncident.status || 'pending').replace('_', ' ')}
                     </Badge>
                   </div>
-                  <div className="mb-3"><strong>Impact:</strong> <span className="ms-2 text-dark">{selectedIncident.impact || 'Not specified'}</span></div>
-                  <div className="mb-3"><strong>Urgency:</strong> <span className="ms-2 text-dark">{selectedIncident.urgency || 'Not specified'}</span></div>
+                  <div className="mb-3"><strong>Impact:</strong> <span className="ms-2 text-dark">{selectedIncident.impact?.name || 'Not specified'}</span></div>
+                  <div className="mb-3"><strong>Urgency:</strong> <span className="ms-2 text-dark">{selectedIncident.urgency?.name || 'Not specified'}</span></div>
                   <div className="mb-3"><strong>Reported By:</strong> <span className="ms-2 text-dark">{selectedIncident.reportedByName}</span></div>
                   <div className="mb-3"><strong>Created:</strong> <span className="ms-2 text-dark">{formatDate(selectedIncident.createdAt)}</span></div>
                 </Col>
@@ -849,12 +942,6 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                       <div className="mt-1 p-2 bg-light rounded text-dark">
                         {selectedIncident.address && <div className="text-dark">{selectedIncident.address}</div>}
                         {selectedIncident.postcode && <div className="text-dark"><strong>Postcode:</strong> {selectedIncident.postcode}</div>}
-                        {(selectedIncident.latitude && selectedIncident.longitude) && (
-                          <div className="text-dark">
-                            <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
-                            <span className="text-success ms-2">📍 Precise Location</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -916,6 +1003,95 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
           Edit Incident - {editingIncident?.number}
         </ModalHeader>
         <ModalBody>
+          {/* Arrow-shaped Status Tabs */}
+          {hasAdvancedEditPermissions() && (
+            <div className="mb-4">
+              <h6 className="text-dark mb-3">Incident State Flow</h6>
+              <div className="d-flex w-100" style={{ height: '50px' }}>
+
+                {/* Pending/New Arrow Tab */}
+                <div
+                  className={`d-flex align-items-center justify-content-center text-white ${(editingIncident?.status === 'pending' || editingIncident?.incidentstate?.name === 'New') ? 'fw-bold' : ''}`}
+                  style={{
+                    flex: 1,
+                    height: '50px',
+                    backgroundColor: (editingIncident?.status === 'pending' || editingIncident?.incidentstate?.name === 'New') ? '#007bff' : '#6c757d',
+                    position: 'relative',
+                    clipPath: 'polygon(0 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 0 100%)',
+                    zIndex: 4
+                  }}
+                >
+                  Pending
+                </div>
+
+                {/* In Progress Arrow Tab */}
+                <div
+                  className={`d-flex align-items-center justify-content-center text-white ${(editingIncident?.status === 'in_progress' || editingIncident?.incidentstate?.name === 'InProgress') ? 'fw-bold' : ''}`}
+                  style={{
+                    flex: 1,
+                    height: '50px',
+                    backgroundColor: (editingIncident?.status === 'in_progress' || editingIncident?.incidentstate?.name === 'InProgress') ? '#007bff' : '#6c757d',
+                    position: 'relative',
+                    clipPath: 'polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%)',
+                    marginLeft: '-25px',
+                    zIndex: 3
+                  }}
+                >
+                  In Progress
+                </div>
+
+                {/* On Hold Arrow Tab */}
+                <div
+                  className={`d-flex align-items-center justify-content-center text-white ${(editingIncident?.status === 'on_hold' || editingIncident?.incidentstate?.name === 'OnHold') ? 'fw-bold' : ''}`}
+                  style={{
+                    flex: 1,
+                    height: '50px',
+                    backgroundColor: (editingIncident?.status === 'on_hold' || editingIncident?.incidentstate?.name === 'OnHold') ? '#007bff' : '#6c757d',
+                    position: 'relative',
+                    clipPath: 'polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%)',
+                    marginLeft: '-25px',
+                    zIndex: 2
+                  }}
+                >
+                  On Hold
+                </div>
+
+                {/* Resolved Arrow Tab */}
+                <div
+                  className={`d-flex align-items-center justify-content-center text-white ${(editingIncident?.status === 'resolved' || editingIncident?.incidentstate?.name === 'Resolved') ? 'fw-bold' : ''}`}
+                  style={{
+                    flex: 1,
+                    height: '50px',
+                    backgroundColor: (editingIncident?.status === 'resolved' || editingIncident?.incidentstate?.name === 'Resolved') ? '#007bff' : '#6c757d',
+                    position: 'relative',
+                    clipPath: 'polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%)',
+                    marginLeft: '-25px',
+                    zIndex: 1
+                  }}
+                >
+                  Resolved
+                </div>
+
+                {/* Closed Arrow Tab */}
+                <div
+                  className={`d-flex align-items-center justify-content-center text-white ${(editingIncident?.status === 'closed' || editingIncident?.incidentstate?.name === 'Closed') ? 'fw-bold' : ''}`}
+                  style={{
+                    flex: 1,
+                    height: '50px',
+                    backgroundColor: (editingIncident?.status === 'closed' || editingIncident?.incidentstate?.name === 'Closed') ? '#007bff' : '#6c757d',
+                    position: 'relative',
+                    clipPath: 'polygon(25px 0, 100% 0, 100% 100%, 25px 100%, 0 50%)',
+                    marginLeft: '-25px',
+                    zIndex: 0
+                  }}
+                >
+                  Closed
+                </div>
+
+              </div>
+            </div>
+          )}
+
           {/* Only show advanced tabs for handlers/managers/field engineers */}
           {hasAdvancedEditPermissions() ? (
             <Nav tabs className="mb-4">
@@ -1112,10 +1288,12 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                             value={advancedEditForm.status}
                             onChange={(e) => setAdvancedEditForm({...advancedEditForm, status: e.target.value})}
                           >
-                            <option value="pending">New</option>
+                            <option value="pending">Pending</option>
                             <option value="in_progress">In Progress</option>
+                            <option value="on_hold">On Hold</option>
                             <option value="resolved">Resolved</option>
                             <option value="closed">Closed</option>
+                            <option value="cancelled">Cancelled</option>
                           </Input>
                         </FormGroup>
                       </Col>
@@ -1314,12 +1492,55 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                         <th className="text-dark">Type</th>
                         <th className="text-dark">Reading</th>
                         <th className="text-dark">Date</th>
+                        <th className="text-dark">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Dummy data - remove in production */}
                       <tr>
-                        <td colSpan={4} className="text-center text-muted">
-                          No readings recorded yet
+                        <td className="text-dark">1</td>
+                        <td className="text-dark">Upstream</td>
+                        <td className="text-dark">4.2 mg/L</td>
+                        <td className="text-dark">2024-06-15</td>
+                        <td>
+                          <Button
+                            color="info"
+                            size="sm"
+                            className="me-2"
+                            onClick={() => console.log('Download reading 1')}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            color="danger"
+                            size="sm"
+                            onClick={() => console.log('Delete reading 1')}
+                          >
+                            Delete
+                          </Button>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="text-dark">2</td>
+                        <td className="text-dark">Downstream</td>
+                        <td className="text-dark">3.8 mg/L</td>
+                        <td className="text-dark">2024-06-16</td>
+                        <td>
+                          <Button
+                            color="info"
+                            size="sm"
+                            className="me-2"
+                            onClick={() => console.log('Download reading 2')}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            color="danger"
+                            size="sm"
+                            onClick={() => console.log('Delete reading 2')}
+                          >
+                            Delete
+                          </Button>
                         </td>
                       </tr>
                     </tbody>
@@ -1439,12 +1660,69 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                         <th className="text-dark">Detail</th>
                         <th className="text-dark">Status</th>
                         <th className="text-dark">Created At</th>
+                        <th className="text-dark">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Dummy data - remove in production */}
                       <tr>
-                        <td colSpan={9} className="text-center text-muted">
-                          No actions recorded yet
+                        <td className="text-dark">ACT-001</td>
+                        <td className="text-dark">2024-06-15</td>
+                        <td className="text-dark">
+                          <Badge color="success">Yes</Badge>
+                        </td>
+                        <td className="text-dark">3 days</td>
+                        <td className="text-dark">Investigation</td>
+                        <td className="text-dark">High</td>
+                        <td className="text-dark">Initial site inspection completed</td>
+                        <td className="text-dark">Completed</td>
+                        <td className="text-dark">2024-06-15 09:30</td>
+                        <td>
+                          <Button
+                            color="info"
+                            size="sm"
+                            className="me-2"
+                            onClick={() => console.log('Download action 1')}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            color="danger"
+                            size="sm"
+                            onClick={() => console.log('Delete action 1')}
+                          >
+                            Delete
+                          </Button>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="text-dark">ACT-002</td>
+                        <td className="text-dark">2024-06-16</td>
+                        <td className="text-dark">
+                          <Badge color="warning">No</Badge>
+                        </td>
+                        <td className="text-dark">2 days</td>
+                        <td className="text-dark">Resolution</td>
+                        <td className="text-dark">Medium</td>
+                        <td className="text-dark">Equipment repair scheduled</td>
+                        <td className="text-dark">In Progress</td>
+                        <td className="text-dark">2024-06-16 14:20</td>
+                        <td>
+                          <Button
+                            color="info"
+                            size="sm"
+                            className="me-2"
+                            onClick={() => console.log('Download action 2')}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            color="danger"
+                            size="sm"
+                            onClick={() => console.log('Delete action 2')}
+                          >
+                            Delete
+                          </Button>
                         </td>
                       </tr>
                     </tbody>
@@ -1487,7 +1765,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                               </div>
                             </td>
                             <td>
-                              <Badge style={{ backgroundColor: getStatusColor(incident.status || 'resolved'), color: 'white' }}>
+                              <Badge style={{ backgroundColor: getStatusColorUpdated(incident.status || 'resolved'), color: 'white' }}>
                                 {(incident.status || 'resolved').replace('_', ' ')}
                               </Badge>
                             </td>
@@ -1521,16 +1799,6 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack }) => {
                     <p className="text-muted">No resolved incidents with similar characteristics were found in the knowledge base.</p>
                   </div>
                 )}
-
-                <div className="mt-4 p-3 bg-light rounded">
-                  <h6 className="text-dark">Knowledge Base Tips:</h6>
-                  <ul className="mb-0 text-dark">
-                    <li>Review similar cases to understand common resolution patterns</li>
-                    <li>Check if any standard procedures were followed</li>
-                    <li>Look for recurring issues that might indicate systemic problems</li>
-                    <li>Note successful resolution techniques for future reference</li>
-                  </ul>
-                </div>
               </TabPane>
             )}
           </TabContent>
