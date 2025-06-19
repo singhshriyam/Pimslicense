@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { Container, Row, Col, Card, CardBody, CardHeader, Button } from 'reactstrap'
+import { Container, Row, Col, Card, CardBody, Button } from 'reactstrap'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import {
@@ -10,7 +10,7 @@ import {
 } from '../../services/userService';
 
 import {
-  fetchEndUserIncidents,
+  fetchIncidentsByUserRole,
   getIncidentStats,
   getStatusColor,
   getPriorityColor,
@@ -30,15 +30,12 @@ const EndUserDashboard = () => {
 
   // Check if we should show all incidents based on URL parameter
   const viewParam = searchParams.get('view');
+  const statusParam = searchParams.get('status'); // Add status parameter for filtered view
   const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents');
+  const [filterByStatus, setFilterByStatus] = useState<string | null>(statusParam);
 
   const [dashboardData, setDashboardData] = useState({
     myIncidents: [] as Incident[],
-    totalIncidents: 0,
-    solvedIncidents: 0,
-    inProgressIncidents: 0,
-    pendingIncidents: 0,
-    closedIncidents: 0,
     loading: true,
     error: null as string | null
   });
@@ -71,16 +68,10 @@ const EndUserDashboard = () => {
       });
 
       // Fetch user's incidents using unified service
-      const userIncidents = await fetchEndUserIncidents();
-      const stats = getIncidentStats(userIncidents);
+      const userIncidents = await fetchIncidentsByUserRole('enduser');
 
       setDashboardData({
         myIncidents: userIncidents,
-        totalIncidents: stats.total,
-        solvedIncidents: stats.resolved,
-        inProgressIncidents: stats.inProgress,
-        pendingIncidents: stats.pending,
-        closedIncidents: stats.closed,
         loading: false,
         error: null
       });
@@ -102,8 +93,13 @@ const EndUserDashboard = () => {
   // Update showAllIncidents when URL parameter changes
   useEffect(() => {
     const currentViewParam = searchParams.get('view');
+    const currentStatusParam = searchParams.get('status');
     setShowAllIncidents(currentViewParam === 'all-incidents');
+    setFilterByStatus(currentStatusParam);
   }, [searchParams]);
+
+  // Get statistics
+  const stats = getIncidentStats(dashboardData.myIncidents);
 
   // Format date for display without time
   const formatDateLocal = (dateString: string) => {
@@ -116,10 +112,10 @@ const EndUserDashboard = () => {
 
   // Pie chart configuration
   const pieChartSeries = [
-    dashboardData.solvedIncidents,
-    dashboardData.inProgressIncidents,
-    dashboardData.pendingIncidents,
-    dashboardData.closedIncidents
+    stats.resolved,
+    stats.inProgress,
+    stats.pending,
+    stats.closed
   ];
 
   // Only show non-zero values
@@ -140,7 +136,42 @@ const EndUserDashboard = () => {
   const pieChartOptions = {
     chart: {
       type: 'pie' as const,
-      height: 350
+      height: 350,
+      events: {
+        dataPointSelection: function(event: any, chartContext: any, config: any) {
+          try {
+            const selectedLabel = nonZeroLabels[config.dataPointIndex];
+            let statusToFilter = '';
+
+            switch(selectedLabel) {
+              case 'Resolved':
+                statusToFilter = 'resolved';
+                break;
+              case 'In Progress':
+                statusToFilter = 'in_progress';
+                break;
+              case 'Pending':
+                statusToFilter = 'pending';
+                break;
+              case 'Closed':
+                statusToFilter = 'closed';
+                break;
+            }
+
+            if (statusToFilter) {
+              // Navigate to all incidents view with status filter
+              setShowAllIncidents(true);
+              setFilterByStatus(statusToFilter);
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.set('view', 'all-incidents');
+              newUrl.searchParams.set('status', statusToFilter);
+              window.history.pushState({}, '', newUrl.toString());
+            }
+          } catch (error) {
+            console.warn('Chart interaction error:', error);
+          }
+        }
+      }
     },
     labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
     colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
@@ -157,7 +188,14 @@ const EndUserDashboard = () => {
           position: 'bottom' as const
         }
       }
-    }]
+    }],
+    tooltip: {
+      y: {
+        formatter: function(val: number) {
+          return val + ' incidents'
+        }
+      }
+    }
   };
 
   // Monthly trends calculation
@@ -250,9 +288,11 @@ const EndUserDashboard = () => {
 
   const handleBackToDashboard = () => {
     setShowAllIncidents(false);
+    setFilterByStatus(null);
     // Update URL without page refresh
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.delete('view');
+    newUrl.searchParams.delete('status');
     window.history.pushState({}, '', newUrl.toString());
   };
 
@@ -296,6 +336,7 @@ const EndUserDashboard = () => {
       <AllIncidents
         userType="enduser"
         onBack={handleBackToDashboard}
+        initialStatusFilter={filterByStatus}
       />
     );
   }
@@ -332,7 +373,7 @@ const EndUserDashboard = () => {
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{dashboardData.totalIncidents}</h5>
+                      <h5 className="mb-0 counter">{stats.total}</h5>
                       <span className="f-light">My Total Incidents</span>
                     </div>
                   </div>
@@ -346,7 +387,7 @@ const EndUserDashboard = () => {
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{dashboardData.solvedIncidents}</h5>
+                      <h5 className="mb-0 counter">{stats.resolved}</h5>
                       <span className="f-light">Resolved</span>
                     </div>
                   </div>
@@ -360,7 +401,7 @@ const EndUserDashboard = () => {
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{dashboardData.inProgressIncidents}</h5>
+                      <h5 className="mb-0 counter">{stats.inProgress}</h5>
                       <span className="f-light">In Progress</span>
                     </div>
                   </div>
@@ -374,7 +415,7 @@ const EndUserDashboard = () => {
                 <div className="media static-top-widget">
                   <div className="align-self-center text-center">
                     <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{dashboardData.pendingIncidents}</h5>
+                      <h5 className="mb-0 counter">{stats.pending}</h5>
                       <span className="f-light">Pending</span>
                     </div>
                   </div>
@@ -388,19 +429,18 @@ const EndUserDashboard = () => {
         <Row>
           <Col lg={8}>
             <Card>
-              <CardHeader className="pb-0">
-                <div className="d-flex justify-content-between align-items-center">
+              <CardBody>
+                <div className="d-flex justify-content-between align-items-center mb-3">
                   <h5>My Recent Incidents</h5>
                   <div>
-                    {dashboardData.totalIncidents > 0 && (
+                    {stats.total > 0 && (
                       <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
                         View All
                       </Button>
                     )}
                   </div>
                 </div>
-              </CardHeader>
-              <CardBody>
+
                 {dashboardData.myIncidents.length === 0 ? (
                   <div className="text-center py-5">
                     <div className="mb-3">
@@ -431,7 +471,11 @@ const EndUserDashboard = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {dashboardData.myIncidents.slice(0, 4).map((incident) => (
+                        {/* Show the 4 most recent incidents (sorted by createdAt descending) */}
+                        {dashboardData.myIncidents
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .slice(0, 4)
+                          .map((incident) => (
                           <tr key={incident.id}>
                             <td>
                               <span className="fw-medium text-primary">{incident.number}</span>
@@ -439,15 +483,14 @@ const EndUserDashboard = () => {
                             <td>
                               <div>
                                 <div className="fw-medium">{incident.category}</div>
-                                {/* <small className="text-muted">{incident.subCategory}</small> */}
                               </div>
                             </td>
                             <td>
                               <span
                                 className="badge"
-                                style={{ backgroundColor: getStatusColor(incident.status || 'pending'), color: 'white' }}
+                                style={{ backgroundColor: getStatusColor(incident.status), color: 'white' }}
                               >
-                                {(incident.status || 'pending').replace('_', ' ')}
+                                {incident.status.replace('_', ' ')}
                               </span>
                             </td>
                             <td>
@@ -468,19 +511,20 @@ const EndUserDashboard = () => {
 
           <Col lg={4}>
             <Card>
-              <CardHeader className="pb-3 pt-3">
-                <h5>Status Overview</h5>
-              </CardHeader>
               <CardBody>
-                {dashboardData.totalIncidents > 0 ? (
-                  <Chart
-                    options={pieChartOptions}
-                    series={nonZeroData.length > 0 ? nonZeroData : [1]}
-                    type="pie"
-                    height={300}
-                  />
+                <h5 className="mb-3">Status Overview</h5>
+                {stats.total > 0 ? (
+                  <div style={{ minHeight: '300px' }}>
+                    <Chart
+                      options={pieChartOptions}
+                      series={nonZeroData.length > 0 ? nonZeroData : [1]}
+                      type="pie"
+                      height={300}
+                      key={`pie-chart-${stats.total}-${nonZeroData.join('-')}`}
+                    />
+                  </div>
                 ) : (
-                  <div className="text-center py-4">
+                  <div className="text-center py-4" style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                     <p className="text-muted">No data to display</p>
                     <small className="text-muted">Report your first incident to see status overview</small>
                   </div>
@@ -494,19 +538,20 @@ const EndUserDashboard = () => {
         <Row>
           <Col lg={12}>
             <Card>
-              <CardHeader className="pb-0">
-                <h5>My Monthly Incident Trends</h5>
-              </CardHeader>
               <CardBody>
-                {dashboardData.totalIncidents > 0 ? (
-                  <Chart
-                    options={barChartOptions}
-                    series={barChartSeries}
-                    type="bar"
-                    height={350}
-                  />
+                <h5 className="mb-3">My Monthly Incident Trends</h5>
+                {stats.total > 0 ? (
+                  <div style={{ minHeight: '350px' }}>
+                    <Chart
+                      options={barChartOptions}
+                      series={barChartSeries}
+                      type="bar"
+                      height={350}
+                      key={`bar-chart-${stats.total}-${reported.join('-')}`}
+                    />
+                  </div>
                 ) : (
-                  <div className="text-center py-5">
+                  <div className="text-center py-5" style={{ minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
                     <p className="text-muted">No trend data available yet</p>
                     <small className="text-muted">Report incidents to see monthly trends</small>
                   </div>

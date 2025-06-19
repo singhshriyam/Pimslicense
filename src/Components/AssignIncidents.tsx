@@ -30,8 +30,17 @@ interface AssignmentTarget {
   type: 'manager' | 'handler' | 'field_engineer' | 'water_pollution_expert';
 }
 
-// Enhanced Incident type to match backend structure
-interface EnhancedIncident extends Omit<Incident, 'status'> {
+// Define our own incident interface to avoid conflicts
+interface AssignIncident {
+  id: string;
+  number: string;
+  shortDescription: string;
+  caller: string;
+  createdAt: string;
+  updatedAt?: string;
+  priority?: string;
+  assignedTo?: string;
+  // Backend specific fields
   incidentstate?: {
     id: number;
     name: string;
@@ -50,7 +59,8 @@ interface EnhancedIncident extends Omit<Incident, 'status'> {
     email: string;
     team_id: number;
   };
-  status?: IncidentStatusType; // Override status with proper type
+  // Frontend status field
+  status?: string;
 }
 
 // Role configuration for assignment
@@ -64,12 +74,9 @@ interface RoleConfig {
   available: boolean;
 }
 
-// Status type definitions
-type IncidentStatusType = 'pending' | 'in_progress' | 'on_hold' | 'resolved' | 'closed';
-
 // Status mapping helper functions
-const mapBackendStatusToFrontend = (backendStatus: string): IncidentStatusType => {
-  const statusMap: {[key: string]: IncidentStatusType} = {
+const mapBackendStatusToFrontend = (backendStatus: string): string => {
+  const statusMap: {[key: string]: string} = {
     'New': 'pending',
     'InProgress': 'in_progress',
     'OnHold': 'on_hold',
@@ -83,8 +90,8 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
   const router = useRouter();
 
   // State management
-  const [incidents, setIncidents] = useState<EnhancedIncident[]>([]);
-  const [filteredIncidents, setFilteredIncidents] = useState<EnhancedIncident[]>([]);
+  const [incidents, setIncidents] = useState<AssignIncident[]>([]);
+  const [filteredIncidents, setFilteredIncidents] = useState<AssignIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -92,7 +99,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
 
   // Assignment modal state
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [selectedIncident, setSelectedIncident] = useState<EnhancedIncident | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState<AssignIncident | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [selectedAssignee, setSelectedAssignee] = useState('');
   const [assignmentNotes, setAssignmentNotes] = useState('');
@@ -111,12 +118,12 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
   const [assignmentTargets, setAssignmentTargets] = useState<AssignmentTarget[]>([]);
   const [loadingTargets, setLoadingTargets] = useState(true);
 
-  // Role configurations
+  // Role configurations - PRODUCTION READY
   const roleConfigs: RoleConfig[] = [
     {
       id: 'handler',
       name: 'Incident Handler',
-      description: 'Assign to incident handlers for immediate processing',
+      description: 'Assign to incident handlers for immediate processing and resolution',
       apiEndpoint: 'https://apexwpc.apextechno.co.uk/api/incident-handeler/assign-incident',
       statusChange: 'In Progress',
       color: 'primary',
@@ -125,45 +132,50 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
     {
       id: 'manager',
       name: 'Incident Manager',
-      description: 'Escalate to incident managers for oversight',
+      description: 'Escalate to incident managers for oversight and coordination',
       apiEndpoint: 'https://apexwpc.apextechno.co.uk/api/incident-manager/assign-incident',
-      statusChange: 'Under Review',
+      statusChange: 'Under Management Review',
       color: 'warning',
-      available: false // Backend not ready
+      available: false // Backend API under development
     },
     {
       id: 'field_engineer',
       name: 'Field Engineer',
-      description: 'Assign to field engineers for on-site resolution',
+      description: 'Assign to field engineers for on-site investigation and resolution',
       apiEndpoint: 'https://apexwpc.apextechno.co.uk/api/field-engineer/assign-incident',
-      statusChange: 'On Hold (Field Work)',
+      statusChange: 'On Hold (Field Work Required)',
       color: 'info',
-      available: false // Backend not ready
+      available: false // Backend API under development
     },
     {
       id: 'water_pollution_expert',
       name: 'Water Pollution Expert',
-      description: 'Assign to specialists for complex water pollution cases',
+      description: 'Assign to specialists for complex environmental incidents',
       apiEndpoint: 'https://apexwpc.apextechno.co.uk/api/expert-team/assign-incident',
-      statusChange: 'Expert Review',
+      statusChange: 'Expert Analysis Required',
       color: 'success',
-      available: false // Backend not ready
+      available: false // Backend API under development
     }
   ];
 
-  // Fetch assignment targets based on selected role
+  // Fetch assignment targets based on selected role - PRODUCTION VERSION (NO FALLBACK)
   const fetchAssignmentTargets = async (roleType?: string) => {
     try {
       setLoadingTargets(true);
+      setError(null); // Clear any previous errors
 
-      // Fetch users from API
+      // Fetch users from API - PRODUCTION ONLY, NO FALLBACK DATA
       const response = await fetch('https://apexwpc.apextechno.co.uk/api/users');
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        throw new Error(`Failed to fetch users from server: ${response.status} ${response.statusText}`);
       }
 
       const userData = await response.json();
       const users = userData.data || userData;
+
+      if (!Array.isArray(users)) {
+        throw new Error('Invalid user data format received from server');
+      }
 
       // Filter users based on role type
       let filteredUsers = users;
@@ -183,36 +195,39 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
         filteredUsers = users.filter((user: any) => [2, 5, 6, 9, 10].includes(user.team_id));
       }
 
-      const targets: AssignmentTarget[] = filteredUsers.map((user: any) => ({
-        id: user.id?.toString() || Math.random().toString(),
-        name: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
-        email: user.email,
-        team: user.team_name,
-        team_id: user.team_id,
-        type: getTeamTypeFromId(user.team_id)
-      }));
+      // PRODUCTION: Validate all required fields exist, NO fallback data
+      const targets: AssignmentTarget[] = filteredUsers
+        .filter((user: any) => {
+          // Strict validation - all fields must exist
+          return user.id &&
+                 user.first_name &&
+                 user.email &&
+                 user.team_id &&
+                 user.team_name;
+        })
+        .map((user: any) => ({
+          id: user.id.toString(),
+          name: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
+          email: user.email,
+          team: user.team_name,
+          team_id: user.team_id,
+          type: getTeamTypeFromId(user.team_id)
+        }))
+        // Sort targets by name for better UX
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       setAssignmentTargets(targets);
 
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      // Fallback to static data
-      const fallbackTargets: AssignmentTarget[] = [
-        { id: '4', name: 'Shalini', email: 'shalini_mehta@apextechno.co.uk', team: 'Incident Handler', team_id: 2, type: 'handler' },
-        { id: '3', name: 'Narayan', email: 'naryan@apextecno.co.uk', team: 'Incident Handler', team_id: 2, type: 'handler' },
-        { id: '5', name: 'B Pattanaik', email: 'b.pattanaik@apextechno.co.uk', team: 'Incident Handler', team_id: 2, type: 'handler' },
-        { id: '7', name: 'Ujjwal', email: 'ujjwal@gmail.com', team: 'Incident Handler', team_id: 2, type: 'handler' },
-        { id: '2', name: 'Shweta', email: 'shweta.bhushan@apextechno.co.uk', team: 'Incident Manager', team_id: 5, type: 'manager' },
-        { id: '16', name: 'Ajay SLA Manager', email: 'ajay.pandey@apextechno.co.uk', team: 'SLA Manager', team_id: 6, type: 'manager' },
-        { id: '23', name: 'Field Engineer', email: 'fe@gmail.com', team: 'Field Engineer', team_id: 9, type: 'field_engineer' },
-        { id: '24', name: 'Expert Team', email: 'et@gmail.com', team: 'Expert Team', team_id: 10, type: 'water_pollution_expert' }
-      ];
-
-      if (roleType) {
-        setAssignmentTargets(fallbackTargets.filter(target => target.type === roleType));
-      } else {
-        setAssignmentTargets(fallbackTargets);
+      // Production feedback - inform user if no assignees available
+      if (targets.length === 0) {
+        const roleLabel = roleType ? roleConfigs.find(r => r.id === roleType)?.name : 'assignable users';
+        setError(`No ${roleLabel} found in the system. Please contact administrator.`);
       }
+
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      setError(`Failed to load assignment targets: ${error.message}`);
+      setAssignmentTargets([]); // PRODUCTION: Clear targets on error, no fallback
     } finally {
       setLoadingTargets(false);
     }
@@ -259,21 +274,51 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
       setUser(currentUser);
 
       const fetchedIncidents = await fetchAllIncidents();
+
+      if (!Array.isArray(fetchedIncidents)) {
+        throw new Error('Invalid incidents data format received from API');
+      }
+
       console.log('AssignIncidents - Fetched incidents:', fetchedIncidents.length);
 
-      const enhancedIncidents: EnhancedIncident[] = fetchedIncidents.map(incident => ({
-        ...incident,
-        status: mapBackendStatusToFrontend(incident.incidentstate?.name || 'New') as IncidentStatusType,
-        assignedTo: incident.assigned_to?.name || incident.assignedTo || 'Unassigned'
-      }));
+      // Convert base incidents to our assign incident format and sort by latest first
+      const assignIncidents: AssignIncident[] = fetchedIncidents
+        .filter((incident: any) => incident.id && incident.number) // Ensure required fields exist
+        .map((incident: any) => ({
+          id: incident.id,
+          number: incident.number,
+          shortDescription: incident.shortDescription || 'No description available',
+          caller: incident.caller || 'Unknown',
+          createdAt: incident.createdAt,
+          updatedAt: incident.updatedAt,
+          priority: incident.priority,
+          assignedTo: incident.assigned_to?.name || incident.assignedTo || 'Unassigned',
+          incidentstate: incident.incidentstate,
+          category: incident.category,
+          urgency: incident.urgency,
+          assigned_to: incident.assigned_to,
+          status: mapBackendStatusToFrontend(incident.incidentstate?.name || 'New')
+        }))
+        // Sort by creation date - LATEST FIRST (most recent incidents at top)
+        .sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA; // Descending order - newest incidents first
+        });
 
-      setIncidents(enhancedIncidents);
-      setFilteredIncidents(enhancedIncidents);
+      if (assignIncidents.length === 0) {
+        setError('No incidents found in the system');
+      }
+
+      setIncidents(assignIncidents);
+      setFilteredIncidents(assignIncidents);
       setCurrentPage(1);
 
     } catch (error: any) {
       console.error('Fetch incidents error:', error);
-      setError(error.message || 'Failed to load incidents');
+      setError(error.message || 'Failed to load incidents from server');
+      setIncidents([]);
+      setFilteredIncidents([]);
     } finally {
       setLoading(false);
     }
@@ -288,7 +333,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
     fetchAssignmentTargets(); // Fetch all targets initially
   }, [router, userType]);
 
-  // Filter incidents
+  // Filter incidents - maintain latest first order after filtering
   useEffect(() => {
     let filtered = [...incidents];
 
@@ -323,6 +368,13 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
       );
     }
 
+    // IMPORTANT: Maintain latest-first order after filtering
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA; // Latest incidents first
+    });
+
     setFilteredIncidents(filtered);
     setCurrentPage(1);
   }, [incidents, statusFilter, priorityFilter, searchTerm]);
@@ -332,19 +384,21 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentIncidents = filteredIncidents.slice(startIndex, startIndex + itemsPerPage);
 
-  // Handle role selection
+  // Handle role selection with error clearing
   const handleRoleSelect = (roleId: string) => {
     setSelectedRole(roleId);
     setSelectedAssignee(''); // Reset assignee when role changes
+    setError(null); // Clear any previous errors
     fetchAssignmentTargets(roleId); // Fetch users for this role
   };
 
-  // Assignment handlers
-  const handleAssignIncident = (incident: EnhancedIncident) => {
+  // Assignment handlers with comprehensive validation
+  const handleAssignIncident = (incident: AssignIncident) => {
     setSelectedIncident(incident);
     setSelectedRole('');
     setSelectedAssignee('');
     setAssignmentNotes('');
+    setError(null); // Clear any previous errors
     setShowAssignModal(true);
     fetchAssignmentTargets(); // Fetch all targets initially
   };
@@ -376,11 +430,20 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
         return;
       }
 
+      // Validate incident ID and assignee ID are numeric
+      const incidentId = parseInt(selectedIncident.id);
+      const assigneeId = parseInt(assignee.id);
+
+      if (isNaN(incidentId) || isNaN(assigneeId)) {
+        setError('Invalid incident or assignee ID');
+        return;
+      }
+
       // Prepare assignment data
       const assignmentData = {
-        incident_id: parseInt(selectedIncident.id),
-        assigned_to_id: parseInt(assignee.id),
-        notes: assignmentNotes,
+        incident_id: incidentId,
+        assigned_to_id: assigneeId,
+        notes: assignmentNotes.trim(),
         role_type: selectedRole
       };
 
@@ -393,40 +456,55 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          // Add authorization header if needed
+          // Add authorization header if your API requires it
           // 'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify(assignmentData)
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to assign incident (${response.status})`);
+        let errorMessage = `Failed to assign incident (${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          // If JSON parsing fails, use default error message
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
       console.log('Assignment result:', result);
 
-      // Update local state
-      const updatedIncident: EnhancedIncident = {
+      // Update local state and maintain latest-first order
+      const updatedIncident: AssignIncident = {
         ...selectedIncident,
         assignedTo: assignee.name,
         assigned_to: {
-          id: parseInt(assignee.id),
+          id: assigneeId,
           name: assignee.name,
           email: assignee.email,
           team_id: assignee.team_id
         },
-        status: (selectedRole === 'field_engineer' ? 'on_hold' : 'in_progress') as IncidentStatusType
+        status: selectedRole === 'field_engineer' ? 'on_hold' : 'in_progress',
+        updatedAt: new Date().toISOString()
       };
 
-      const updatedIncidents = incidents.map(incident =>
-        incident.id === selectedIncident.id ? updatedIncident : incident
-      );
+      // Update incidents and maintain latest-first sorting
+      const updatedIncidents = incidents
+        .map(incident => incident.id === selectedIncident.id ? updatedIncident : incident)
+        .sort((a, b) => {
+          const dateA = new Date(a.createdAt || 0).getTime();
+          const dateB = new Date(b.createdAt || 0).getTime();
+          return dateB - dateA; // Keep latest incidents first
+        });
 
       setIncidents(updatedIncidents);
       setShowAssignModal(false);
       setSelectedIncident(null);
+      setSelectedRole('');
+      setSelectedAssignee('');
+      setAssignmentNotes('');
 
       setSuccess(`Incident ${selectedIncident.number} successfully assigned to ${assignee.name} (${roleConfig.name})`);
 
@@ -444,9 +522,35 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
   // Utility functions
   const formatDateOnly = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleDateString();
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
     } catch (error) {
-      return 'Unknown';
+      return 'Invalid Date';
+    }
+  };
+
+  const formatDateTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      return date.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid Date';
     }
   };
 
@@ -456,6 +560,15 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
     } else {
       const dashboardRoute = getUserDashboard(user?.team || 'user');
       router.push(dashboardRoute);
+    }
+  };
+
+  // Enhanced refresh functionality
+  const handleRefresh = async () => {
+    setError(null);
+    await fetchData();
+    if (selectedRole) {
+      await fetchAssignmentTargets(selectedRole);
     }
   };
 
@@ -496,10 +609,54 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
     return (
       <Container fluid>
         <div className="text-center py-5">
-          <div className="spinner-border text-primary" role="status">
+          <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
             <span className="visually-hidden">Loading incidents...</span>
           </div>
+          <h5 className="text-muted">Loading Incidents for Assignment</h5>
+          <p className="text-muted">Fetching latest incidents from server...</p>
         </div>
+      </Container>
+    );
+  }
+
+  if (error && incidents.length === 0) {
+    return (
+      <Container fluid>
+        <Row>
+          <Col xs={12}>
+            <Card className="mb-4 mt-4">
+              <CardBody>
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h4 className="mb-1 text-danger">⚠️ Unable to Load Incidents</h4>
+                    <p className="text-muted mb-0">There was an error loading incident data</p>
+                  </div>
+                  <div>
+                    <Button color="secondary" size="sm" onClick={handleBackToDashboard}>
+                      ← Back to Dashboard
+                    </Button>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
+        <Row>
+          <Col xs={12}>
+            <div className="alert alert-danger">
+              <h5 className="alert-heading">🚨 System Error</h5>
+              <p className="mb-3">{error}</p>
+              <div className="d-flex gap-2">
+                <Button color="danger" onClick={fetchData}>
+                  🔄 Retry Loading
+                </Button>
+                <Button color="outline-danger" onClick={() => window.location.reload()}>
+                  🔃 Refresh Page
+                </Button>
+              </div>
+            </div>
+          </Col>
+        </Row>
       </Container>
     );
   }
@@ -515,7 +672,10 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
                     <h4 className="mb-1">🎯 Assign Incidents</h4>
-                    <p className="text-muted mb-0">Assign incidents to appropriate team members based on their roles</p>
+                    <p className="text-muted mb-0">
+                      Assign incidents to appropriate team members based on their roles
+                      <span className="ms-2 badge bg-info">Latest incidents shown first</span>
+                    </p>
                   </div>
                   <div>
                     <Button color="secondary" size="sm" onClick={handleBackToDashboard}>
@@ -558,7 +718,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                 <div className="d-flex justify-content-between align-items-center">
                   <h5>🔍 Filter & Assign</h5>
                   <div>
-                    <Button color="outline-primary" size="sm" onClick={fetchData}>
+                    <Button color="outline-primary" size="sm" onClick={handleRefresh}>
                       🔄 Refresh
                     </Button>
                   </div>
@@ -633,7 +793,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
               </CardHeader>
               <CardBody>
                 {filteredIncidents.length === 0 ? (
-                  <div className="text-center py-4">
+                  <div className="text-center py-5">
                     <div className="mb-3">
                       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -642,36 +802,61 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                         <line x1="16" y1="17" x2="8" y2="17"/>
                       </svg>
                     </div>
-                    <p className="text-muted">No incidents found matching your criteria.</p>
-                    <Button color="outline-primary" onClick={() => {
-                      setStatusFilter('all');
-                      setPriorityFilter('all');
-                      setSearchTerm('');
-                    }}>
-                      Clear Filters
-                    </Button>
+                    {incidents.length === 0 ? (
+                      <div>
+                        <p className="text-muted">No incidents found in the system.</p>
+                        <Button color="primary" onClick={fetchData}>
+                          🔄 Refresh Data
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-muted">No incidents found matching your criteria.</p>
+                        <Button color="outline-primary" onClick={() => {
+                          setStatusFilter('all');
+                          setPriorityFilter('all');
+                          setSearchTerm('');
+                        }}>
+                          Clear All Filters
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
+                    <div className="mb-3">
+                      <small className="text-muted">
+                        📅 Showing {filteredIncidents.length} incidents (latest first) |
+                        Last updated: {new Date().toLocaleTimeString()}
+                      </small>
+                    </div>
                     <div className="table-responsive">
                       <table className="table table-hover">
-                        <thead>
+                        <thead className="table-light">
                           <tr>
-                            <th>Incident</th>
-                            <th>Category</th>
+                            <th>
+                              <div className="d-flex align-items-center">
+                                Incident
+                                <small className="text-muted ms-1">(Latest First)</small>
+                              </div>
+                            </th>
+                            <th>Category & Caller</th>
                             <th>Priority</th>
                             <th>Status</th>
-                            <th>Current Assignment</th>
+                            <th>Assignment</th>
                             <th>Created</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {currentIncidents.map((incident) => (
-                            <tr key={incident.id}>
+                          {currentIncidents.map((incident, index) => (
+                            <tr key={incident.id} className={index === 0 ? "table-warning" : ""}>
                               <td>
                                 <div>
-                                  <span className="fw-medium text-primary">{incident.number}</span>
+                                  <span className="fw-medium text-primary">
+                                    {incident.number}
+                                    {index === 0 && <span className="badge bg-success ms-2 small">Latest</span>}
+                                  </span>
                                   <div className="text-muted small" style={{ maxWidth: '200px' }}>
                                     {incident.shortDescription}
                                   </div>
@@ -682,15 +867,15 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                                   <div className="fw-medium" style={{ maxWidth: '200px' }}>
                                     {typeof incident.category === 'object' ? incident.category?.name : incident.category}
                                   </div>
-                                  <small className="text-muted">Caller: {incident.caller}</small>
+                                  <small className="text-muted">👤 {incident.caller}</small>
                                 </div>
                               </td>
                               <td>
                                 <Badge style={{
-                                  backgroundColor: getPriorityColor(incident.urgency?.name || incident.priority),
+                                  backgroundColor: getPriorityColor(incident.urgency?.name || incident.priority || 'medium'),
                                   color: 'white'
                                 }}>
-                                  {incident.urgency?.name || incident.priority}
+                                  {incident.urgency?.name || incident.priority || 'Medium'}
                                 </Badge>
                               </td>
                               <td>
@@ -706,7 +891,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                                   {incident.assigned_to?.name ? (
                                     <div>
                                       <span className="fw-medium text-success">
-                                        {incident.assigned_to.name}
+                                        ✅ {incident.assigned_to.name}
                                       </span>
                                       <br />
                                       <small className="text-muted">
@@ -716,14 +901,14 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                                   ) : incident.assignedTo && incident.assignedTo !== 'Unassigned' ? (
                                     <div>
                                       <span className="fw-medium text-success">
-                                        {incident.assignedTo}
+                                        ✅ {incident.assignedTo}
                                       </span>
                                       <br />
                                       <small className="text-muted">Assigned</small>
                                     </div>
                                   ) : (
                                     <div>
-                                      <span className="text-warning fw-medium">⚠️ Unassigned</span>
+                                      <span className="text-danger fw-medium">❌ Unassigned</span>
                                       <br />
                                       <small className="text-muted">Needs assignment</small>
                                     </div>
@@ -731,13 +916,20 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                                 </div>
                               </td>
                               <td>
-                                <small>{formatDateOnly(incident.createdAt)}</small>
+                                <small>
+                                  <div>📅 {formatDateOnly(incident.createdAt)}</div>
+                                  <div className="text-muted">⏰ {formatDateTime(incident.createdAt).split(' ')[1]}</div>
+                                  {incident.updatedAt && incident.updatedAt !== incident.createdAt && (
+                                    <div className="text-info small">Updated: {formatDateOnly(incident.updatedAt)}</div>
+                                  )}
+                                </small>
                               </td>
                               <td>
                                 <Button
-                                  color="primary"
+                                  color={incident.assigned_to?.name ? "warning" : "primary"}
                                   size="sm"
                                   onClick={() => handleAssignIncident(incident)}
+                                  className="btn-sm"
                                 >
                                   {incident.assigned_to?.name ? '🔄 Reassign' : '👤 Assign'}
                                 </Button>
@@ -748,13 +940,19 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                       </table>
                     </div>
 
-                    {/* Pagination */}
+                    {/* Enhanced Pagination */}
                     {totalPages > 1 && (
-                      <div className="d-flex justify-content-between align-items-center mt-3">
+                      <div className="d-flex justify-content-between align-items-center mt-4 p-3 bg-light rounded">
                         <div>
-                          <small className="text-muted">Page {currentPage} of {totalPages}</small>
+                          <small className="text-muted">
+                            📄 Page {currentPage} of {totalPages} |
+                            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredIncidents.length)} of {filteredIncidents.length} incidents
+                          </small>
                         </div>
-                        <div>{renderPaginationButtons()}</div>
+                        <div className="d-flex align-items-center">
+                          <small className="text-muted me-3">Go to page:</small>
+                          <div>{renderPaginationButtons()}</div>
+                        </div>
                       </div>
                     )}
                   </>
@@ -781,8 +979,8 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                   <Col md={6}>
                     <div><strong>Incident:</strong> {selectedIncident.number}</div>
                     <div><strong>Priority:</strong>
-                      <Badge className="ms-2" style={{ backgroundColor: getPriorityColor(selectedIncident.urgency?.name || selectedIncident.priority), color: 'white' }}>
-                        {selectedIncident.urgency?.name || selectedIncident.priority}
+                      <Badge className="ms-2" style={{ backgroundColor: getPriorityColor(selectedIncident.urgency?.name || selectedIncident.priority || 'medium'), color: 'white' }}>
+                        {selectedIncident.urgency?.name || selectedIncident.priority || 'Medium'}
                       </Badge>
                     </div>
                   </Col>
@@ -842,7 +1040,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                   )}
                 </FormGroup>
 
-                {/* Step 2: Select User */}
+                {/* Step 2: Select User (only show if role is selected) */}
                 {selectedRole && (
                   <FormGroup>
                     <Label className="fw-bold">Step 2: Select Assignee</Label>
@@ -853,21 +1051,30 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                       </div>
                     ) : (
                       <>
-                        <Input
-                          type="select"
-                          value={selectedAssignee}
-                          onChange={(e) => setSelectedAssignee(e.target.value)}
-                        >
-                          <option value="">Select an assignee...</option>
-                          {assignmentTargets.map(target => (
-                            <option key={target.id} value={target.id}>
-                              {target.name} - {target.team} ({target.email})
-                            </option>
-                          ))}
-                        </Input>
-                        <small className="text-muted mt-1">
-                          {assignmentTargets.length} available {roleConfigs.find(r => r.id === selectedRole)?.name}(s)
-                        </small>
+                        {assignmentTargets.length === 0 ? (
+                          <div className="text-center p-3 text-muted">
+                            <i className="fas fa-users-slash me-2"></i>
+                            No {roleConfigs.find(r => r.id === selectedRole)?.name}s available in system
+                          </div>
+                        ) : (
+                          <>
+                            <Input
+                              type="select"
+                              value={selectedAssignee}
+                              onChange={(e) => setSelectedAssignee(e.target.value)}
+                            >
+                              <option value="">Select an assignee...</option>
+                              {assignmentTargets.map(target => (
+                                <option key={target.id} value={target.id}>
+                                  {target.name} - {target.team} ({target.email})
+                                </option>
+                              ))}
+                            </Input>
+                            <small className="text-muted mt-1">
+                              {assignmentTargets.length} available {roleConfigs.find(r => r.id === selectedRole)?.name}(s)
+                            </small>
+                          </>
+                        )}
                       </>
                     )}
                   </FormGroup>
@@ -879,40 +1086,71 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
                     <Label>Assignment Notes (Optional)</Label>
                     <Input
                       type="textarea"
-                      rows={4}
+                      rows={3}
                       value={assignmentNotes}
                       onChange={(e) => setAssignmentNotes(e.target.value)}
                       placeholder="Add any notes about this assignment..."
+                      maxLength={500}
                     />
+                    <small className="text-muted">
+                      {assignmentNotes.length}/500 characters
+                    </small>
                     {selectedRole === 'field_engineer' && (
-                      <small className="text-warning mt-1">
-                        <strong>⚠️ Note:</strong> Assigning to Field Engineer will change incident status to "On Hold"
-                      </small>
+                      <div className="alert alert-warning mt-2 py-2">
+                        <small>
+                          <strong>⚠️ Note:</strong> Assigning to Field Engineer will change incident status to "On Hold"
+                        </small>
+                      </div>
                     )}
                   </FormGroup>
+                )}
+
+                {/* Assignment Summary */}
+                {selectedRole && selectedAssignee && (
+                  <div className="alert alert-info mt-3">
+                    <h6 className="alert-heading">📋 Assignment Summary</h6>
+                    <div className="mb-2">
+                      <strong>Incident:</strong> {selectedIncident.number} - {selectedIncident.shortDescription}
+                    </div>
+                    <div className="mb-2">
+                      <strong>Assignee:</strong> {assignmentTargets.find(t => t.id === selectedAssignee)?.name}
+                      ({assignmentTargets.find(t => t.id === selectedAssignee)?.team})
+                    </div>
+                    <div className="mb-2">
+                      <strong>Role:</strong> {roleConfigs.find(r => r.id === selectedRole)?.name}
+                    </div>
+                    <div>
+                      <strong>Status Change:</strong> {roleConfigs.find(r => r.id === selectedRole)?.statusChange}
+                    </div>
+                  </div>
                 )}
               </Form>
             </>
           )}
         </ModalBody>
-        <ModalFooter>
-          <Button
-            color="primary"
-            onClick={handleSaveAssignment}
-            disabled={assigning || !selectedRole || !selectedAssignee || loadingTargets}
-          >
-            {assigning ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                Assigning...
-              </>
-            ) : (
-              selectedIncident?.assigned_to?.name ? '🔄 Reassign Incident' : '✅ Assign Incident'
-            )}
-          </Button>
-          <Button color="secondary" onClick={() => setShowAssignModal(false)}>
-            Cancel
-          </Button>
+        <ModalFooter className="d-flex justify-content-between">
+          <small className="text-muted">
+            {selectedIncident && `Incident ID: ${selectedIncident.id} | Created: ${formatDateTime(selectedIncident.createdAt)}`}
+          </small>
+          <div>
+            <Button color="secondary" onClick={() => setShowAssignModal(false)} className="me-2">
+              Cancel
+            </Button>
+            <Button
+              color="primary"
+              onClick={handleSaveAssignment}
+              disabled={assigning || !selectedRole || !selectedAssignee || loadingTargets}
+            >
+              {assigning ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                  Assigning...
+                </>
+              ) : (
+                selectedIncident?.assigned_to?.name ? '🔄 Reassign Incident' : '✅ Assign Incident'
+              )}
+            </Button>
+          </div>
         </ModalFooter>
       </Modal>
     </>
