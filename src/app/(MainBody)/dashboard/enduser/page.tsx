@@ -110,6 +110,34 @@ const EndUserDashboard = () => {
     }
   };
 
+  // Safe function to get category name
+  const getCategoryName = (incident: Incident): string => {
+    if (typeof incident.category === 'string') return incident.category;
+    if (typeof incident.category === 'object' && incident.category?.name) return incident.category.name;
+    return 'Uncategorized';
+  };
+
+  // Safe function to get assigned person name
+  const getAssignedToName = (incident: Incident): string => {
+    if (typeof incident.assigned_to === 'string') return incident.assigned_to;
+    if (typeof incident.assigned_to === 'object' && incident.assigned_to?.name) return incident.assigned_to.name;
+    return 'Unassigned';
+  };
+
+  // Safe function to get incident ID as string
+  const getIncidentId = (incident: Incident): string => {
+    if (typeof incident.id === 'string') return incident.id;
+    if (typeof incident.id === 'number') return incident.id.toString();
+    if (typeof incident.incident_no === 'string') return incident.incident_no;
+    return 'Unknown';
+  };
+
+  // Safe function to get status display name
+  const getStatusDisplayName = (status: string): string => {
+    if (!status) return 'Unknown';
+    return status.replace('_', ' ');
+  };
+
   // Pie chart configuration
   const pieChartSeries = [
     stats.resolved,
@@ -139,7 +167,19 @@ const EndUserDashboard = () => {
       height: 350,
       events: {
         dataPointSelection: function(event: any, chartContext: any, config: any) {
+          // Prevent the default chart behavior and add safety checks
+          if (!config || typeof config.dataPointIndex === 'undefined') {
+            console.warn('Invalid chart config');
+            return;
+          }
+
           try {
+            // Add bounds checking
+            if (config.dataPointIndex < 0 || config.dataPointIndex >= nonZeroLabels.length) {
+              console.warn('Invalid data point index');
+              return;
+            }
+
             const selectedLabel = nonZeroLabels[config.dataPointIndex];
             let statusToFilter = '';
 
@@ -159,13 +199,27 @@ const EndUserDashboard = () => {
             }
 
             if (statusToFilter) {
-              // Navigate to all incidents view with status filter
-              setShowAllIncidents(true);
-              setFilterByStatus(statusToFilter);
-              const newUrl = new URL(window.location.href);
-              newUrl.searchParams.set('view', 'all-incidents');
-              newUrl.searchParams.set('status', statusToFilter);
-              window.history.pushState({}, '', newUrl.toString());
+              // Use setTimeout to ensure DOM is ready and prevent race conditions
+              setTimeout(() => {
+                try {
+                  // Navigate to all incidents view with status filter
+                  setShowAllIncidents(true);
+                  setFilterByStatus(statusToFilter);
+
+                  // Safely update URL
+                  if (typeof window !== 'undefined' && window.location) {
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('view', 'all-incidents');
+                    newUrl.searchParams.set('status', statusToFilter);
+                    window.history.pushState({}, '', newUrl.toString());
+                  }
+                } catch (urlError) {
+                  console.warn('URL update error:', urlError);
+                  // Still update the view even if URL update fails
+                  setShowAllIncidents(true);
+                  setFilterByStatus(statusToFilter);
+                }
+              }, 0);
             }
           } catch (error) {
             console.warn('Chart interaction error:', error);
@@ -205,7 +259,7 @@ const EndUserDashboard = () => {
     const monthlyData = months.map((month, index) => {
       const monthIncidents = dashboardData.myIncidents.filter(incident => {
         try {
-          const incidentMonth = new Date(incident.createdAt).getMonth();
+          const incidentMonth = new Date(incident.created_at).getMonth();
           return incidentMonth === index;
         } catch (error) {
           return false;
@@ -473,16 +527,16 @@ const EndUserDashboard = () => {
                       <tbody>
                         {/* Show the 4 most recent incidents (sorted by createdAt descending) */}
                         {dashboardData.myIncidents
-                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                           .slice(0, 4)
                           .map((incident) => (
                           <tr key={incident.id}>
                             <td>
-                              <span className="fw-medium text-primary">{incident.number}</span>
+                              <span className="fw-medium text-primary">{getIncidentId(incident)}</span>
                             </td>
                             <td>
                               <div>
-                                <div className="fw-medium">{incident.category}</div>
+                                <div className="fw-medium">{getCategoryName(incident)}</div>
                               </div>
                             </td>
                             <td>
@@ -490,15 +544,15 @@ const EndUserDashboard = () => {
                                 className="badge"
                                 style={{ backgroundColor: getStatusColor(incident.status), color: 'white' }}
                               >
-                                {incident.status.replace('_', ' ')}
+                                {getStatusDisplayName(incident.status)}
                               </span>
                             </td>
                             <td>
                               <span className="text-muted">
-                                {incident.assignedTo || 'Unassigned'}
+                                {getAssignedToName(incident)}
                               </span>
                             </td>
-                            <td>{formatDateLocal(incident.createdAt)}</td>
+                            <td>{formatDateLocal(incident.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>

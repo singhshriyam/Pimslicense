@@ -2,43 +2,98 @@
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table } from 'reactstrap'
 import { useRouter, useSearchParams } from 'next/navigation'
-import dynamic from 'next/dynamic'
-import InteractiveIncidentMap from '../../../../Components/InteractiveIncidentMap';
+import AdminForms from '../../../../Components/AdminForms'
 
 import {
   fetchAllIncidents,
-  fetchIncidentsByUserRole,
   getIncidentStats,
-  formatDate,
-  getStatusColor,
-  getPriorityColor,
   type Incident
-} from '../../../(MainBody)/services/incidentService';
+} from '../../../(MainBody)/services/incidentService'
 
 import {
   getCurrentUser,
   isAuthenticated
-} from '../../../(MainBody)/services/userService';
+} from '../../../(MainBody)/services/userService'
 
-import AllIncidents from '../../../../Components/AllIncidents';
-
-// Dynamically import ApexCharts to avoid SSR issues
-const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
+import AllIncidents from '../../../../Components/AllIncidents'
 
 interface User {
-  id: string;
-  name: string;
-  email: string;
-  team: string;
-  lastActivity?: string;
+  id: string
+  name: string
+  email: string
+  team: string
+  lastActivity?: string
+}
+
+interface Request {
+  id: string
+  type: string
+  description: string
+  requestedBy: string
+  status: string
+  createdAt: string
+}
+
+interface PendingApproval {
+  id: string
+  type: string
+  description: string
+  requestedBy: string
+  pendingSince: string
+  priority: string
 }
 
 const AdminDashboard = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const viewParam = searchParams.get('view');
-  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents');
+  const viewParam = searchParams.get('view')
+  const tabParam = searchParams.get('tab')
+
+  // Enhanced tab checking - include all possible tabs from your menu
+  const shouldShowForms = tabParam && [
+    // Master Settings
+    'subcategory',
+    'contact-type',
+    'state',
+    'impact',
+    'urgency',
+    // Asset Management
+    'asset-state',
+    'asset-substate',
+    'asset-function',
+    'asset-location',
+    'department',
+    'company',
+    'stock-room',
+    'aisle',
+    'add-asset',
+    // Site Management
+    'site-type',
+    'sites',
+    // User Management
+    'users',
+    // Groups
+    'all-groups',
+    'create-group',
+    // Roles & Permissions
+    'all-roles',
+    'create-roles',
+    'all-permissions',
+    'create-permission',
+    // SLA Management
+    'sla-definitions',
+    'sla-conditions',
+    // Incident Management
+    'create-incident',
+    'create-manager',
+    'create-handler',
+    'pending-approval',
+    'sla-define',
+    'sla-report'
+  ].includes(tabParam)
+
+  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents')
 
   const [dashboardData, setDashboardData] = useState({
     incidents: [] as Incident[],
@@ -49,39 +104,104 @@ const AdminDashboard = () => {
     closedIncidents: 0,
     loading: true,
     error: null as string | null
-  });
+  })
 
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [user, setUser] = useState({
     name: '',
     team: '',
     email: '',
     userId: ''
-  });
+  })
 
-  const [loggedInUsers] = useState<User[]>([]);
+  const [loggedInUsers] = useState<User[]>([])
+  const [requests, setRequests] = useState<Request[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
+  const [requestsLoading, setRequestsLoading] = useState(false)
+  const [approvalsLoading, setApprovalsLoading] = useState(false)
 
-  // Fetch data
+  // Enhanced tab to form mapping - matches your AdminForms configuration
+  const getFormTypeFromTab = (tab: string): string => {
+    const tabMapping: { [key: string]: string } = {
+      // Master Settings
+      'subcategory': 'sub-categories',
+      'contact-type': 'contact-type',
+      'state': 'incident-states',
+      'impact': 'impacts',
+      'urgency': 'urgencies',
+      // Asset Management
+      'asset-state': 'asset-states',
+      'asset-substate': 'asset-substates',
+      'asset-function': 'asset-functions',
+      'asset-location': 'asset-locations',
+      'department': 'departments',
+      'company': 'companies',
+      'stock-room': 'stock-rooms',
+      'aisle': 'aisles',
+      'add-asset': 'assets',
+      // Site Management
+      'site-type': 'site-types',
+      'sites': 'sites',
+      // User Management
+      'users': 'users',
+      // Groups
+      'all-groups': 'groups',
+      'create-group': 'groups',
+      // Roles & Permissions
+      'all-roles': 'roles',
+      'create-roles': 'roles',
+      'all-permissions': 'permissions',
+      'create-permission': 'permissions',
+      // SLA Management
+      'sla-definitions': 'sla-definitions',
+      'sla-conditions': 'sla-conditions',
+      // Incident Management
+      'create-incident': 'incidents',
+      'create-manager': 'managers',
+      'create-handler': 'handlers',
+      'pending-approval': 'approvals',
+      'sla-define': 'sla-define',
+      'sla-report': 'sla-report'
+    }
+    return tabMapping[tab] || 'categories'
+  }
+
+  // Debug logging with more details
+  useEffect(() => {
+    console.log('URL Parameters Debug:', {
+      viewParam,
+      tabParam,
+      shouldShowForms,
+      formType: tabParam ? getFormTypeFromTab(tabParam) : 'none',
+      currentPath: typeof window !== 'undefined' ? window.location.href : 'SSR'
+    })
+  }, [viewParam, tabParam, shouldShowForms])
+
+  // Handle special views first
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view')
+    setShowAllIncidents(currentViewParam === 'all-incidents')
+  }, [searchParams])
+
+  // Fetch data function
   const fetchData = async () => {
     try {
-      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }))
 
       if (!isAuthenticated()) {
-        router.replace('/auth/login');
-        return;
+        router.replace('/auth/login')
+        return
       }
 
-      const currentUser = getCurrentUser();
+      const currentUser = getCurrentUser()
       setUser({
         name: currentUser?.name || 'Administrator',
         team: currentUser?.team || 'Administrator',
         email: currentUser?.email || '',
         userId: currentUser?.id || ''
-      });
+      })
 
-      // Admin should see ALL incidents - same logic as manager
-      const allIncidents = await fetchAllIncidents();
-      const stats = getIncidentStats(allIncidents);
+      const allIncidents = await fetchAllIncidents()
+      const stats = getIncidentStats(allIncidents)
 
       setDashboardData({
         incidents: allIncidents,
@@ -92,116 +212,119 @@ const AdminDashboard = () => {
         closedIncidents: stats.closed,
         loading: false,
         error: null
-      });
+      })
 
     } catch (error: any) {
       setDashboardData(prev => ({
         ...prev,
         loading: false,
         error: error.message || 'Failed to load dashboard data'
-      }));
+      }))
     }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [router]);
-
-  useEffect(() => {
-    const currentViewParam = searchParams.get('view');
-    setShowAllIncidents(currentViewParam === 'all-incidents');
-  }, [searchParams]);
-
-  // Priority data for pie chart
-  const getPriorityData = () => {
-    const highPriority = dashboardData.incidents.filter(inc =>
-      inc.priority?.toLowerCase().includes('high') ||
-      inc.priority?.toLowerCase().includes('critical')
-    ).length;
-
-    const mediumPriority = dashboardData.incidents.filter(inc =>
-      inc.priority?.toLowerCase().includes('medium') ||
-      inc.priority?.toLowerCase().includes('moderate')
-    ).length;
-
-    const lowPriority = dashboardData.incidents.filter(inc =>
-      inc.priority?.toLowerCase().includes('low')
-    ).length;
-
-    return { high: highPriority, medium: mediumPriority, low: lowPriority };
-  };
-
-  const { high, medium, low } = getPriorityData();
-
-  const priorityData: number[] = [];
-  const priorityLabels: string[] = [];
-  const priorityColors: string[] = [];
-
-  if (high > 0) {
-    priorityData.push(high);
-    priorityLabels.push('High Priority');
-    priorityColors.push('#dc3545');
-  }
-  if (medium > 0) {
-    priorityData.push(medium);
-    priorityLabels.push('Medium Priority');
-    priorityColors.push('#ffc107');
-  }
-  if (low > 0) {
-    priorityData.push(low);
-    priorityLabels.push('Low Priority');
-    priorityColors.push('#28a745');
   }
 
-  const priorityPieChartOptions = {
-    chart: {
-      type: 'pie' as const,
-      height: 350
-    },
-    labels: priorityLabels.length > 0 ? priorityLabels : ['No Data'],
-    colors: priorityColors.length > 0 ? priorityColors : ['#6b7280'],
-    legend: {
-      position: 'bottom' as const
-    },
-    dataLabels: {
-      enabled: true,
-      formatter: function (val: number) {
-        return Math.round(val) + '%'
-      }
+  // Placeholder functions for future API integration
+  const fetchRequests = async () => {
+    setRequestsLoading(true)
+    try {
+      setTimeout(() => {
+        setRequests([])
+        setRequestsLoading(false)
+      }, 1000)
+    } catch (error) {
+      console.error('Failed to fetch requests:', error)
+      setRequestsLoading(false)
     }
-  };
+  }
 
-  // Event handlers
-  const handlePinClick = (incident: Incident) => {
-    setSelectedIncident(incident);
-  };
+  const fetchPendingApprovals = async () => {
+    setApprovalsLoading(true)
+    try {
+      setTimeout(() => {
+        setPendingApprovals([])
+        setApprovalsLoading(false)
+      }, 1000)
+    } catch (error) {
+      console.error('Failed to fetch pending approvals:', error)
+      setApprovalsLoading(false)
+    }
+  }
 
-  const closeIncidentDetails = () => {
-    setSelectedIncident(null);
-  };
+  const handleApproval = async (id: string, action: 'approve' | 'reject') => {
+    try {
+      console.log(`${action} approval for ID: ${id}`)
+      fetchPendingApprovals()
+    } catch (error) {
+      console.error(`Failed to ${action} approval:`, error)
+    }
+  }
+
+  // Load data only when showing dashboard (not forms or incidents view)
+  useEffect(() => {
+    if (!shouldShowForms && !showAllIncidents) {
+      fetchData()
+      fetchRequests()
+      fetchPendingApprovals()
+    }
+  }, [router, shouldShowForms, showAllIncidents])
 
   const handleViewAllIncidents = () => {
-    setShowAllIncidents(true);
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.set('view', 'all-incidents');
-    window.history.pushState({}, '', newUrl.toString());
-  };
+    setShowAllIncidents(true)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('view', 'all-incidents')
+    newUrl.searchParams.delete('tab') // Clear tab when switching to incidents view
+    window.history.pushState({}, '', newUrl.toString())
+  }
 
   const handleBackToDashboard = () => {
-    setShowAllIncidents(false);
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete('view');
-    window.history.pushState({}, '', newUrl.toString());
-  };
+    setShowAllIncidents(false)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('view')
+    newUrl.searchParams.delete('tab')
+    window.history.pushState({}, '', newUrl.toString())
+  }
 
   const formatDateLocal = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleDateString();
+      return new Date(dateString).toLocaleDateString()
     } catch (error) {
-      return 'Unknown';
+      return 'Unknown'
     }
-  };
+  }
 
+  // Render AdminForms if a form tab is selected
+  if (shouldShowForms) {
+    const formType = getFormTypeFromTab(tabParam!)
+    console.log(`Rendering AdminForms with formType: ${formType}`)
+
+    return (
+      <Container fluid>
+        <Row>
+          <Col xs={12}>
+            <Card className="mb-4 mt-4">
+              <CardBody>
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h4 className="mb-1">Admin Management - {tabParam?.replace('-', ' ').toUpperCase()}</h4>
+                    <p className="text-muted mb-0">Manage system configuration and data</p>
+                  </div>
+                  <Button
+                    color="outline-secondary"
+                    onClick={() => router.push('/dashboard/admin')}
+                  >
+                    Back to Dashboard
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+        </Row>
+        <AdminForms initialTab={formType} />
+      </Container>
+    )
+  }
+
+  // Show loading state
   if (dashboardData.loading) {
     return (
       <Container fluid>
@@ -211,9 +334,10 @@ const AdminDashboard = () => {
           </div>
         </div>
       </Container>
-    );
+    )
   }
 
+  // Show error state
   if (dashboardData.error) {
     return (
       <Container fluid>
@@ -222,326 +346,389 @@ const AdminDashboard = () => {
           <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
         </div>
       </Container>
-    );
+    )
   }
 
+  // Show all incidents view
   if (showAllIncidents) {
-    return <AllIncidents userType="admin" onBack={handleBackToDashboard} />;
+    return <AllIncidents userType="admin" onBack={handleBackToDashboard} />
   }
 
+  // Show main dashboard
   return (
-    <>
-      <Container fluid>
-        {/* Welcome Header */}
-        <Row>
-          <Col xs={12}>
-            <Card className="mb-4 mt-4">
-              <CardBody>
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h4 className="mb-1">Welcome {user.name}!</h4>
+    <Container fluid>
+      {/* Welcome Header */}
+      <Row>
+        <Col xs={12}>
+          <Card className="mb-4 mt-4">
+            <CardBody>
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h4 className="mb-1">Welcome {user.name}!</h4>
+                  <p className="text-muted mb-0">Admin Dashboard - Manage your system</p>
+                </div>
+                <Button
+                  color="primary"
+                  onClick={handleViewAllIncidents}
+                >
+                  View All Incidents
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Stats Cards */}
+      <Row className="mb-4">
+        <Col lg={3} md={6} className="mb-3">
+          <Card className="border-left-primary h-100">
+            <CardBody>
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div className="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                    Total Incidents
+                  </div>
+                  <div className="h5 mb-0 font-weight-bold text-gray-800">
+                    {dashboardData.totalIncidents}
                   </div>
                 </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
 
-        {/* Priority Chart and Currently Logged In Users Row */}
-        <Row className="mb-4">
-          {/* Incidents by Priority Pie Chart */}
-          <Col lg={4}>
-            <Card className="h-100">
-              <CardHeader className="pb-0">
-                <h5>Incidents by Priority</h5>
-              </CardHeader>
-              <CardBody>
-                {dashboardData.totalIncidents > 0 ? (
-                  <Chart
-                    options={priorityPieChartOptions}
-                    series={priorityData.length > 0 ? priorityData : [1]}
-                    type="pie"
-                    height={350}
-                  />
-                ) : (
-                  <div className="text-center py-5">
-                    <p className="text-muted">No priority data available</p>
+        <Col lg={3} md={6} className="mb-3">
+          <Card className="border-left-success h-100">
+            <CardBody>
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div className="text-xs font-weight-bold text-success text-uppercase mb-1">
+                    Resolved
                   </div>
-                )}
-              </CardBody>
-            </Card>
-          </Col>
+                  <div className="h5 mb-0 font-weight-bold text-gray-800">
+                    {dashboardData.resolvedIncidents}
+                  </div>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
 
-          {/* Currently Logged In Users */}
-          <Col lg={8}>
-            <Card className="h-100">
-              <CardHeader className="pb-0">
-                <h5>Currently Logged In Users</h5>
-              </CardHeader>
-              <CardBody>
+        <Col lg={3} md={6} className="mb-3">
+          <Card className="border-left-warning h-100">
+            <CardBody>
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div className="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                    Total Requests
+                  </div>
+                  <div className="h5 mb-0 font-weight-bold text-gray-800">
+                    {requests.length}
+                  </div>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+
+        <Col lg={3} md={6} className="mb-3">
+          <Card className="border-left-danger h-100">
+            <CardBody>
+              <div className="d-flex align-items-center">
+                <div className="flex-grow-1">
+                  <div className="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                    Pending Approvals
+                  </div>
+                  <div className="h5 mb-0 font-weight-bold text-gray-800">
+                    {pendingApprovals.length}
+                  </div>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Admin Quick Actions and System Overview */}
+      <Row className="mb-4">
+        {/* Admin Quick Actions */}
+        <Col lg={6}>
+          <Card className="h-100">
+            <CardHeader className="pb-0">
+              <h5>Admin Quick Actions</h5>
+            </CardHeader>
+            <CardBody>
+              <div className="d-grid gap-2">
+                <Button
+                  color="primary"
+                  onClick={() => router.push('/dashboard/admin?tab=subcategory')}
+                  className="text-start"
+                >
+                  Manage Sub-Categories
+                </Button>
+                <Button
+                  color="info"
+                  onClick={() => router.push('/dashboard/admin?tab=contact-type')}
+                  className="text-start"
+                >
+                  Manage Contact Types
+                </Button>
+                <Button
+                  color="success"
+                  onClick={() => router.push('/dashboard/admin?tab=sites')}
+                  className="text-start"
+                >
+                  Manage Sites
+                </Button>
+                <Button
+                  color="warning"
+                  onClick={() => router.push('/dashboard/admin?tab=impact')}
+                  className="text-start"
+                >
+                  Manage Impacts
+                </Button>
+                <Button
+                  color="secondary"
+                  onClick={() => router.push('/dashboard/admin?tab=urgency')}
+                  className="text-start"
+                >
+                  Manage Urgencies
+                </Button>
+                <Button
+                  color="dark"
+                  onClick={() => router.push('/dashboard/admin?tab=state')}
+                  className="text-start"
+                >
+                  Manage Incident States
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+
+        {/* Currently Logged In Users */}
+        <Col lg={6}>
+          <Card className="h-100">
+            <CardHeader className="pb-0">
+              <h5>Currently Logged In Users</h5>
+            </CardHeader>
+            <CardBody>
+              <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <Table hover className="table-borderless table-sm">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Name</th>
+                      <th>Team</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loggedInUsers.length > 0 ? (
+                      loggedInUsers.map((loggedUser) => (
+                        <tr key={loggedUser.id}>
+                          <td className="fw-medium">{loggedUser.name}</td>
+                          <td>
+                            <Badge color="primary" size="sm">{loggedUser.team}</Badge>
+                          </td>
+                          <td>
+                            <Badge color="success" size="sm">
+                              Online
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="text-center text-muted py-4">
+                          No active users found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Requests List */}
+      <Row className="mb-4">
+        <Col xs={12}>
+          <Card>
+            <CardHeader>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5>System Requests</h5>
+                <Button color="outline-primary" size="sm">
+                  New Request
+                </Button>
+              </div>
+            </CardHeader>
+            <CardBody>
+              {requestsLoading ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading requests...</span>
+                  </div>
+                </div>
+              ) : requests.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
                       <tr>
-                        <th>User Id</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Group</th>
-                        <th>Last Activity at</th>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Requested By</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {loggedInUsers.length > 0 ? (
-                        loggedInUsers.map((loggedUser) => (
-                          <tr key={loggedUser.id}>
-                            <td>{loggedUser.id}</td>
-                            <td className="fw-medium">{loggedUser.name}</td>
-                            <td className="text-muted">{loggedUser.email}</td>
-                            <td>{loggedUser.team}</td>
-                            <td className="text-muted">
-                              {loggedUser.lastActivity ? new Date(loggedUser.lastActivity).toLocaleString() : new Date().toLocaleString()}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="text-center text-muted">No active users found</td>
+                      {requests.map((request) => (
+                        <tr key={request.id}>
+                          <td>
+                            <span className="fw-medium text-primary">{request.id}</span>
+                          </td>
+                          <td>
+                            <Badge color="info">{request.type}</Badge>
+                          </td>
+                          <td>{request.description}</td>
+                          <td>{request.requestedBy}</td>
+                          <td>
+                            <Badge
+                              color={
+                                request.status === 'approved' ? 'success' :
+                                request.status === 'rejected' ? 'danger' :
+                                request.status === 'pending' ? 'warning' : 'secondary'
+                              }
+                            >
+                              {request.status}
+                            </Badge>
+                          </td>
+                          <td>{formatDateLocal(request.createdAt)}</td>
+                          <td>
+                            <div className="d-flex gap-1">
+                              <Button color="outline-primary" size="sm">
+                                View
+                              </Button>
+                              <Button color="outline-secondary" size="sm">
+                                Edit
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
-                      )}
+                      ))}
                     </tbody>
                   </Table>
                 </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Map Section */}
-        <InteractiveIncidentMap
-          incidents={dashboardData.incidents}
-          onPinClick={handlePinClick}
-          height="400px"
-        />
-
-        {/* Incident Details Modal */}
-        {selectedIncident && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            onClick={closeIncidentDetails}
-          >
-            <div
-              style={{
-                backgroundColor: 'white',
-                borderRadius: '8px',
-                padding: '0',
-                maxWidth: '600px',
-                width: '90%',
-                maxHeight: '80vh',
-                overflow: 'auto',
-                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Card className="m-0">
-                <CardHeader className="bg-primary text-white">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <h5 className="mb-0 text-white">📍 Incident Details</h5>
-                    <Button
-                      color="link"
-                      className="text-white p-0"
-                      onClick={closeIncidentDetails}
-                      style={{ fontSize: '24px', textDecoration: 'none' }}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardBody>
-                  <Row>
-                    <Col md={6}>
-                      <div className="mb-3">
-                        <strong>Incident ID:</strong>
-                        <div className="text-primary fs-5 fw-bold">{selectedIncident.number}</div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Category:</strong>
-                        <div>{selectedIncident.category}</div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Sub Category:</strong>
-                        <div>{selectedIncident.subCategory}</div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Priority:</strong>
-                        <div>
-                          <Badge style={{ backgroundColor: getPriorityColor(selectedIncident.priority), color: 'white' }} className="fs-6">
-                            {selectedIncident.priority}
-                          </Badge>
-                        </div>
-                      </div>
-                    </Col>
-                    <Col md={6}>
-                      <div className="mb-3">
-                        <strong>Status:</strong>
-                        <div>
-                          <Badge style={{ backgroundColor: getStatusColor(selectedIncident.status), color: 'white' }} className="fs-6">
-                            {selectedIncident.status?.replace('_', ' ')}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Impact:</strong>
-                        <div>{selectedIncident.impact || 'Not specified'}</div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Urgency:</strong>
-                        <div>{selectedIncident.urgency || 'Not specified'}</div>
-                      </div>
-                      <div className="mb-3">
-                        <strong>Created:</strong>
-                        <div>{formatDateLocal(selectedIncident.createdAt)}</div>
-                      </div>
-                    </Col>
-                  </Row>
-
-                  <div className="mb-3">
-                    <strong>Description:</strong>
-                    <div className="mt-1 p-2 bg-light rounded">
-                      {selectedIncident.shortDescription || 'No description available'}
-                    </div>
-                  </div>
-
-                  {selectedIncident.description && selectedIncident.description !== selectedIncident.shortDescription && (
-                    <div className="mb-3">
-                      <strong>Detailed Description:</strong>
-                      <div className="mt-1 p-2 bg-light rounded">
-                        {selectedIncident.description}
-                      </div>
-                    </div>
-                  )}
-
-                  <Row>
-                    <Col md={6}>
-                      <div className="mb-3">
-                        <strong>Reported By:</strong>
-                        <div>{selectedIncident.reportedByName || selectedIncident.caller}</div>
-                        <small className="text-muted">{selectedIncident.reportedBy}</small>
-                      </div>
-                    </Col>
-                    <Col md={6}>
-                      <div className="mb-3">
-                        <strong>Assigned To:</strong>
-                        <div>{selectedIncident.assignedTo || 'Unassigned'}</div>
-                        {selectedIncident.assignedToEmail && (
-                          <small className="text-muted">{selectedIncident.assignedToEmail}</small>
-                        )}
-                      </div>
-                    </Col>
-                  </Row>
-
-                  {(selectedIncident.address || selectedIncident.postcode || (selectedIncident.latitude && selectedIncident.longitude)) && (
-                    <div className="mb-3">
-                      <strong>Location:</strong>
-                      <div className="mt-1 p-2 bg-light rounded">
-                        <div>{selectedIncident.address || 'Address not specified'}</div>
-                        {selectedIncident.postcode && (
-                          <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>
-                        )}
-                        {(selectedIncident.latitude && selectedIncident.longitude) && (
-                          <div>
-                            <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
-                            <span className="text-success ms-2">📍 Precise Location</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mb-3">
-                    <strong>Contact Type:</strong>
-                    <div>{selectedIncident.contactType}</div>
-                  </div>
-
-                  <div className="text-center mt-4">
-                    <Button color="primary" className="me-2">Edit Incident</Button>
-                    <Button color="outline-secondary" onClick={closeIncidentDetails}>Close</Button>
-                  </div>
-                </CardBody>
-              </Card>
-            </div>
-          </div>
-        )}
-
-        {/* Recent Incidents */}
-        <Row>
-          <Col lg={12}>
-            <Card>
-              <CardHeader className="pb-0">
-                <div className="d-flex justify-content-between align-items-center">
-                  <h5>Recent Incidents</h5>
-                  <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>View All</Button>
+              ) : (
+                <div className="text-center py-5">
+                  <p className="text-muted mb-0">No requests found</p>
+                  <small className="text-muted">Requests will appear here when available from the backend API</small>
                 </div>
-              </CardHeader>
-              <CardBody>
-                {dashboardData.incidents.length > 0 ? (
-                  <div className="table-responsive">
-                    <Table hover className="table-borderless">
-                      <thead className="table-light">
-                        <tr>
-                          <th>ID</th>
-                          <th>Description</th>
-                          <th>Impact</th>
-                          <th>Location</th>
-                          <th>Created At</th>
+              )}
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Pending Approvals */}
+      <Row>
+        <Col xs={12}>
+          <Card>
+            <CardHeader>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5>Pending Approvals</h5>
+                <Badge color="danger" className="fs-6">
+                  {pendingApprovals.length} Pending
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardBody>
+              {approvalsLoading ? (
+                <div className="text-center py-3">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading approvals...</span>
+                  </div>
+                </div>
+              ) : pendingApprovals.length > 0 ? (
+                <div className="table-responsive">
+                  <Table hover className="table-borderless">
+                    <thead className="table-light">
+                      <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Requested By</th>
+                        <th>Priority</th>
+                        <th>Pending Since</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingApprovals.map((approval) => (
+                        <tr key={approval.id}>
+                          <td>
+                            <span className="fw-medium text-primary">{approval.id}</span>
+                          </td>
+                          <td>
+                            <Badge color="warning">{approval.type}</Badge>
+                          </td>
+                          <td>{approval.description}</td>
+                          <td>{approval.requestedBy}</td>
+                          <td>
+                            <Badge
+                              color={
+                                approval.priority === 'high' ? 'danger' :
+                                approval.priority === 'medium' ? 'warning' : 'info'
+                              }
+                            >
+                              {approval.priority}
+                            </Badge>
+                          </td>
+                          <td>{formatDateLocal(approval.pendingSince)}</td>
+                          <td>
+                            <div className="d-flex gap-1">
+                              <Button
+                                color="success"
+                                size="sm"
+                                title="Approve"
+                                onClick={() => handleApproval(approval.id, 'approve')}
+                              >
+                                ✓
+                              </Button>
+                              <Button
+                                color="danger"
+                                size="sm"
+                                title="Reject"
+                                onClick={() => handleApproval(approval.id, 'reject')}
+                              >
+                                ✗
+                              </Button>
+                              <Button color="outline-primary" size="sm" title="View Details">
+                                View
+                              </Button>
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {dashboardData.incidents.slice(0, 5).map((incident) => (
-                          <tr key={incident.id}>
-                            <td>
-                              <span className="fw-medium text-primary">{incident.number}</span>
-                            </td>
-                            <td>
-                              <div>
-                                <div className="fw-medium">{incident.category}</div>
-                              </div>
-                            </td>
-                            <td>
-                              <Badge color="secondary">{incident.impact || 'Medium'}</Badge>
-                            </td>
-                            <td>
-                              <div>
-                                <span className="text-muted">{incident.address || 'Not specified'}</span>
-                              </div>
-                            </td>
-                            <td>{formatDateLocal(incident.createdAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-3">
-                    <p className="text-muted mb-0">No recent incidents</p>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-      </Container>
-    </>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-5">
+                  <p className="text-muted mb-0">No pending approvals</p>
+                  <small className="text-muted">Pending approvals will appear here when available from the backend API</small>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+    </Container>
   )
 }
 

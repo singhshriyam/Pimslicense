@@ -46,7 +46,7 @@ export const mapTeamToRole = (team: string): string => {
   if (teamLower.includes('incident') && teamLower.includes('manager')) return 'INCIDENT_MANAGER';
   if (teamLower.includes('incident') && teamLower.includes('handler')) return 'INCIDENT_HANDLER';
   if (teamLower.includes('field') && teamLower.includes('engineer')) return 'FIELD_ENGINEER';
-  if (teamLower.includes('water') && teamLower.includes('pollution')) return 'WATER_POLLUTION_EXPERT';
+  if (teamLower.includes('expert') && teamLower.includes('team')) return 'expert_team';
   if (teamLower.includes('sla') && teamLower.includes('manager')) return 'SLA_MANAGER';
 
   return 'USER';
@@ -60,7 +60,7 @@ export const getUserDashboard = (team: string): string => {
   if (teamLower.includes('incident') && teamLower.includes('manager')) return '/dashboard/incident_manager';
   if (teamLower.includes('incident') && teamLower.includes('handler')) return '/dashboard/incident_handler';
   if (teamLower.includes('field') && teamLower.includes('engineer')) return '/dashboard/field_engineer';
-  if (teamLower.includes('water') && teamLower.includes('pollution')) return '/dashboard/water_pollution_expert';
+  if (teamLower.includes('expert') && teamLower.includes('team')) return '/dashboard/expert_team';
   if (teamLower.includes('sla') && teamLower.includes('manager')) return '/dashboard/developer';
 
   return '/dashboard/enduser';
@@ -91,7 +91,7 @@ export const filterIncidentsByRole = (incidents: any[], userEmail: string, userT
     case 'field_engineer':
       return incidents.filter(incident => incident.assignedToEmail === userEmail);
 
-    case 'water_pollution_expert':
+    case 'expert_team':
       return incidents.filter(incident => incident.assignedToEmail === userEmail);
 
     case 'administrator':

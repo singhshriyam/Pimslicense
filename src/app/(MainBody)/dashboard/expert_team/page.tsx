@@ -1,4 +1,3 @@
-
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, Button } from 'reactstrap'
@@ -11,7 +10,7 @@ import {
 } from '../../services/userService';
 
 import {
-  fetchHandlerIncidents, // Use the FIXED handler function
+  // fetchExpertTeamIncidents, // TODO: Implement this endpoint
   getIncidentStats,
   getStatusColor,
   getPriorityColor,
@@ -25,7 +24,52 @@ import AssignIncidents from '../../../../Components/AssignIncidents';
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
 
-const IncidentHandlerDashboard = () => {
+// FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
+// This fake data is temporarily used to show dashboard functionality
+// Remove this entire section once fetchExpertTeamIncidents() API endpoint is implemented
+export const EXPERT_TEAM_FAKE_DATA: Incident[] = [
+  {
+    id: 'demo-expert-1',
+    incident_no: 'EXP-2024-001',
+    status: 'in_progress',
+    category: { name: 'Complex Analysis' },
+    priority: 'Critical',
+    user: { name: 'Michael', last_name: 'Brown' },
+    created_at: '2024-01-14T09:15:00Z',
+    assigned_to: { name: 'Expert', last_name: 'Analyst' },
+    incidentstate: { name: 'inprogress' },
+    urgency: { name: 'Critical' },
+    short_description: 'Complex water quality analysis required for industrial discharge'
+  },
+  {
+    id: 'demo-expert-2',
+    incident_no: 'EXP-2024-002',
+    status: 'resolved',
+    category: { name: 'Technical Review' },
+    priority: 'High',
+    user: { name: 'Lisa', last_name: 'Davis' },
+    created_at: '2024-01-13T16:45:00Z',
+    assigned_to: { name: 'Expert', last_name: 'Analyst' },
+    incidentstate: { name: 'resolved' },
+    urgency: { name: 'High' },
+    short_description: 'Technical review of pollution control measures'
+  },
+  {
+    id: 'demo-expert-3',
+    incident_no: 'EXP-2024-003',
+    status: 'pending',
+    category: { name: 'Root Cause Analysis' },
+    priority: 'High',
+    user: { name: 'Robert', last_name: 'Wilson' },
+    created_at: '2024-01-16T11:30:00Z',
+    assigned_to: { name: 'Expert', last_name: 'Analyst' },
+    incidentstate: { name: 'new' },
+    urgency: { name: 'High' },
+    short_description: 'Root cause analysis for recurring chemical discharge violations'
+  }
+];
+
+const ExpertTeamDashboard = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -115,30 +159,35 @@ const IncidentHandlerDashboard = () => {
         }
 
         setUser({
-          name: currentUser?.name || 'Handler',
-          team: currentUser?.team || 'Incident Handler',
+          name: currentUser?.name || 'Expert Team Member',
+          team: currentUser?.team || 'Expert Team',
           email: currentUser?.email || '',
           userId: currentUser?.id || ''
         });
 
-        const handlerIncidents = await fetchHandlerIncidents();
+        // TODO: Implement fetchExpertTeamIncidents() endpoint
+        // const expertIncidents = await fetchExpertTeamIncidents();
+
+        // FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
+        // Using exported fake data for consistency across all views
+        const expertIncidents: Incident[] = EXPERT_TEAM_FAKE_DATA;
 
         // Log status breakdown for debugging
-        const statusCounts = handlerIncidents.reduce((acc, incident) => {
+        const statusCounts = expertIncidents.reduce((acc, incident) => {
           const status = getStatus(incident);
           acc[status] = (acc[status] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
 
         // Log assignment breakdown
-        const assignmentCounts = handlerIncidents.reduce((acc, incident) => {
+        const assignmentCounts = expertIncidents.reduce((acc, incident) => {
           const key = getAssignedTo(incident);
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
 
         setDashboardData({
-          myIncidents: handlerIncidents,
+          myIncidents: expertIncidents,
           loading: false,
           error: null
         });
@@ -158,7 +207,16 @@ const IncidentHandlerDashboard = () => {
   useEffect(() => {
     const currentViewParam = searchParams.get('view');
     const currentStatusParam = searchParams.get('status');
-    setCurrentView(currentViewParam || 'dashboard');
+
+    // Check for sidebar navigation
+    if (currentViewParam === 'my-incidents') {
+      setCurrentView('all-incidents');
+    } else if (currentViewParam === 'assign-incidents') {
+      setCurrentView('assign-incidents');
+    } else {
+      setCurrentView(currentViewParam || 'dashboard');
+    }
+
     setFilterByStatus(currentStatusParam);
   }, [searchParams]);
 
@@ -201,10 +259,15 @@ const IncidentHandlerDashboard = () => {
     try {
       setDashboardData(prev => ({ ...prev, loading: true, error: null }));
 
-      const userIncidents = await fetchHandlerIncidents();
+      // TODO: Implement fetchExpertTeamIncidents() endpoint
+      // const expertIncidents = await fetchExpertTeamIncidents();
+
+      // FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
+      // Using exported fake data for consistency across all views
+      const expertIncidents: Incident[] = EXPERT_TEAM_FAKE_DATA;
 
       setDashboardData({
-        myIncidents: userIncidents,
+        myIncidents: expertIncidents,
         loading: false,
         error: null
       });
@@ -224,11 +287,11 @@ const IncidentHandlerDashboard = () => {
 
   // Render different views based on current view
   if (currentView === 'all-incidents') {
-    return <AllIncidents userType="handler" onBack={handleBackToDashboard} initialStatusFilter={filterByStatus} />;
+    return <AllIncidents userType="expert_team" onBack={handleBackToDashboard} initialStatusFilter={filterByStatus} />;
   }
 
   if (currentView === 'assign-incidents') {
-    return <AssignIncidents userType="handler" onBack={handleBackToDashboard} />;
+    return <AssignIncidents userType="expert_team" onBack={handleBackToDashboard} />;
   }
 
   if (dashboardData.loading) {
@@ -432,6 +495,7 @@ const IncidentHandlerDashboard = () => {
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
                     <h4 className="mb-1">Welcome back, {user.name}!</h4>
+                    <small className="text-muted">Expert Team Dashboard - Advanced Analysis & Resolution</small>
                   </div>
                   <div>
                     <Button color="outline-primary" size="sm" onClick={handleRefreshData}>
@@ -510,7 +574,7 @@ const IncidentHandlerDashboard = () => {
             <Card>
               <CardBody>
                 <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5>My Recent Assigned Incidents</h5>
+                  <h5>My Recent Expert Assignments</h5>
                   <div>
                     {stats.total > 0 && (
                       <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
@@ -533,7 +597,7 @@ const IncidentHandlerDashboard = () => {
                     </div>
                     <h6 className="text-muted">No incidents assigned yet</h6>
                     <p className="text-muted">
-                      You don't have any assigned incidents at the moment. Check back later for new assignments.
+                      You don't have any expert assignments at the moment. Check back later for complex cases requiring expert analysis.
                     </p>
                   </div>
                 ) : (
@@ -595,13 +659,15 @@ const IncidentHandlerDashboard = () => {
                 <h5 className="mb-3">Task Overview</h5>
                 {stats.total > 0 ? (
                   <div style={{ minHeight: '300px' }}>
-                    <Chart
-                      options={pieChartOptions}
-                      series={nonZeroData.length > 0 ? nonZeroData : [1]}
-                      type="pie"
-                      height={300}
-                      key={`pie-chart-${stats.total}-${nonZeroData.join('-')}`}
-                    />
+                    {typeof window !== 'undefined' && typeof document !== 'undefined' && (
+                      <Chart
+                        options={pieChartOptions}
+                        series={nonZeroData.length > 0 ? nonZeroData : [1]}
+                        type="pie"
+                        height={300}
+                        key={`pie-chart-${stats.total}-${nonZeroData.join('-')}`}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-4" style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
@@ -622,13 +688,15 @@ const IncidentHandlerDashboard = () => {
                 <h5 className="mb-3">My Monthly Performance Trends</h5>
                 {stats.total > 0 ? (
                   <div style={{ minHeight: '350px' }}>
-                    <Chart
-                      options={barChartOptions}
-                      series={barChartSeries}
-                      type="bar"
-                      height={350}
-                      key={`bar-chart-${stats.total}-${assigned.join('-')}`}
-                    />
+                    {typeof window !== 'undefined' && typeof document !== 'undefined' && (
+                      <Chart
+                        options={barChartOptions}
+                        series={barChartSeries}
+                        type="bar"
+                        height={350}
+                        key={`bar-chart-${stats.total}-${assigned.join('-')}`}
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-5" style={{ minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
@@ -645,4 +713,4 @@ const IncidentHandlerDashboard = () => {
   )
 }
 
-export default IncidentHandlerDashboard
+export default ExpertTeamDashboard

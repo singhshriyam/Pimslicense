@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { getStoredUserTeam, mapTeamToRole, isAuthenticated } from "../../app/(MainBody)/services/userService";
 
 // User role type definition - UPDATED to include Field Engineer
-export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'FIELD_ENGINEER' | 'WATER_POLLUTION_EXPERT' | 'USER' | 'SLA_MANAGER';
+export type UserRole = 'ADMINISTRATOR' | 'INCIDENT_MANAGER' | 'INCIDENT_HANDLER' | 'FIELD_ENGINEER' | 'expert_team' | 'USER' | 'SLA_MANAGER';
 
 export interface User {
   id?: string;
@@ -73,7 +73,7 @@ export const RoleUtils = {
       'INCIDENT_MANAGER': '/dashboard/incident_manager',
       'INCIDENT_HANDLER': '/dashboard/incident_handler',
       'FIELD_ENGINEER': '/dashboard/field_engineer',
-      'WATER_POLLUTION_EXPERT': '/dashboard/water_pollution_expert',
+      'expert_team': '/dashboard/expert_team',
       'SLA_MANAGER': '/dashboard/slamanager',
       'USER': '/dashboard/enduser'
     };
@@ -83,7 +83,7 @@ export const RoleUtils = {
   canAccessAdmin: (role: UserRole): boolean => role === 'ADMINISTRATOR',
   canManageUsers: (role: UserRole): boolean => role === 'ADMINISTRATOR',
   canManageIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER'].includes(role),
-  canHandleIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER', 'FIELD_ENGINEER', 'WATER_POLLUTION_EXPERT'].includes(role),
+  canHandleIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'INCIDENT_HANDLER', 'FIELD_ENGINEER', 'expert_team'].includes(role),
   canViewAllIncidents: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
   canCreateIncidents: (role: UserRole): boolean => true,
   canManageSLA: (role: UserRole): boolean => ['ADMINISTRATOR', 'INCIDENT_MANAGER', 'SLA_MANAGER'].includes(role),
@@ -95,7 +95,7 @@ export const RoleUtils = {
       'INCIDENT_MANAGER': 'Incident Manager',
       'INCIDENT_HANDLER': 'Incident Handler',
       'FIELD_ENGINEER': 'Field Engineer',
-      'WATER_POLLUTION_EXPERT': 'Water Pollution Expert',
+      'expert_team': 'Water Pollution Expert',
       'SLA_MANAGER': 'SLA Manager',
       'USER': 'End User'
     };
@@ -119,32 +119,32 @@ const createMenuSection = (title: string, items: MenuItem[]): MenuItem => ({
 
 const AdminMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("Admin Dashboard", "/dashboard/admin")
+    createMenuItem("Admin", "/dashboard/admin")
   ]),
   createMenuSection("Management", [
     {
       title: "Groups",
       type: "submenu",
       children: [
-        createMenuItem("All Groups", "/dashboard?tab=all-groups"),
-        createMenuItem("Create Group", "/dashboard?tab=create-group")
+        createMenuItem("All Groups", "/dashboard/admin?tab=all-groups"),
+        createMenuItem("Create Group", "/dashboard/admin?tab=create-group")
       ]
     },
     {
       title: "Users",
       type: "submenu",
       children: [
-        createMenuItem("All Users", "/dashboard?tab=users")
+        createMenuItem("All Users", "/dashboard/admin?tab=users")
       ]
     },
     {
       title: "Roles & Permissions",
       type: "submenu",
       children: [
-        createMenuItem("All Roles", "/dashboard?tab=all-roles"),
-        createMenuItem("Create Roles", "/dashboard?tab=create-roles"),
-        createMenuItem("All Permissions", "/dashboard?tab=all-permissions"),
-        createMenuItem("Create Permission", "/dashboard?tab=create-permission")
+        createMenuItem("All Roles", "/dashboard/admin?tab=all-roles"),
+        createMenuItem("Create Roles", "/dashboard/admin?tab=create-roles"),
+        createMenuItem("All Permissions", "/dashboard/admin?tab=all-permissions"),
+        createMenuItem("Create Permission", "/dashboard/admin?tab=create-permission")
       ]
     }
   ]),
@@ -154,10 +154,10 @@ const AdminMenuList: MenuItem[] = [
       type: "submenu",
       children: [
         createMenuItem("All Incidents", "/dashboard/admin?view=all-incidents"),
-        createMenuItem("Create Incident", "/dashboard?tab=create-incident"),
+        createMenuItem("Create Incident", "/dashboard/admin?tab=create-incident"),
         createMenuItem("Assign Incidents", "/dashboard/admin?view=assign-incidents"),
-        createMenuItem("Manager Registration", "/dashboard?tab=create-manager"),
-        createMenuItem("Handler Registration", "/dashboard?tab=create-handler")
+        createMenuItem("Manager Registration", "/dashboard/admin?tab=create-manager"),
+        createMenuItem("Handler Registration", "/dashboard/admin?tab=create-handler")
       ]
     }
   ]),
@@ -166,26 +166,26 @@ const AdminMenuList: MenuItem[] = [
       title: "Master Settings",
       type: "submenu",
       children: [
-        createMenuItem("Sub-Category", "/dashboard?tab=subcategory"),
-        createMenuItem("Contact Type", "/dashboard?tab=contact-type"),
-        createMenuItem("Incident State", "/dashboard?tab=state"),
-        createMenuItem("Impact", "/dashboard?tab=impact"),
-        createMenuItem("Urgency", "/dashboard?tab=urgency")
+        createMenuItem("Sub-Category", "/dashboard/admin?tab=subcategory"),
+        createMenuItem("Contact Type", "/dashboard/admin?tab=contact-type"),
+        createMenuItem("Incident State", "/dashboard/admin?tab=state"),
+        createMenuItem("Impact", "/dashboard/admin?tab=impact"),
+        createMenuItem("Urgency", "/dashboard/admin?tab=urgency")
       ]
     },
     {
       title: "Asset Management",
       type: "submenu",
       children: [
-        createMenuItem("Asset State", "/dashboard?tab=asset-state"),
-        createMenuItem("Asset Sub State", "/dashboard?tab=asset-substate"),
-        createMenuItem("Asset Function", "/dashboard?tab=asset-function"),
-        createMenuItem("Asset Location", "/dashboard?tab=asset-location"),
-        createMenuItem("Department", "/dashboard?tab=department"),
-        createMenuItem("Company", "/dashboard?tab=company"),
-        createMenuItem("Stock Room", "/dashboard?tab=stock-room"),
-        createMenuItem("Aisle", "/dashboard?tab=aisle"),
-        createMenuItem("Add Asset", "/dashboard?tab=add-asset")
+        createMenuItem("Asset State", "/dashboard/admin?tab=asset-state"),
+        createMenuItem("Asset Sub State", "/dashboard/admin?tab=asset-substate"),
+        createMenuItem("Asset Function", "/dashboard/admin?tab=asset-function"),
+        createMenuItem("Asset Location", "/dashboard/admin?tab=asset-location"),
+        createMenuItem("Department", "/dashboard/admin?tab=department"),
+        createMenuItem("Company", "/dashboard/admin?tab=company"),
+        createMenuItem("Stock Room", "/dashboard/admin?tab=stock-room"),
+        createMenuItem("Aisle", "/dashboard/admin?tab=aisle"),
+        createMenuItem("Add Asset", "/dashboard/admin?tab=add-asset")
       ]
     },
     {
@@ -209,7 +209,7 @@ const AdminMenuList: MenuItem[] = [
 
 const IncidentManagerMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("Manager Dashboard", "/dashboard/incident_manager", "dashboard")
+    createMenuItem("Manager", "/dashboard/incident_manager", "dashboard")
   ]),
   createMenuSection("Incident Management", [
     createMenuItem("All Incidents", "/dashboard/incident_manager?view=all-incidents", "alert-triangle"),
@@ -225,7 +225,7 @@ const IncidentManagerMenuList: MenuItem[] = [
 
 const IncidentHandlerMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("Handler Dashboard", "/dashboard/incident_handler", "dashboard")
+    createMenuItem("Handler", "/dashboard/incident_handler", "dashboard")
   ]),
   createMenuSection("My Tasks", [
     createMenuItem("My Incidents", "/dashboard/incident_handler?view=all-incidents", "list"),
@@ -237,28 +237,29 @@ const IncidentHandlerMenuList: MenuItem[] = [
 // NEW - Field Engineer Menu
 const FieldEngineerMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("Field Dashboard", "/dashboard/field_engineer", "map-pin")
+    createMenuItem("Field Engineer", "/dashboard/field_engineer", "map-pin")
   ]),
-  createMenuSection("Field Work", [
-    createMenuItem("My Assignments", "/dashboard/field_engineer?view=all-incidents", "clipboard-list"),
-    createMenuItem("Site Inspections", "/dashboard/field_engineer", "search")
-  ])
+  // createMenuSection("Field Work", [
+  //   createMenuItem("My Assignments", "/dashboard/field_engineer?view=all-incidents", "clipboard-list"),
+  //   createMenuItem("Site Inspections", "/dashboard/field_engineer", "search")
+  // ])
 ];
 
 // NEW - Water Pollution Expert Menu
-const WaterPollutionExpertMenuList: MenuItem[] = [
+const ExpertTeamMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("Expert Dashboard", "/dashboard/water_pollution_expert", "droplets")
+    createMenuItem("Expert Team", "/dashboard/expert_team", "dashboard")
   ]),
-  createMenuSection("Water Quality", [
-    createMenuItem("My Cases", "/dashboard/water_pollution_expert?view=all-incidents", "beaker"),
-    createMenuItem("Water Testing", "/dashboard/water_pollution_expert", "flask")
+  createMenuSection("My Tasks", [
+    createMenuItem("My Incidents", "/dashboard/expert_team?view=all-incidents", "list"),
+    createMenuItem("Create Incident", "/dashboard?tab=create-incident", "plus-circle"),
+    createMenuItem("Assign to Others", "/dashboard/expert_team?view=assign-incidents", "user-check")
   ])
 ];
 
 const SLAManagerMenuList: MenuItem[] = [
   createMenuSection("Dashboard", [
-    createMenuItem("SLA Dashboard", "/dashboard/developer", "dashboard")
+    createMenuItem("SLA Manager", "/dashboard/developer", "dashboard")
   ]),
   createMenuSection("SLA Management", [
     createMenuItem("All Incidents", "/dashboard?tab=all-incidents", "alert-triangle"),
@@ -295,7 +296,7 @@ export const getMenuByRole = (userRole: UserRole): MenuItem[] => {
     'INCIDENT_MANAGER': IncidentManagerMenuList,
     'INCIDENT_HANDLER': IncidentHandlerMenuList,
     'FIELD_ENGINEER': FieldEngineerMenuList,
-    'WATER_POLLUTION_EXPERT': WaterPollutionExpertMenuList,
+    'expert_team': ExpertTeamMenuList,
     'SLA_MANAGER': SLAManagerMenuList,
     'USER': EndUserMenuList
   };
@@ -373,7 +374,7 @@ export {
   IncidentManagerMenuList,
   IncidentHandlerMenuList,
   FieldEngineerMenuList,
-  WaterPollutionExpertMenuList,
+  ExpertTeamMenuList,
   SLAManagerMenuList,
   EndUserMenuList,
   GuestMenuList

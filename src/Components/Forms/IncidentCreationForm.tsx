@@ -1,13 +1,21 @@
-// src/components/IncidentCreationForm.tsx - Complete Production-Ready Version
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, CardBody, Form, FormGroup, Label, Input, Button, Alert } from 'reactstrap';
 
-// Import from the unified service
 import {
   createIncident,
   type Incident
 } from '../../app/(MainBody)/services/incidentService';
+
+import {
+  fetchCategories,
+  fetchSubcategories,
+  fetchContactTypes,
+  fetchImpacts,
+  fetchUrgencies,
+  fetchAssets,
+  fetchSites,
+} from '../../app/(MainBody)/services/masterService';
 
 import {
   getCurrentUser
@@ -26,6 +34,8 @@ interface IncidentFormData {
   postcode: string;
   latitude: string;
   longitude: string;
+  asset_id: string;
+  site_id: string;
 }
 
 interface IncidentCreationFormProps {
@@ -54,14 +64,16 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     category_id: '',
     subcategory_id: '',
     short_description: '',
-    contact_type_id: '3', // SelfService
-    impact_id: '1', // Default to Significant
-    urgency_id: '2', // Default to Medium
+    contact_type_id: '',
+    impact_id: '',
+    urgency_id: '',
     description: '',
     address: '',
     postcode: '',
     latitude: '',
-    longitude: ''
+    longitude: '',
+    asset_id: '',
+    site_id: ''
   });
 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -81,70 +93,125 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Category and subcategory options with IDs matching your backend
-  const categoryOptions = [
-    { id: '1', name: 'Inside home' },
-    { id: '2', name: 'Street Pavement' },
-    { id: '3', name: 'SP site' },
-    { id: '4', name: 'Outside drive way /garden' },
-    { id: '5', name: 'River strem or lake' }
-  ];
+  // Backend data states
+  const [masterData, setMasterData] = useState({
+    categories: [] as Array<{id: number, name: string}>,
+    subcategories: [] as Array<{id: number, name: string, category_id: number}>,
+    contactTypes: [] as Array<{id: number, name: string}>,
+    impacts: [] as Array<{id: number, name: string}>,
+    urgencies: [] as Array<{id: number, name: string}>,
+    assets: [] as Array<{id: number, name: string}>,
+    sites: [] as Array<{id: number, name: string}>,
+    loading: false,
+    error: null as string | null
+  });
 
-  const subcategoryOptions: Record<string, Array<{id: string, name: string}>> = {
-    '1': [ // Inside home
-      { id: '1', name: 'Leak from my pipe' },
-      { id: '2', name: 'Toilet/sink /shower issues' },
-      { id: '3', name: 'Sewage spillout' },
-      { id: '4', name: 'Cover or lid is damaged' },
-      { id: '5', name: 'Sewage smell in my home' },
-      { id: '6', name: 'Blocked alarm' }
-    ],
-    '2': [ // Street Pavement
-      { id: '7', name: 'Manhole blocked /smelly' },
-      { id: '8', name: 'Cover or lid is damaged' },
-      { id: '9', name: 'Smelly sewage over flowing on the street' },
-      { id: '10', name: 'Roadside drain or gully that is blocked' }
-    ],
-    '3': [ // SP site
-      { id: '11', name: 'Mark the site in the map or list of SP sites' }
-    ],
-    '4': [ // Outside drive way /garden
-      { id: '12', name: 'Leak on my property outside' },
-      { id: '13', name: 'Blocked /smelly manhole on my property' },
-      { id: '14', name: 'Sewage overflow on my property' },
-      { id: '15', name: 'Blocked drain on my property' },
-      { id: '16', name: 'Sewage odour outside my home' }
-    ],
-    '5': [ // River stream or lake
-      // Add subcategories if available
-    ]
+  // Load master data from backend
+  useEffect(() => {
+    const loadMasterData = async () => {
+      setMasterData(prev => ({ ...prev, loading: true, error: null }));
+
+      try {
+        // PRODUCTION: Load all working APIs with proper authentication
+        console.log('Loading all master data...');
+
+        const [categoriesRes, contactTypesRes, impactsRes, urgenciesRes, assetsRes, sitesRes] = await Promise.all([
+          fetchCategories(),
+          fetchContactTypes(),
+          fetchImpacts(),
+          fetchUrgencies(),
+          fetchAssets(),
+          fetchSites()
+        ]);
+
+        // Validate API responses
+        if (!categoriesRes || !categoriesRes.data || categoriesRes.data.length === 0) {
+          throw new Error('Categories API returned no data');
+        }
+        if (!contactTypesRes || !contactTypesRes.data || contactTypesRes.data.length === 0) {
+          throw new Error('Contact Types API returned no data');
+        }
+        if (!impactsRes || !impactsRes.data || impactsRes.data.length === 0) {
+          throw new Error('Impacts API returned no data');
+        }
+        if (!urgenciesRes || !urgenciesRes.data || urgenciesRes.data.length === 0) {
+          throw new Error('Urgencies API returned no data');
+        }
+        if (!assetsRes || !assetsRes.data || assetsRes.data.length === 0) {
+          throw new Error('Assets API returned no data');
+        }
+        if (!sitesRes || !sitesRes.data || sitesRes.data.length === 0) {
+          throw new Error('Sites API returned no data');
+        }
+
+        setMasterData(prev => ({
+          ...prev,
+          categories: categoriesRes.data,
+          contactTypes: contactTypesRes.data,
+          impacts: impactsRes.data,
+          urgencies: urgenciesRes.data,
+          assets: assetsRes.data,
+          sites: sitesRes.data,
+          loading: false,
+          error: null
+        }));
+
+        // Set default values only after successful API load
+        setFormData(prev => ({
+          ...prev,
+          contact_type_id: contactTypesRes.data[0]?.id?.toString() || '',
+          impact_id: impactsRes.data[0]?.id?.toString() || '',
+          urgency_id: urgenciesRes.data[0]?.id?.toString() || ''
+        }));
+
+        console.log('Form initialized with default values');
+
+      } catch (error: any) {
+        console.error('Error loading master data:', error);
+        setMasterData(prev => ({
+          ...prev,
+          categories: [],
+          contactTypes: [],
+          impacts: [],
+          urgencies: [],
+          assets: [],
+          sites: [],
+          loading: false,
+          error: error.message || 'Failed to load form data. Please check your connection and try again.'
+        }));
+      }
+    };
+
+    loadMasterData();
+  }, []);
+
+  // Load subcategories when category changes - PRODUCTION API
+  const loadSubcategories = async (categoryId: string) => {
+    if (!categoryId) {
+      setMasterData(prev => ({ ...prev, subcategories: [] }));
+      return;
+    }
+
+    try {
+      const subcategoriesRes = await fetchSubcategories(categoryId);
+
+      if (!subcategoriesRes || !subcategoriesRes.data) {
+        throw new Error('Subcategories API returned no data');
+      }
+
+      setMasterData(prev => ({
+        ...prev,
+        subcategories: subcategoriesRes.data
+      }));
+    } catch (error: any) {
+      console.error(`Error loading subcategories for category ${categoryId}:`, error);
+      setMasterData(prev => ({ ...prev, subcategories: [] }));
+      setError(`Failed to load subcategories: ${error.message}`);
+    }
   };
 
-  // Contact type options
-  const contactTypeOptions = [
-    { id: '3', name: 'SelfService' },
-    { id: '1', name: 'Phone' },
-    { id: '2', name: 'Email' },
-    { id: '4', name: 'Walk-in' }
-  ];
-
-  // Impact options
-  const impactOptions = [
-    { id: '1', name: 'Significant' },
-    { id: '2', name: 'Moderate' },
-    { id: '3', name: 'Low' }
-  ];
-
-  // Urgency options
-  const urgencyOptions = [
-    { id: '1', name: 'High' },
-    { id: '2', name: 'Medium' },
-    { id: '3', name: 'Low' },
-    { id: '4', name: 'High' } // Note: Your DB shows both id 1 and 4 as "High"
-  ];
-
-  // Simple debounce function
-  function debounce(func: Function, wait: number) {
+  // Helper functions
+  const debounce = (func: Function, wait: number) => {
     let timeout: NodeJS.Timeout;
     return function executedFunction(...args: any[]) {
       const later = () => {
@@ -154,9 +221,8 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
-  }
+  };
 
-  // Simplified spell check function
   const checkSpelling = async (text: string) => {
     if (!text || text.length < 10) {
       setSpellCheckResults([]);
@@ -167,13 +233,8 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     try {
       const response = await fetch('https://api.languagetool.org/v2/check', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          text: text,
-          language: 'en-US'
-        })
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ text: text, language: 'en-US' })
       });
 
       if (response.ok) {
@@ -183,20 +244,14 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
         setSpellCheckResults([]);
       }
     } catch (error) {
-      console.log('Spell check error:', error);
       setSpellCheckResults([]);
     } finally {
       setIsSpellChecking(false);
     }
   };
 
-  // Debounced spell check
-  const debouncedSpellCheck = React.useCallback(
-    debounce((text: string) => checkSpelling(text), 1500),
-    []
-  );
+  const debouncedSpellCheck = React.useCallback(debounce((text: string) => checkSpelling(text), 1500), []);
 
-  // Apply spell check suggestion
   const applySuggestion = (errorIndex: number, suggestion: string) => {
     const error = spellCheckResults[errorIndex];
     if (!error) return;
@@ -207,12 +262,9 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     const newText = beforeError + suggestion + afterError;
 
     setFormData(prev => ({ ...prev, description: newText }));
-
-    // Re-check spelling after applying suggestion
     setTimeout(() => checkSpelling(newText), 500);
   };
 
-  // AI-powered description generation
   const generateAIDescriptions = async () => {
     if (!formData.category_id || !formData.subcategory_id) {
       setAiError('Please select both category and subcategory first.');
@@ -227,7 +279,6 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
       const categoryName = getCategoryName(formData.category_id);
       const subcategoryName = getSubCategoryName(formData.subcategory_id);
 
-      // Simple prompt for AI
       const prompt = `You are writing incident reports for customers reporting ${subcategoryName.toLowerCase()} issues in ${categoryName.toLowerCase()} areas.
 
 Write 3 different customer complaints. Each should be 30-60 words, direct and simple.
@@ -241,22 +292,17 @@ Write 3 similar reports for ${subcategoryName.toLowerCase()} problems. Separate 
 
 Just write the 3 reports, nothing else:`;
 
-      // Call Groq AI API endpoint
       const response = await fetch('/api/generate-description', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
       });
 
       if (!response.ok) {
-        throw new Error(`Groq AI service error: ${response.status}`);
+        throw new Error(`AI service error: ${response.status}`);
       }
 
       const data = await response.json();
-
-      // Parse Groq AI response
       let descriptions: string[] = [];
 
       if (data.content) {
@@ -272,14 +318,12 @@ Just write the 3 reports, nothing else:`;
       setAiSuggestions(descriptions);
 
     } catch (error) {
-      console.error('AI generation failed:', error);
-      setAiError('Groq AI service is currently unavailable. Please write your description manually.');
+      setAiError('AI service is currently unavailable. Please write your description manually.');
     } finally {
       setIsGeneratingAI(false);
     }
   };
 
-  // Get current location using browser geolocation
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       setLocationStatus('Geolocation is not supported by this browser.');
@@ -294,16 +338,9 @@ Just write the 3 reports, nothing else:`;
         const latitude = position.coords.latitude.toString();
         const longitude = position.coords.longitude.toString();
 
-        setFormData(prev => ({
-          ...prev,
-          latitude,
-          longitude
-        }));
-
+        setFormData(prev => ({ ...prev, latitude, longitude }));
         setLocationStatus(`Location captured: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
         setLoadingLocation(false);
-
-        // Optional: Reverse geocode to get address
         reverseGeocode(latitude, longitude);
       },
       (error) => {
@@ -325,15 +362,10 @@ Just write the 3 reports, nothing else:`;
         setLocationStatus(errorMessage);
         setLoadingLocation(false);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
-  // Reverse geocode coordinates to get address
   const reverseGeocode = async (latitude: string, longitude: string) => {
     try {
       const response = await fetch(
@@ -345,12 +377,7 @@ Just write the 3 reports, nothing else:`;
         if (data && data.display_name) {
           const address = data.display_name;
           const postcode = data.address?.postcode || '';
-
-          setFormData(prev => ({
-            ...prev,
-            address: address,
-            postcode: postcode
-          }));
+          setFormData(prev => ({ ...prev, address: address, postcode: postcode }));
         }
       }
     } catch (error) {
@@ -358,7 +385,6 @@ Just write the 3 reports, nothing else:`;
     }
   };
 
-  // Auto-detect address from UK postcode
   const lookupPostcode = async (postcode: string) => {
     if (!postcode || postcode.length < 5) return;
 
@@ -369,21 +395,13 @@ Just write the 3 reports, nothing else:`;
 
       if (data.status === 200 && data.result) {
         const result = data.result;
-        const fullAddress = [
-          result.admin_district,
-          result.admin_county,
-          result.country
-        ].filter(Boolean).join(', ');
+        const fullAddress = [result.admin_district, result.admin_county, result.country]
+          .filter(Boolean).join(', ');
 
         const latitude = result.latitude ? result.latitude.toString() : '';
         const longitude = result.longitude ? result.longitude.toString() : '';
 
-        setFormData(prev => ({
-          ...prev,
-          address: fullAddress,
-          latitude,
-          longitude
-        }));
+        setFormData(prev => ({ ...prev, address: fullAddress, latitude, longitude }));
 
         if (latitude && longitude) {
           setLocationStatus(`Location from postcode: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
@@ -406,6 +424,7 @@ Just write the 3 reports, nothing else:`;
         newData.subcategory_id = '';
         setAiSuggestions([]);
         setAiError(null);
+        loadSubcategories(value);
       }
 
       if (name === 'subcategory_id') {
@@ -417,7 +436,6 @@ Just write the 3 reports, nothing else:`;
         setTimeout(() => lookupPostcode(value), 500);
       }
 
-      // Trigger spell check for description field
       if (name === 'description') {
         debouncedSpellCheck(value);
       }
@@ -437,36 +455,28 @@ Just write the 3 reports, nothing else:`;
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.caller.trim()) {
-      errors.caller = 'Caller name is required';
-    }
-
-    if (!formData.category_id) {
-      errors.category_id = 'Category is required';
-    }
-
-    if (!formData.subcategory_id) {
-      errors.subcategory_id = 'Sub Category is required';
-    }
+    if (!formData.caller.trim()) errors.caller = 'Caller name is required';
+    if (!formData.category_id) errors.category_id = 'Category is required';
+    if (!formData.subcategory_id) errors.subcategory_id = 'Sub Category is required';
+    if (!formData.contact_type_id) errors.contact_type_id = 'Contact Type is required';
+    if (!formData.impact_id) errors.impact_id = 'Impact is required';
+    if (!formData.urgency_id) errors.urgency_id = 'Urgency is required';
 
     if (!formData.short_description.trim()) {
       errors.short_description = 'Short description is required';
     } else if (formData.short_description.length < 10) {
       errors.short_description = 'Short description must be at least 10 characters';
     }
-
     if (!formData.description.trim()) {
       errors.description = 'Detailed description is required';
     } else if (formData.description.length < 20) {
       errors.description = 'Detailed description must be at least 20 characters';
     }
-
     if (!formData.address.trim()) {
       errors.address = 'Address/Location is required';
     } else if (formData.address.length < 5) {
       errors.address = 'Address must be at least 5 characters';
     }
-
     if (!formData.postcode.trim()) {
       errors.postcode = 'Postcode is required';
     } else if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(formData.postcode.trim())) {
@@ -479,11 +489,7 @@ Just write the 3 reports, nothing else:`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     setShowConfirmModal(true);
   };
 
@@ -495,15 +501,10 @@ Just write the 3 reports, nothing else:`;
 
     try {
       const currentUser = getCurrentUser();
-
-      if (!currentUser?.id) {
-        throw new Error('User not authenticated. Please log in again.');
-      }
+      if (!currentUser?.id) throw new Error('User not authenticated. Please log in again.');
 
       const parsedUserId = parseInt(currentUser.id, 10);
-      if (isNaN(parsedUserId)) {
-        throw new Error('Invalid user ID. Please log in again.');
-      }
+      if (isNaN(parsedUserId)) throw new Error('Invalid user ID. Please log in again.');
 
       if (!formData.category_id || !formData.subcategory_id) {
         throw new Error('Category and Sub Category are required');
@@ -511,18 +512,20 @@ Just write the 3 reports, nothing else:`;
 
       const incidentData = {
         user_id: parsedUserId,
-        incidentstate_id: 1, // New
+        incidentstate_id: 1,
         urgency_id: parseInt(formData.urgency_id, 10),
         category_id: parseInt(formData.category_id, 10),
         subcategory_id: parseInt(formData.subcategory_id, 10),
         contact_type_id: parseInt(formData.contact_type_id, 10),
-        impact_id: parseInt(formData.impact_id, 10),
+        impact_id: formData.impact_id ? parseInt(formData.impact_id, 10) : null,
         short_description: formData.short_description,
         description: formData.description,
         address: formData.address,
         postcode: formData.postcode,
         lat: formData.latitude || null,
-        lng: formData.longitude || null
+        lng: formData.longitude || null,
+        asset_id: formData.asset_id ? parseInt(formData.asset_id, 10) : null,
+        site_id: formData.site_id ? parseInt(formData.site_id, 10) : null
       };
 
       const createdIncident = await createIncident(incidentData);
@@ -537,14 +540,16 @@ Just write the 3 reports, nothing else:`;
         category_id: '',
         subcategory_id: '',
         short_description: '',
-        contact_type_id: '3',
-        impact_id: '1',
-        urgency_id: '2',
+        contact_type_id: masterData.contactTypes[0]?.id?.toString() || '',
+        impact_id: masterData.impacts[0]?.id?.toString() || '',
+        urgency_id: masterData.urgencies[0]?.id?.toString() || '',
         description: '',
         address: '',
         postcode: '',
         latitude: '',
-        longitude: ''
+        longitude: '',
+        asset_id: '',
+        site_id: ''
       });
 
       setValidationErrors({});
@@ -557,9 +562,7 @@ Just write the 3 reports, nothing else:`;
 
       setTimeout(() => {
         setShowSuccess(false);
-        if (onSuccess) {
-          onSuccess();
-        }
+        if (onSuccess) onSuccess();
       }, 5000);
 
     } catch (error: any) {
@@ -573,20 +576,21 @@ Just write the 3 reports, nothing else:`;
 
   const handleCancelSubmit = () => {
     setShowConfirmModal(false);
-
     setFormData({
       caller: userName || '',
       category_id: '',
       subcategory_id: '',
       short_description: '',
-      contact_type_id: '3',
-      impact_id: '1',
-      urgency_id: '2',
+      contact_type_id: masterData.contactTypes[0]?.id?.toString() || '',
+      impact_id: masterData.impacts[0]?.id?.toString() || '',
+      urgency_id: masterData.urgencies[0]?.id?.toString() || '',
       description: '',
       address: '',
       postcode: '',
       latitude: '',
-      longitude: ''
+      longitude: '',
+      asset_id: '',
+      site_id: ''
     });
 
     setValidationErrors({});
@@ -599,41 +603,89 @@ Just write the 3 reports, nothing else:`;
     setError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    setTimeout(() => {
-      setShowCancelMessage(false);
-    }, 4000);
+    setTimeout(() => setShowCancelMessage(false), 4000);
   };
 
-  const handleCloseModal = () => {
-    setShowConfirmModal(false);
-  };
+  const handleCloseModal = () => setShowConfirmModal(false);
 
   const getSubCategoryOptions = () => {
-    if (!formData.category_id || !subcategoryOptions[formData.category_id]) {
-      return [];
-    }
-    return subcategoryOptions[formData.category_id];
+    return masterData.subcategories.filter(subcat =>
+      subcat.category_id === parseInt(formData.category_id)
+    );
   };
 
   const getCategoryName = (id: string) => {
-    const category = categoryOptions.find(cat => cat.id === id);
+    const category = masterData.categories.find(cat => cat.id === parseInt(id));
     return category?.name || '';
   };
 
   const getSubCategoryName = (id: string) => {
-    const subCat = getSubCategoryOptions().find(sub => sub.id === id);
+    const subCat = masterData.subcategories.find(sub => sub.id === parseInt(id));
     return subCat?.name || '';
   };
 
   const getImpactName = (id: string) => {
-    const impact = impactOptions.find(imp => imp.id === id);
+    const impact = masterData.impacts.find(imp => imp.id === parseInt(id));
     return impact?.name || '';
   };
 
   const getUrgencyName = (id: string) => {
-    const urgency = urgencyOptions.find(urg => urg.id === id);
+    const urgency = masterData.urgencies.find(urg => urg.id === parseInt(id));
     return urgency?.name || '';
   };
+
+  const getContactTypeName = (id: string) => {
+    const contactType = masterData.contactTypes.find(ct => ct.id === parseInt(id));
+    return contactType?.name || '';
+  };
+
+  const getAssetName = (id: string) => {
+    const asset = masterData.assets.find(asset => asset.id === parseInt(id));
+    return asset?.name || '';
+  };
+
+  const getSiteName = (id: string) => {
+    const site = masterData.sites.find(site => site.id === parseInt(id));
+    return site?.name || '';
+  };
+
+  // Show loading state
+  if (masterData.loading) {
+    return (
+      <Container fluid className={compactMode ? "p-2" : "p-4"}>
+        <Card>
+          <CardBody>
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading form data...</span>
+              </div>
+              <p className="mt-2 text-muted">Loading categories and options...</p>
+            </div>
+          </CardBody>
+        </Card>
+      </Container>
+    );
+  }
+
+  // Show error state
+  if (masterData.error) {
+    return (
+      <Container fluid className={compactMode ? "p-2" : "p-4"}>
+        <Card>
+          <CardBody>
+            <Alert color="danger">
+              <strong>Error loading form data:</strong> {masterData.error}
+              <div className="mt-2">
+                <Button color="danger" size="sm" onClick={() => window.location.reload()}>
+                  Retry
+                </Button>
+              </div>
+            </Alert>
+          </CardBody>
+        </Card>
+      </Container>
+    );
+  }
 
   return (
     <Container fluid className={compactMode ? "p-2" : "p-4"}>
@@ -709,11 +761,16 @@ Just write the 3 reports, nothing else:`;
                     value={formData.contact_type_id}
                     onChange={handleInputChange}
                     required
+                    invalid={!!validationErrors.contact_type_id}
                   >
-                    {contactTypeOptions.map(option => (
+                    <option value="">Select Contact Type</option>
+                    {masterData.contactTypes.map(option => (
                       <option key={option.id} value={option.id}>{option.name}</option>
                     ))}
                   </Input>
+                  {validationErrors.contact_type_id && (
+                    <div className="invalid-feedback">{validationErrors.contact_type_id}</div>
+                  )}
                 </FormGroup>
               </Col>
             </Row>
@@ -732,7 +789,7 @@ Just write the 3 reports, nothing else:`;
                     invalid={!!validationErrors.category_id}
                   >
                     <option value="">Select Category</option>
-                    {categoryOptions.map(category => (
+                    {masterData.categories.map(category => (
                       <option key={category.id} value={category.id}>{category.name}</option>
                     ))}
                   </Input>
@@ -766,7 +823,6 @@ Just write the 3 reports, nothing else:`;
               </Col>
             </Row>
 
-            {/* Show Impact and Urgency for all users, but make them read-only for regular users */}
             <Row>
               <Col md={6}>
                 <FormGroup>
@@ -779,11 +835,16 @@ Just write the 3 reports, nothing else:`;
                     onChange={handleInputChange}
                     required
                     disabled={userRole === 'User' || userRole === 'EndUser'}
+                    invalid={!!validationErrors.impact_id}
                   >
-                    {impactOptions.map(option => (
+                    <option value="">Select Impact</option>
+                    {masterData.impacts.map(option => (
                       <option key={option.id} value={option.id}>{option.name}</option>
                     ))}
                   </Input>
+                  {validationErrors.impact_id && (
+                    <div className="invalid-feedback">{validationErrors.impact_id}</div>
+                  )}
                 </FormGroup>
               </Col>
               <Col md={6}>
@@ -797,11 +858,16 @@ Just write the 3 reports, nothing else:`;
                     onChange={handleInputChange}
                     required
                     disabled={userRole === 'User' || userRole === 'EndUser'}
+                    invalid={!!validationErrors.urgency_id}
                   >
-                    {urgencyOptions.map(option => (
+                    <option value="">Select Urgency</option>
+                    {masterData.urgencies.map(option => (
                       <option key={option.id} value={option.id}>{option.name}</option>
                     ))}
                   </Input>
+                  {validationErrors.urgency_id && (
+                    <div className="invalid-feedback">{validationErrors.urgency_id}</div>
+                  )}
                 </FormGroup>
               </Col>
             </Row>
@@ -977,7 +1043,7 @@ Just write the 3 reports, nothing else:`;
                       spellCheck={true}
                     />
 
-                    {/* Simple spell check suggestions below textarea */}
+                    {/* Spell check suggestions */}
                     {spellCheckResults.length > 0 && (
                       <div className="mt-2 p-2 border rounded bg-light">
                         <small className="text-muted d-block mb-2">
@@ -1018,6 +1084,81 @@ Just write the 3 reports, nothing else:`;
                   </small>
                   {validationErrors.description && (
                     <div className="invalid-feedback">{validationErrors.description}</div>
+                  )}
+                </FormGroup>
+              </Col>
+            </Row>
+
+            {/* Assets and Sites */}
+            <Row>
+              <Col md={6}>
+                <FormGroup>
+                  <Label for="asset_id">Asset</Label>
+                  <Input
+                    type="select"
+                    id="asset_id"
+                    name="asset_id"
+                    value={formData.asset_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Asset (Optional)</option>
+                    {masterData.assets.map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
+                  </Input>
+                </FormGroup>
+              </Col>
+              <Col md={6}>
+                <FormGroup>
+                  <Label for="site_id">Site</Label>
+                  <Input
+                    type="select"
+                    id="site_id"
+                    name="site_id"
+                    value={formData.site_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Site (Optional)</option>
+                    {masterData.sites.map(option => (
+                      <option key={option.id} value={option.id}>{option.name}</option>
+                    ))}
+                  </Input>
+                </FormGroup>
+              </Col>
+            </Row>
+
+            {/* Location Section */}
+            <Row>
+              <Col md={12}>
+                <FormGroup>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <Label className="mb-0">Location Services</Label>
+                    <Button
+                      type="button"
+                      color="outline-primary"
+                      size="sm"
+                      onClick={getCurrentLocation}
+                      disabled={loadingLocation}
+                      className="d-flex align-items-center"
+                    >
+                      {loadingLocation ? (
+                        <>
+                          <i className="fa fa-spinner fa-spin me-1"></i>
+                          Getting Location...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fa fa-map-marker me-1"></i>
+                          Get Current Location
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {locationStatus && (
+                    <small className={`d-block ${locationStatus.includes('error') || locationStatus.includes('Unable') ? 'text-danger' : 'text-success'}`}>
+                      <i className={`fa ${locationStatus.includes('error') || locationStatus.includes('Unable') ? 'fa-exclamation-triangle' : 'fa-check-circle'} me-1`}></i>
+                      {locationStatus}
+                    </small>
                   )}
                 </FormGroup>
               </Col>
@@ -1087,9 +1228,18 @@ Just write the 3 reports, nothing else:`;
                     <div className="col-6">
                       <strong>Impact:</strong> {getImpactName(formData.impact_id)}<br/>
                       <strong>Urgency:</strong> {getUrgencyName(formData.urgency_id)}<br/>
-                      <strong>Location:</strong> {formData.address}
+                      <strong>Contact Type:</strong> {getContactTypeName(formData.contact_type_id)}
                     </div>
                   </div>
+                  <div className="mt-2 text-black">
+                    <strong>Location:</strong> {formData.address}
+                  </div>
+                  {(formData.asset_id || formData.site_id) && (
+                    <div className="mt-2 text-black">
+                      {formData.asset_id && <><strong>Asset:</strong> {getAssetName(formData.asset_id)}<br/></>}
+                      {formData.site_id && <><strong>Site:</strong> {getSiteName(formData.site_id)}</>}
+                    </div>
+                  )}
                   <div className="mt-2 text-black">
                     <strong>Description:</strong> {formData.short_description}
                   </div>

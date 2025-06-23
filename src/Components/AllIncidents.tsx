@@ -9,7 +9,9 @@ import {
 } from '../app/(MainBody)/services/userService';
 
 import {
-  fetchIncidentsByUserRole,
+  fetchHandlerIncidents,
+  fetchManagerIncidents,
+  fetchEndUserIncidents,
   getIncidentStats,
   getStatusColor,
   getPriorityColor,
@@ -17,11 +19,14 @@ import {
   type Incident
 } from '../app/(MainBody)/services/incidentService';
 
+// Import fake data ONLY for Expert Team Dashboard - remove for production
+import { EXPERT_TEAM_FAKE_DATA } from '../app/(MainBody)/dashboard/expert_team/page';
+
 import EditIncident from './EditIncident';
 import ViewIncident from './ViewIncident';
 
 interface AllIncidentsProps {
-  userType?: 'enduser' | 'handler' | 'admin' | 'manager' | 'field_engineer' | 'water_pollution_expert';
+  userType?: 'enduser' | 'handler' | 'admin' | 'manager' | 'field_engineer' | 'expert_team';
   onBack?: () => void;
   initialStatusFilter?: string | null;
 }
@@ -59,6 +64,91 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
     }));
   };
 
+  // Helper functions to safely access incident properties
+  const getCategoryName = (incident: Incident): string => {
+    if (typeof incident.category === 'string') return incident.category;
+    if (incident.category && typeof incident.category === 'object' && incident.category.name) {
+      return incident.category.name;
+    }
+    return 'Uncategorized';
+  };
+
+  const getPriorityName = (incident: Incident): string => {
+    if (incident.priority && typeof incident.priority === 'object' && incident.priority.name) {
+      return incident.priority.name;
+    }
+    if (incident.priority && typeof incident.priority === 'string') {
+      return incident.priority;
+    }
+    if (incident.urgency && typeof incident.urgency === 'object' && incident.urgency.name) {
+      return incident.urgency.name;
+    }
+    return 'Medium';
+  };
+
+  const getCallerName = (incident: Incident): string => {
+    if (!incident.user || typeof incident.user !== 'object') {
+      return 'Unknown User';
+    }
+
+    const firstName = incident.user.name || '';
+    const lastName = incident.user.last_name || '';
+
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+
+    return firstName || lastName || 'Unknown User';
+  };
+
+  const getIncidentNumber = (incident: Incident): string => {
+    if (incident.incident_no) return incident.incident_no;
+    if (typeof incident.id === 'string') return incident.id;
+    if (typeof incident.id === 'number') return incident.id.toString();
+    return 'Unknown';
+  };
+
+  const getShortDescription = (incident: Incident): string => {
+    return incident.short_description || 'No description';
+  };
+
+  const getCreatedAt = (incident: Incident): string => {
+    return incident.created_at || new Date().toISOString();
+  };
+
+  const getAssignedTo = (incident: Incident): string => {
+    if (!incident.assigned_to || typeof incident.assigned_to !== 'object') {
+      return 'Unassigned';
+    }
+
+    const firstName = incident.assigned_to.name || '';
+    const lastName = incident.assigned_to.last_name || '';
+
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+
+    return firstName || lastName || 'Unassigned';
+  };
+
+  const getStatus = (incident: Incident): 'pending' | 'in_progress' | 'resolved' | 'closed' => {
+    if (incident.status) return incident.status;
+
+    if (incident.incidentstate && typeof incident.incidentstate === 'object' && incident.incidentstate.name) {
+      const state = incident.incidentstate.name.toLowerCase();
+      if (state === 'new') return 'pending';
+      if (state === 'inprogress') return 'in_progress';
+      if (state === 'resolved') return 'resolved';
+      if (state === 'closed') return 'closed';
+    }
+
+    return 'pending';
+  };
+
+  const getAddress = (incident: Incident): string => {
+    return incident.address || 'Not specified';
+  };
+
   // Check if user has advanced edit permissions
   const hasAdvancedEditPermissions = () => {
     const userTeam = user?.team?.toLowerCase() || '';
@@ -75,7 +165,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
            currentUserType.includes('manager') ||
            currentUserType.includes('admin') ||
            currentUserType.includes('field_engineer') ||
-           currentUserType.includes('water_pollution_expert');
+           currentUserType.includes('expert_team');
   };
 
   // Fetch incidents based on user type
@@ -92,19 +182,64 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
 
       setUser(currentUser);
 
-      console.log('🔍 AllIncidents: Fetching data...');
-      console.log('👤 User Type (prop):', userType);
-      console.log('👤 User Team:', currentUser?.team);
-
       const actualUserType = userType || currentUser?.team?.toLowerCase() || 'enduser';
 
-      // Use the unified fetchIncidentsByUserRole function
-      const fetchedIncidents = await fetchIncidentsByUserRole(actualUserType);
+      let fetchedIncidents: Incident[] = [];
+
+      console.log('🎯 AllIncidents: Fetching for user type:', actualUserType);
+
+      // Use different data sources based on user type
+      if (actualUserType.includes('expert')) {
+        console.log('🎯 Fetching as EXPERT TEAM - using demo data (API not ready)');
+        // TEMPORARY: Using fake data until expert team API is implemented
+        fetchedIncidents = EXPERT_TEAM_FAKE_DATA;
+      } else if (actualUserType.includes('field') || actualUserType.includes('engineer')) {
+        console.log('🎯 Fetching as FIELD ENGINEER - using demo data (API not ready)');
+        // TEMPORARY: Using fake data until field engineer API is implemented
+        fetchedIncidents = EXPERT_TEAM_FAKE_DATA; // Using same demo data temporarily
+      } else if (actualUserType.includes('manager') || actualUserType.includes('admin')) {
+        console.log('🎯 Fetching as MANAGER/ADMIN - using real API');
+        try {
+          fetchedIncidents = await fetchManagerIncidents();
+          console.log('✅ Manager incidents loaded:', fetchedIncidents.length);
+        } catch (error: any) {
+          console.error('❌ Manager incidents fetch failed:', error);
+          throw new Error(`Failed to load manager incidents: ${error.message}`);
+        }
+      } else if (actualUserType.includes('handler')) {
+        console.log('🎯 Fetching as HANDLER - using real API');
+        try {
+          fetchedIncidents = await fetchHandlerIncidents();
+          console.log('✅ Handler incidents loaded:', fetchedIncidents.length);
+        } catch (error: any) {
+          console.error('❌ Handler incidents fetch failed:', error);
+          throw new Error(`Failed to load handler incidents: ${error.message}`);
+        }
+      } else {
+        console.log('🎯 Fetching as END USER - using real API');
+        try {
+          fetchedIncidents = await fetchEndUserIncidents();
+          console.log('✅ End user incidents loaded:', fetchedIncidents.length);
+        } catch (error: any) {
+          console.error('❌ End user incidents fetch failed:', error);
+          throw new Error(`Failed to load user incidents: ${error.message}`);
+        }
+      }
 
       console.log('✅ AllIncidents: Received', fetchedIncidents.length, 'incidents');
 
+      // Debug: Log assignment breakdown
+      if (fetchedIncidents.length > 0) {
+        const assignmentBreakdown = fetchedIncidents.reduce((acc, incident) => {
+          const assignee = getAssignedTo(incident);
+          acc[assignee] = (acc[assignee] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log('👥 Assignment breakdown:', assignmentBreakdown);
+      }
+
       // Sort incidents by creation date (latest first)
-      fetchedIncidents.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      fetchedIncidents.sort((a, b) => new Date(getCreatedAt(b)).getTime() - new Date(getCreatedAt(a)).getTime());
 
       setIncidents(fetchedIncidents);
       setFilteredIncidents(fetchedIncidents);
@@ -113,6 +248,9 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
     } catch (error: any) {
       console.error('❌ Fetch incidents error:', error);
       setError(error.message || 'Failed to load incidents');
+      // Set empty array on error to prevent crashes
+      setIncidents([]);
+      setFilteredIncidents([]);
     } finally {
       setLoading(false);
     }
@@ -138,16 +276,19 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
     let filtered = [...incidents];
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(incident => incident.status === statusFilter);
+      filtered = filtered.filter(incident => {
+        const incidentStatus = getStatus(incident);
+        return incidentStatus === statusFilter;
+      });
     }
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(incident =>
-        incident.shortDescription?.toLowerCase().includes(term) ||
-        incident.number?.toLowerCase().includes(term) ||
-        incident.category?.toLowerCase().includes(term) ||
-        incident.caller?.toLowerCase().includes(term)
+        getShortDescription(incident).toLowerCase().includes(term) ||
+        getIncidentNumber(incident).toLowerCase().includes(term) ||
+        getCategoryName(incident).toLowerCase().includes(term) ||
+        getCallerName(incident).toLowerCase().includes(term)
       );
     }
 
@@ -221,7 +362,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
            currentUserType.includes('manager') ||
            currentUserType.includes('admin') ||
            currentUserType.includes('field_engineer') ||
-           currentUserType.includes('water_pollution_expert');
+           currentUserType.includes('expert_team');
   };
 
   const isHandler = hasElevatedPermissions();
@@ -279,6 +420,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading incidents...</span>
           </div>
+          <p className="mt-3 text-muted">Loading incidents...</p>
         </div>
       </Container>
     );
@@ -289,7 +431,10 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
       <Container fluid>
         <div className="alert alert-danger mt-3">
           <strong>Error:</strong> {error}
-          <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
+          <div className="mt-2">
+            <Button color="primary" onClick={fetchData} className="me-2">Try again</Button>
+            <Button color="secondary" onClick={handleBackToDashboard}>Back to Dashboard</Button>
+          </div>
         </div>
       </Container>
     );
@@ -387,7 +532,7 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
                             {isHandler && <th>Priority</th>}
                             {isHandler && <th>Caller</th>}
                             {!isHandler && <th>Assigned</th>}
-                            <th>Location</th>
+                            <th>SLA Status</th>
                             <th>Created</th>
                             <th>Actions</th>
                           </tr>
@@ -397,52 +542,52 @@ const AllIncidents: React.FC<AllIncidentsProps> = ({ userType, onBack, initialSt
                             <tr key={incident.id}>
                               <td>
                                 <div>
-                                  <span className="fw-medium text-primary">{incident.number}</span>
+                                  <span className="fw-medium text-primary">{getIncidentNumber(incident)}</span>
                                 </div>
                               </td>
                               <td>
                                 <div>
-                                  <div className="fw-medium text-dark">{incident.category}</div>
+                                  <div className="fw-medium text-dark">{getCategoryName(incident)}</div>
                                 </div>
                               </td>
                               <td>
-                                <Badge style={{ backgroundColor: getStatusColor(incident.status), color: 'white' }}>
-                                  {incident.status.replace('_', ' ')}
+                                <Badge style={{ backgroundColor: getStatusColor(getStatus(incident)), color: 'white' }}>
+                                  {getStatus(incident).replace('_', ' ')}
                                 </Badge>
                               </td>
                               {isHandler && (
                                 <td>
-                                  <Badge style={{ backgroundColor: getPriorityColor(incident.priority), color: 'white' }}>
-                                    {incident.priority}
+                                  <Badge style={{ backgroundColor: getPriorityColor(getPriorityName(incident)), color: 'white' }}>
+                                    {getPriorityName(incident)}
                                   </Badge>
                                 </td>
                               )}
                               {isHandler && (
                                 <td>
                                   <div>
-                                    <div className="fw-medium text-dark">{incident.caller}</div>
+                                    <div className="fw-medium text-dark">{getCallerName(incident)}</div>
                                   </div>
                                 </td>
                               )}
                               {!isHandler && (
                                 <td>
-                                  <small className="text-muted">{incident.assignedTo || 'Unassigned'}</small>
+                                  <small className="text-muted">{getAssignedTo(incident)}</small>
                                 </td>
                               )}
                               <td>
                                 <div>
-                                  <span className="text-muted">{incident.address || 'Not specified'}</span>
+                                  {/* SLA status placeholder */}
                                 </div>
                               </td>
                               <td>
-                                <small className="text-dark">{formatDateOnly(incident.createdAt)}</small>
+                                <small className="text-dark">{formatDateOnly(getCreatedAt(incident))}</small>
                               </td>
                               <td>
                                 {isHandler ? (
                                   // Advanced dropdown for handlers/managers/field engineers
                                   <Dropdown
-                                    isOpen={dropdownOpen[incident.id] || false}
-                                    toggle={() => toggleDropdown(incident.id)}
+                                    isOpen={dropdownOpen[incident.id.toString()] || false}
+                                    toggle={() => toggleDropdown(incident.id.toString())}
                                   >
                                     <DropdownToggle tag="button" className="btn btn-link p-1 border-0 bg-transparent text-dark">
                                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-dark">

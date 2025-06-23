@@ -17,13 +17,17 @@ import {
 
 import {
   getCurrentUser,
-  isAuthenticated
+  isAuthenticated,
+  getStoredToken
 } from '../../services/userService';
 
 import AllIncidents from '../../../../Components/AllIncidents';
 import AssignIncidents from '../../../../Components/AssignIncidents';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
+
+// Define API base URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 const IncidentManagerDashboard = () => {
   const router = useRouter();
@@ -47,6 +51,112 @@ const IncidentManagerDashboard = () => {
 
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
+  // State for SLA breach data
+  const [slaBreachData, setSlaBreachData] = useState({
+    data: [] as number[],
+    labels: [] as string[],
+    colors: [] as string[]
+  });
+
+  // State for handler performance data
+  const [handlerPerformanceData, setHandlerPerformanceData] = useState({
+    handlers: [] as string[],
+    pending: [] as number[],
+    breached: [] as number[],
+    resolved: [] as number[]
+  });
+
+  // Safe helper functions to prevent object rendering errors
+  const getIncidentNumber = (incident: Incident): string => {
+    if (incident.incident_no) return incident.incident_no;
+    if (typeof incident.id === 'number') return incident.id.toString();
+    return 'Unknown';
+  };
+
+  const getCategoryName = (incident: Incident): string => {
+    if (incident.category && typeof incident.category === 'object' && incident.category.name) {
+      return incident.category.name;
+    }
+    return 'Uncategorized';
+  };
+
+  const getPriorityName = (incident: Incident): string => {
+    if (incident.priority && typeof incident.priority === 'object' && incident.priority.name) {
+      return incident.priority.name;
+    }
+    if (incident.urgency && typeof incident.urgency === 'object' && incident.urgency.name) {
+      return incident.urgency.name;
+    }
+    return 'Medium';
+  };
+
+  const getStatusName = (incident: Incident): 'pending' | 'in_progress' | 'resolved' | 'closed' => {
+    if (incident.status) return incident.status;
+    if (incident.incidentstate && typeof incident.incidentstate === 'object' && incident.incidentstate.name) {
+      const state = incident.incidentstate.name.toLowerCase();
+      if (state === 'new') return 'pending';
+      if (state === 'inprogress') return 'in_progress';
+      if (state === 'resolved') return 'resolved';
+      if (state === 'closed') return 'closed';
+    }
+    return 'pending';
+  };
+
+  const getAssignedToName = (incident: Incident): string => {
+    if (!incident.assigned_to) return 'Unassigned';
+
+    const firstName = incident.assigned_to.name || '';
+    const lastName = incident.assigned_to.last_name || '';
+
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+    return firstName || lastName || 'Unassigned';
+  };
+
+  const getShortDescription = (incident: Incident): string => {
+    return incident.short_description || 'No description';
+  };
+
+  const getCreatedAt = (incident: Incident): string => {
+    return incident.created_at || new Date().toISOString();
+  };
+
+  const getCallerName = (incident: Incident): string => {
+    if (!incident.user) return 'Unknown User';
+
+    const firstName = incident.user.name || '';
+    const lastName = incident.user.last_name || '';
+
+    if (firstName && lastName) {
+      return `${firstName} ${lastName}`;
+    }
+    return firstName || lastName || 'Unknown User';
+  };
+
+  const getSLAStatus = (incident: Incident): string => {
+    const createdTime = new Date(getCreatedAt(incident));
+    const now = new Date();
+    const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
+
+    let slaLimit = 24; // default for low priority
+    const priority = getPriorityName(incident).toLowerCase();
+    if (priority.includes('critical')) {
+      slaLimit = 4;
+    } else if (priority.includes('high')) {
+      slaLimit = 8;
+    } else if (priority.includes('medium')) {
+      slaLimit = 12;
+    }
+
+    const status = getStatusName(incident);
+    if (status === 'resolved' || status === 'closed') {
+      return 'Within SLA';
+    }
+
+    return hoursSinceCreated > slaLimit ? 'SLA Breached' : 'Within SLA';
+  };
+
   // Fetch data
   const fetchData = async () => {
     try {
@@ -68,7 +178,6 @@ const IncidentManagerDashboard = () => {
       console.log('🔍 Manager Dashboard: Fetching incidents...');
       console.log('👤 Current user:', currentUser);
 
-      // MANAGER SHOULD SEE ALL INCIDENTS - same as admin
       const allIncidents = await fetchAllIncidents();
 
       console.log('📊 Manager Dashboard: Received incidents:', allIncidents);
@@ -92,36 +201,338 @@ const IncidentManagerDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [router]);
-
-  useEffect(() => {
-    const currentViewParam = searchParams.get('view');
-    setCurrentView(currentViewParam || 'dashboard');
-  }, [searchParams]);
-
-  // Calculate stats
-  const stats = getIncidentStats(dashboardData.managedIncidents);
-
-  console.log('📊 Manager Dashboard Stats:', stats);
-
-  // SLA Status calculation
-  const getSLAStatus = (incident: Incident) => {
-    const createdTime = new Date(incident.createdAt);
-    const now = new Date();
-    const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
-
-    if (incident.priority?.toLowerCase().includes('critical')) {
-      return hoursSinceCreated > 4 ? 'Breached' : 'Within SLA';
-    } else if (incident.priority?.toLowerCase().includes('high')) {
-      return hoursSinceCreated > 8 ? 'Breached' : 'Within SLA';
-    } else {
-      return hoursSinceCreated > 24 ? 'Breached' : 'Within SLA';
+  // SLA Breach Distribution data for donut chart
+  const getSLABreachData = async () => {
+    if (dashboardData.managedIncidents.length === 0) {
+      return { data: [], labels: [], colors: [] };
     }
+
+    try {
+      const token = getStoredToken();
+      if (token) {
+        console.log('🔍 Fetching SLA details from API endpoint...');
+
+        const response = await fetch(`${API_BASE_URL}/incident-sla-details`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const slaDetails = result.data || result;
+
+          console.log('📊 SLA Details from API:', slaDetails);
+
+          if (slaDetails && typeof slaDetails === 'object') {
+            const data = [];
+            const labels = [];
+            const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4'];
+
+            if (slaDetails.responseTime && slaDetails.responseTime > 0) {
+              data.push(slaDetails.responseTime);
+              labels.push('Response Time');
+            }
+            if (slaDetails.resolutionTime && slaDetails.resolutionTime > 0) {
+              data.push(slaDetails.resolutionTime);
+              labels.push('Resolution Time');
+            }
+            if (slaDetails.availability && slaDetails.availability > 0) {
+              data.push(slaDetails.availability);
+              labels.push('Availability');
+            }
+            if (slaDetails.quality && slaDetails.quality > 0) {
+              data.push(slaDetails.quality);
+              labels.push('Quality');
+            }
+
+            if (data.length === 0) {
+              return {
+                data: [1],
+                labels: ['No SLA Breaches'],
+                colors: ['#10b981']
+              };
+            }
+
+            return {
+              data,
+              labels,
+              colors: colors.slice(0, data.length)
+            };
+          }
+        } else {
+          console.warn('⚠️ SLA API endpoint not ready:', response.status);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching SLA details:', error);
+    }
+
+    // Fallback: Calculate SLA breaches from incident data
+    console.log('📊 Using fallback: calculating SLA breaches from incident data');
+    const breachedIncidents = dashboardData.managedIncidents.filter(incident =>
+      getSLAStatus(incident) === 'SLA Breached'
+    );
+    const withinSLAIncidents = dashboardData.managedIncidents.filter(incident =>
+      getSLAStatus(incident) === 'Within SLA'
+    );
+
+    if (breachedIncidents.length === 0 && withinSLAIncidents.length === 0) {
+      return {
+        data: [1],
+        labels: ['No Data Available'],
+        colors: ['#6b7280']
+      };
+    }
+
+    return {
+      data: [withinSLAIncidents.length, breachedIncidents.length],
+      labels: ['Within SLA', 'SLA Breached'],
+      colors: ['#10b981', '#ef4444']
+    };
   };
 
-  // Navigation handlers
+  // Handler Performance data for bar chart
+  const getHandlerPerformanceData = async () => {
+    if (dashboardData.managedIncidents.length === 0) {
+      return { handlers: [], pending: [], breached: [], resolved: [] };
+    }
+
+    try {
+      const token = getStoredToken();
+      if (token) {
+        console.log('🔍 Fetching all users for handler performance chart...');
+
+        const response = await fetch(`${API_BASE_URL}/users`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          const allUsers = result.data || result.users || result;
+
+          console.log('📊 Total users from API:', allUsers.length);
+
+          const handlerUsers = allUsers.filter((user: any) => {
+            const userTeam = (user.team_name || user.team || '').toLowerCase();
+            return userTeam.includes('handler') ||
+                   userTeam.includes('field') ||
+                   userTeam.includes('engineer') ||
+                   userTeam.includes('expert') ||
+                   userTeam.includes('water') ||
+                   userTeam.includes('pollution');
+          });
+
+          console.log('📊 Found handlers from API:', handlerUsers.length);
+
+          const handlerMap = new Map();
+
+          handlerUsers.forEach((user: any) => {
+            const firstName = user.first_name || user.name;
+            const lastName = user.last_name;
+            const handlerName = firstName && lastName ? `${firstName} ${lastName}` : firstName || 'Unknown';
+
+            handlerMap.set(handlerName, {
+              pending: 0,
+              breached: 0,
+              resolved: 0
+            });
+          });
+
+          dashboardData.managedIncidents.forEach(incident => {
+            let handlerName = getAssignedToName(incident);
+
+            if (!handlerName || handlerName.trim() === '' || handlerName.toLowerCase() === 'unassigned') {
+              handlerName = 'Unassigned';
+            }
+
+            if (!handlerMap.has(handlerName)) {
+              handlerMap.set(handlerName, {
+                pending: 0,
+                breached: 0,
+                resolved: 0
+              });
+            }
+
+            const handlerStats = handlerMap.get(handlerName);
+
+            const createdTime = new Date(getCreatedAt(incident));
+            const now = new Date();
+            const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
+
+            let slaLimit = 24;
+            const priority = getPriorityName(incident).toLowerCase();
+            if (priority.includes('critical')) {
+              slaLimit = 4;
+            } else if (priority.includes('high')) {
+              slaLimit = 8;
+            } else if (priority.includes('medium')) {
+              slaLimit = 12;
+            }
+
+            const isBreached = hoursSinceCreated > slaLimit && getStatusName(incident) !== 'resolved';
+
+            const status = getStatusName(incident);
+            if (status === 'resolved') {
+              handlerStats.resolved++;
+            } else if (isBreached) {
+              handlerStats.breached++;
+            } else {
+              handlerStats.pending++;
+            }
+          });
+
+          let handlers: string[] = [];
+          let pending: number[] = [];
+          let breached: number[] = [];
+          let resolved: number[] = [];
+
+          const sortedHandlers = Array.from(handlerMap.entries())
+            .map(([name, stats]) => ({
+              name,
+              ...stats,
+              total: stats.pending + stats.breached + stats.resolved
+            }))
+            .sort((a, b) => b.total - a.total);
+
+          console.log('📊 Complete Handler Performance Data:', sortedHandlers);
+
+          sortedHandlers.forEach(handler => {
+            handlers.push(handler.name);
+            pending.push(handler.pending);
+            breached.push(handler.breached);
+            resolved.push(handler.resolved);
+          });
+
+          return { handlers, pending, breached, resolved };
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching users for handler performance:', error);
+    }
+
+    // Fallback: Group incidents by handler using just incident data
+    console.log('📊 Using fallback: grouping by incident assignments only');
+
+    const handlerMap = new Map();
+
+    dashboardData.managedIncidents.forEach(incident => {
+      let handlerName = getAssignedToName(incident);
+
+      if (!handlerName || handlerName.trim() === '' || handlerName.toLowerCase() === 'unassigned') {
+        handlerName = 'Unassigned';
+      } else {
+        if (handlerName.includes('@')) {
+          handlerName = handlerName.split('@')[0];
+        }
+      }
+
+      if (!handlerMap.has(handlerName)) {
+        handlerMap.set(handlerName, {
+          pending: 0,
+          breached: 0,
+          resolved: 0
+        });
+      }
+
+      const handlerStats = handlerMap.get(handlerName);
+
+      const createdTime = new Date(getCreatedAt(incident));
+      const now = new Date();
+      const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
+
+      let slaLimit = 24;
+      const priority = getPriorityName(incident).toLowerCase();
+      if (priority.includes('critical')) {
+        slaLimit = 4;
+      } else if (priority.includes('high')) {
+        slaLimit = 8;
+      } else if (priority.includes('medium')) {
+        slaLimit = 12;
+      }
+
+      const isBreached = hoursSinceCreated > slaLimit && getStatusName(incident) !== 'resolved';
+
+      const status = getStatusName(incident);
+      if (status === 'resolved') {
+        handlerStats.resolved++;
+      } else if (isBreached) {
+        handlerStats.breached++;
+      } else {
+        handlerStats.pending++;
+      }
+    });
+
+    let handlers: string[] = [];
+    let pending: number[] = [];
+    let breached: number[] = [];
+    let resolved: number[] = [];
+
+    const sortedHandlers = Array.from(handlerMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        ...stats,
+        total: stats.pending + stats.breached + stats.resolved
+      }))
+      .filter(h => h.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+    console.log('📊 Fallback Handler Performance Data:', sortedHandlers);
+
+    const minHandlers = 10;
+    const actualHandlers = sortedHandlers.length;
+
+    if (actualHandlers < minHandlers) {
+      const handlerNames = [
+        'Alex Chen', 'Sarah Wilson', 'Mike Johnson', 'Emily Brown',
+        'David Lee', 'Lisa Garcia', 'Tom Anderson', 'Maria Rodriguez',
+        'James Taylor', 'Jennifer Wang', 'Chris Miller', 'Amy Zhang',
+        'Robert Davis', 'Anna Smith', 'Kevin Liu'
+      ];
+
+      sortedHandlers.forEach(handler => {
+        handlers.push(handler.name);
+        pending.push(handler.pending);
+        breached.push(handler.breached);
+        resolved.push(handler.resolved);
+      });
+
+      const placeholdersNeeded = minHandlers - actualHandlers;
+      for (let i = 0; i < placeholdersNeeded; i++) {
+        const placeholderName = handlerNames[actualHandlers + i] || `Handler ${actualHandlers + i + 1}`;
+        handlers.push(placeholderName);
+        pending.push(0);
+        breached.push(0);
+        resolved.push(0);
+      }
+    } else {
+      sortedHandlers.forEach(handler => {
+        handlers.push(handler.name);
+        pending.push(handler.pending);
+        breached.push(handler.breached);
+        resolved.push(handler.resolved);
+      });
+    }
+
+    return { handlers, pending, breached, resolved };
+  };
+
+  // Event handlers
+  const handlePinClick = (incident: Incident) => {
+    setSelectedIncident(incident);
+  };
+
+  const closeIncidentDetails = () => {
+    setSelectedIncident(null);
+  };
+
   const handleViewAllIncidents = () => {
     setCurrentView('all-incidents');
     const newUrl = new URL(window.location.href);
@@ -143,15 +554,6 @@ const IncidentManagerDashboard = () => {
     window.history.pushState({}, '', newUrl.toString());
   };
 
-  // Event handlers
-  const handlePinClick = (incident: Incident) => {
-    setSelectedIncident(incident);
-  };
-
-  const closeIncidentDetails = () => {
-    setSelectedIncident(null);
-  };
-
   const formatDateLocal = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString();
@@ -159,6 +561,41 @@ const IncidentManagerDashboard = () => {
       return 'Unknown';
     }
   };
+
+  // Effects
+  useEffect(() => {
+    fetchData();
+  }, [router]);
+
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view');
+    setCurrentView(currentViewParam || 'dashboard');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const fetchSLAData = async () => {
+      const slaData = await getSLABreachData();
+      setSlaBreachData(slaData);
+    };
+
+    if (dashboardData.managedIncidents.length > 0) {
+      fetchSLAData();
+    }
+  }, [dashboardData.managedIncidents]);
+
+  useEffect(() => {
+    const fetchHandlerData = async () => {
+      const data = await getHandlerPerformanceData();
+      setHandlerPerformanceData(data);
+    };
+
+    if (dashboardData.managedIncidents.length > 0) {
+      fetchHandlerData();
+    }
+  }, [dashboardData.managedIncidents]);
+
+  // Calculate stats
+  const stats = getIncidentStats(dashboardData.managedIncidents);
 
   // Render different views based on current view
   if (currentView === 'all-incidents') {
@@ -194,212 +631,11 @@ const IncidentManagerDashboard = () => {
     );
   }
 
-  // SLA Breach Distribution data for donut chart
-  const getSLABreachData = () => {
-    if (dashboardData.managedIncidents.length === 0) {
-      return { data: [], labels: [], colors: [] };
-    }
-
-    // Calculate breaches by type using REAL DATA ONLY
-    const breachStats = {
-      responseTime: 0,
-      resolutionTime: 0,
-      availability: 0,
-      quality: 0
-    };
-
-    dashboardData.managedIncidents.forEach(incident => {
-      const createdTime = new Date(incident.createdAt);
-      const now = new Date();
-      const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
-
-      let responseTimeLimit = 24; // default for low priority
-      let resolutionTimeLimit = 48; // default for low priority
-
-      if (incident.priority?.toLowerCase().includes('critical')) {
-        responseTimeLimit = 1; // 1 hour for critical
-        resolutionTimeLimit = 4; // 4 hours for critical
-      } else if (incident.priority?.toLowerCase().includes('high')) {
-        responseTimeLimit = 4; // 4 hours for high
-        resolutionTimeLimit = 8; // 8 hours for high
-      } else if (incident.priority?.toLowerCase().includes('medium')) {
-        responseTimeLimit = 8; // 8 hours for medium
-        resolutionTimeLimit = 24; // 24 hours for medium
-      }
-
-      // Response time breach (if not yet assigned or responded)
-      if (hoursSinceCreated > responseTimeLimit && incident.status === 'pending') {
-        breachStats.responseTime++;
-      }
-
-      // Resolution time breach (if not resolved)
-      if (hoursSinceCreated > resolutionTimeLimit && incident.status !== 'resolved') {
-        breachStats.resolutionTime++;
-      }
-    });
-
-    const data = [];
-    const labels = [];
-    const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4']; // red, yellow, purple, cyan
-
-    // Only show categories that have actual breaches
-    if (breachStats.responseTime > 0) {
-      data.push(breachStats.responseTime);
-      labels.push('Response Time');
-    }
-    if (breachStats.resolutionTime > 0) {
-      data.push(breachStats.resolutionTime);
-      labels.push('Resolution Time');
-    }
-    if (breachStats.availability > 0) {
-      data.push(breachStats.availability);
-      labels.push('Availability');
-    }
-    if (breachStats.quality > 0) {
-      data.push(breachStats.quality);
-      labels.push('Quality');
-    }
-
-    // If no breaches, show a message
-    if (data.length === 0) {
-      data.push(1);
-      labels.push('No SLA Breaches');
-      return { data, labels, colors: ['#10b981'] }; // green for no breaches
-    }
-
-    return { data, labels, colors: colors.slice(0, data.length) };
-  };
-
-  const { data: slaData, labels: slaLabels, colors: slaColors } = getSLABreachData();
-
-  // Handler Performance data for bar chart (ensure minimum 10 handlers)
-  const getHandlerPerformanceData = () => {
-    if (dashboardData.managedIncidents.length === 0) {
-      return { handlers: [], pending: [], breached: [], resolved: [] };
-    }
-
-    // Group incidents by handler using assignedTo field from database
-    const handlerMap = new Map();
-
-    dashboardData.managedIncidents.forEach(incident => {
-      // Get handler name from assignedTo field
-      let handlerName = incident.assignedTo;
-
-      // Handle unassigned incidents
-      if (!handlerName || handlerName.trim() === '' || handlerName.toLowerCase() === 'unassigned') {
-        handlerName = 'Unassigned';
-      } else {
-        // Clean up handler name (remove email domain if present)
-        if (handlerName.includes('@')) {
-          handlerName = handlerName.split('@')[0];
-        }
-      }
-
-      // Initialize handler stats if not exists
-      if (!handlerMap.has(handlerName)) {
-        handlerMap.set(handlerName, {
-          pending: 0,
-          breached: 0,
-          resolved: 0
-        });
-      }
-
-      const handlerStats = handlerMap.get(handlerName);
-
-      // Calculate if incident is breached based on real data
-      const createdTime = new Date(incident.createdAt);
-      const now = new Date();
-      const hoursSinceCreated = (now.getTime() - createdTime.getTime()) / (1000 * 60 * 60);
-
-      let slaLimit = 24; // default for low priority
-      if (incident.priority?.toLowerCase().includes('critical')) {
-        slaLimit = 4;
-      } else if (incident.priority?.toLowerCase().includes('high')) {
-        slaLimit = 8;
-      } else if (incident.priority?.toLowerCase().includes('medium')) {
-        slaLimit = 12;
-      }
-
-      const isBreached = hoursSinceCreated > slaLimit && incident.status !== 'resolved';
-
-      // Categorize incident based on real status from database
-      if (incident.status === 'resolved') {
-        handlerStats.resolved++;
-      } else if (isBreached) {
-        handlerStats.breached++;
-      } else {
-        handlerStats.pending++;
-      }
-    });
-
-    // Convert map to arrays for chart
-    let handlers = [];
-    let pending = [];
-    let breached = [];
-    let resolved = [];
-
-    // Sort handlers by total incidents (descending)
-    const sortedHandlers = Array.from(handlerMap.entries())
-      .map(([name, stats]) => ({
-        name,
-        ...stats,
-        total: stats.pending + stats.breached + stats.resolved
-      }))
-      .filter(h => h.total > 0)
-      .sort((a, b) => b.total - a.total);
-
-    console.log('📊 Handler Performance Data:', sortedHandlers);
-
-    // Ensure minimum 10 handlers for better bar visualization
-    const minHandlers = 10;
-    const actualHandlers = sortedHandlers.length;
-
-    // If we have fewer than 10 handlers, add placeholder handlers with zero values
-    if (actualHandlers < minHandlers) {
-      const handlerNames = [
-        'Alex Chen', 'Sarah Wilson', 'Mike Johnson', 'Emily Brown',
-        'David Lee', 'Lisa Garcia', 'Tom Anderson', 'Maria Rodriguez',
-        'James Taylor', 'Jennifer Wang', 'Chris Miller', 'Amy Zhang',
-        'Robert Davis', 'Anna Smith', 'Kevin Liu'
-      ];
-
-      // Add real handlers first
-      sortedHandlers.forEach(handler => {
-        handlers.push(handler.name);
-        pending.push(handler.pending);
-        breached.push(handler.breached);
-        resolved.push(handler.resolved);
-      });
-
-      // Add placeholder handlers to reach minimum 10
-      const placeholdersNeeded = minHandlers - actualHandlers;
-      for (let i = 0; i < placeholdersNeeded; i++) {
-        const placeholderName = handlerNames[actualHandlers + i] || `Handler ${actualHandlers + i + 1}`;
-        handlers.push(placeholderName);
-        pending.push(0);
-        breached.push(0);
-        resolved.push(0);
-      }
-    } else {
-      // Use actual handlers if we have 10 or more
-      sortedHandlers.forEach(handler => {
-        handlers.push(handler.name);
-        pending.push(handler.pending);
-        breached.push(handler.breached);
-        resolved.push(handler.resolved);
-      });
-    }
-
-    return { handlers, pending, breached, resolved };
-  };
-
-  const { handlers, pending, breached, resolved } = getHandlerPerformanceData();
-
   // Chart configurations
   const slaBreachOptions = {
     chart: { type: 'donut' as const, height: 280 },
-    labels: slaLabels,
-    colors: slaColors,
+    labels: slaBreachData.labels,
+    colors: slaBreachData.colors,
     legend: { position: 'bottom' as const },
     dataLabels: {
       enabled: true,
@@ -415,7 +651,7 @@ const IncidentManagerDashboard = () => {
               show: true,
               label: 'Breaches',
               formatter: () => {
-                const total = slaData.reduce((a, b) => a + b, 0);
+                const total = slaBreachData.data.reduce((a, b) => a + b, 0);
                 return `${total}`;
               }
             }
@@ -439,7 +675,7 @@ const IncidentManagerDashboard = () => {
     dataLabels: { enabled: false },
     stroke: { show: true, width: 2, colors: ['transparent'] },
     xaxis: {
-      categories: handlers,
+      categories: handlerPerformanceData.handlers,
       title: {
         text: 'Handlers'
       },
@@ -455,7 +691,7 @@ const IncidentManagerDashboard = () => {
       min: 0
     },
     fill: { opacity: 1 },
-    colors: ['#ffc107', '#ef4444', '#10b981'], // yellow, red, green
+    colors: ['#ffc107', '#ef4444', '#10b981'],
     legend: {
       position: 'top' as const,
       horizontalAlign: 'center' as const
@@ -470,9 +706,9 @@ const IncidentManagerDashboard = () => {
   };
 
   const barChartSeries = [
-    { name: 'Pending', data: pending },
-    { name: 'SLA Breached', data: breached },
-    { name: 'Resolved', data: resolved }
+    { name: 'Pending', data: handlerPerformanceData.pending },
+    { name: 'SLA Breached', data: handlerPerformanceData.breached },
+    { name: 'Resolved', data: handlerPerformanceData.resolved }
   ];
 
   // Main dashboard view
@@ -521,7 +757,7 @@ const IncidentManagerDashboard = () => {
                 {stats.total > 0 ? (
                   <Chart
                     options={slaBreachOptions}
-                    series={slaData}
+                    series={slaBreachData.data}
                     type="donut"
                     height={280}
                   />
@@ -565,7 +801,7 @@ const IncidentManagerDashboard = () => {
                 <h5 className="mb-0">👤 Team Performance Overview</h5>
               </CardHeader>
               <CardBody>
-                {stats.total > 0 && handlers.length > 0 ? (
+                {stats.total > 0 && handlerPerformanceData.handlers.length > 0 ? (
                   <Chart
                     options={barChartOptions}
                     series={barChartSeries}
@@ -628,27 +864,27 @@ const IncidentManagerDashboard = () => {
                           return (
                             <tr key={incident.id}>
                               <td>
-                                <span className="fw-medium text-primary">{incident.number}</span>
+                                <span className="fw-medium text-primary">{getIncidentNumber(incident)}</span>
                               </td>
                               <td>
                                 <div>
-                                  <div className="fw-medium">{incident.category}</div>
+                                  <div className="fw-medium">{getCategoryName(incident)}</div>
                                 </div>
                               </td>
                               <td>
                                 <Badge style={{
-                                  backgroundColor: getPriorityColor(incident.priority),
+                                  backgroundColor: getPriorityColor(getPriorityName(incident)),
                                   color: 'white'
                                 }}>
-                                  {incident.priority}
+                                  {getPriorityName(incident)}
                                 </Badge>
                               </td>
                               <td>
                                 <Badge style={{
-                                  backgroundColor: getStatusColor(incident.status),
+                                  backgroundColor: getStatusColor(getStatusName(incident)),
                                   color: 'white'
                                 }}>
-                                  {incident.status?.replace('_', ' ')}
+                                  {getStatusName(incident).replace('_', ' ')}
                                 </Badge>
                               </td>
                               <td>
@@ -657,10 +893,10 @@ const IncidentManagerDashboard = () => {
                                 </Badge>
                               </td>
                               <td>
-                                <small className="text-muted">{incident.assignedTo || 'Unassigned'}</small>
+                                <small className="text-muted">{getAssignedToName(incident)}</small>
                               </td>
                               <td>
-                                <small>{formatDateLocal(incident.createdAt)}</small>
+                                <small>{formatDateLocal(getCreatedAt(incident))}</small>
                               </td>
                               <td>
                                 <Button
@@ -739,24 +975,24 @@ const IncidentManagerDashboard = () => {
                   <Col md={6}>
                     <div className="mb-3">
                       <strong>Incident ID:</strong>
-                      <div className="text-primary fs-5 fw-bold">{selectedIncident.number}</div>
+                      <div className="text-primary fs-5 fw-bold">{getIncidentNumber(selectedIncident)}</div>
                     </div>
                     <div className="mb-3">
                       <strong>Category:</strong>
-                      <div>{selectedIncident.category}</div>
+                      <div>{getCategoryName(selectedIncident)}</div>
                     </div>
                     <div className="mb-3">
                       <strong>Sub Category:</strong>
-                      <div>{selectedIncident.subCategory}</div>
+                      <div>{selectedIncident.subcategory?.name || 'Not specified'}</div>
                     </div>
                     <div className="mb-3">
                       <strong>Priority:</strong>
                       <div>
                         <Badge
-                          style={{ backgroundColor: getPriorityColor(selectedIncident.priority), color: 'white' }}
+                          style={{ backgroundColor: getPriorityColor(getPriorityName(selectedIncident)), color: 'white' }}
                           className="fs-6"
                         >
-                          {selectedIncident.priority}
+                          {getPriorityName(selectedIncident)}
                         </Badge>
                       </div>
                     </div>
@@ -766,10 +1002,10 @@ const IncidentManagerDashboard = () => {
                       <strong>Status:</strong>
                       <div>
                         <Badge
-                          style={{ backgroundColor: getStatusColor(selectedIncident.status), color: 'white' }}
+                          style={{ backgroundColor: getStatusColor(getStatusName(selectedIncident)), color: 'white' }}
                           className="fs-6"
                         >
-                          {selectedIncident.status?.replace('_', ' ')}
+                          {getStatusName(selectedIncident).replace('_', ' ')}
                         </Badge>
                       </div>
                     </div>
@@ -783,11 +1019,11 @@ const IncidentManagerDashboard = () => {
                     </div>
                     <div className="mb-3">
                       <strong>Assigned To:</strong>
-                      <div>{selectedIncident.assignedTo || 'Unassigned'}</div>
+                      <div>{getAssignedToName(selectedIncident)}</div>
                     </div>
                     <div className="mb-3">
                       <strong>Created:</strong>
-                      <div>{formatDateLocal(selectedIncident.createdAt)}</div>
+                      <div>{formatDateLocal(getCreatedAt(selectedIncident))}</div>
                     </div>
                   </Col>
                 </Row>
@@ -795,11 +1031,11 @@ const IncidentManagerDashboard = () => {
                 <div className="mb-3">
                   <strong>Description:</strong>
                   <div className="mt-1 p-2 bg-light rounded">
-                    {selectedIncident.shortDescription || 'No description available'}
+                    {getShortDescription(selectedIncident)}
                   </div>
                 </div>
 
-                {selectedIncident.description && selectedIncident.description !== selectedIncident.shortDescription && (
+                {selectedIncident.description && selectedIncident.description !== getShortDescription(selectedIncident) && (
                   <div className="mb-3">
                     <strong>Detailed Description:</strong>
                     <div className="mt-1 p-2 bg-light rounded">
@@ -808,17 +1044,14 @@ const IncidentManagerDashboard = () => {
                   </div>
                 )}
 
-                {(selectedIncident.address || selectedIncident.postcode || (selectedIncident.latitude && selectedIncident.longitude)) && (
+                {(selectedIncident.address || selectedIncident.lat || selectedIncident.lng) && (
                   <div className="mb-3">
                     <strong>Location:</strong>
                     <div className="mt-1 p-2 bg-light rounded">
                       <div>{selectedIncident.address || 'Address not specified'}</div>
-                      {selectedIncident.postcode && (
-                        <div><strong>Postcode:</strong> {selectedIncident.postcode}</div>
-                      )}
-                      {(selectedIncident.latitude && selectedIncident.longitude) && (
+                      {(selectedIncident.lat && selectedIncident.lng) && (
                         <div>
-                          <strong>GPS Coordinates:</strong> {selectedIncident.latitude.substring(0,8)}, {selectedIncident.longitude.substring(0,8)}
+                          <strong>GPS Coordinates:</strong> {selectedIncident.lat.toString().substring(0,8)}, {selectedIncident.lng.toString().substring(0,8)}
                           <span className="text-success ms-2">📍 Precise Location</span>
                         </div>
                       )}
@@ -830,14 +1063,14 @@ const IncidentManagerDashboard = () => {
                   <Col md={6}>
                     <div className="mb-3">
                       <strong>Reported By:</strong>
-                      <div>{selectedIncident.reportedByName || selectedIncident.caller}</div>
-                      <small className="text-muted">{selectedIncident.reportedBy}</small>
+                      <div>{getCallerName(selectedIncident)}</div>
+                      <small className="text-muted">{selectedIncident.reported_by || selectedIncident.user?.email || ''}</small>
                     </div>
                   </Col>
                   <Col md={6}>
                     <div className="mb-3">
                       <strong>Contact Type:</strong>
-                      <div>{selectedIncident.contactType}</div>
+                      <div>{selectedIncident.contact_type?.name || 'Not specified'}</div>
                     </div>
                   </Col>
                 </Row>

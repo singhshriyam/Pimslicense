@@ -7,21 +7,52 @@ import {
   formatDate,
   type Incident
 } from '../app/(MainBody)/services/incidentService';
+import { getCurrentUser } from '../app/(MainBody)/services/userService';
+import {
+  fetchCategories,
+  fetchSubcategories,
+  fetchContactTypes,
+  fetchImpacts,
+  fetchUrgencies,
+  fetchIncidentStates,
+  fetchAssets,
+  fetchSites,
+} from '../app/(MainBody)/services/masterService';
 
 interface EditIncidentProps {
-  incident: Incident;
+  incident: any;
   userType?: string;
   onClose: () => void;
   onSave: () => void;
 }
+
+const API_BASE = 'https://apexwpc.apextechno.co.uk/api';
 
 const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose, onSave }) => {
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // Evidence tab states - start empty, load from API
+  // Master data states
+  const [masterData, setMasterData] = useState({
+    categories: [] as Array<{id: number, name: string}>,
+    subCategories: [] as Array<{id: number, name: string, category_id: number}>,
+    contactTypes: [] as Array<{id: number, name: string}>,
+    urgencies: [] as Array<{id: number, name: string}>,
+    impacts: [] as Array<{id: number, name: string}>,
+    incidentStates: [] as Array<{id: number, name: string}>,
+    assets: [] as Array<{id: number, name: string}>,
+    sites: [] as Array<{id: number, name: string}>,
+    actionTypes: [] as Array<{id: number, name: string}>,
+    actionStatuses: [] as Array<{id: number, name: string}>,
+    actionPriorities: [] as Array<{id: number, name: string}>,
+    loading: false,
+    error: null as string | null
+  });
+
+  // Evidence tab states
   const [uploadedImages, setUploadedImages] = useState<Array<{
     id: number;
     name: string;
@@ -30,29 +61,26 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     size: string;
   }>>([]);
 
-  // Ammonia readings - start empty, load from API
   const [ammoniaReadings, setAmmoniaReadings] = useState<Array<{
     id: number;
     type: string;
     reading: string;
     date: string;
+    unit: string;
   }>>([]);
 
-  // Actions - start empty, load from API
   const [actions, setActions] = useState<Array<{
     id: string;
+    action_type_id: string;
+    action_status_id: string;
+    action_priority_id: string;
+    detail: string;
     raised: string;
     complete: boolean;
-    age: string;
-    type: string;
-    priority: string;
-    detail: string;
-    status: string;
-    createdAt: string;
+    created_at: string;
   }>>([]);
 
-  // Similar incidents - start empty, load from API
-  const [similarIncidents, setSimilarIncidents] = useState<Incident[]>([]);
+  const [similarIncidents, setSimilarIncidents] = useState<any[]>([]);
 
   // Form states
   const [editForm, setEditForm] = useState({
@@ -63,18 +91,20 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
   const [advancedEditForm, setAdvancedEditForm] = useState({
     shortDescription: '',
     description: '',
-    category: '',
-    subCategory: '',
-    contactType: '',
-    impact: '',
-    urgency: '',
-    status: '',
-    narration: ''
+    categoryId: '',
+    subCategoryId: '',
+    contactTypeId: '',
+    impactId: '',
+    urgencyId: '',
+    statusId: '',
+    narration: '',
+    assignedTo: '',
+    assetId: '',
+    siteId: ''
   });
 
-  // New form states
   const [newAmmoniaReading, setNewAmmoniaReading] = useState({
-    type: 'Upstream',
+    type: 'downstream',
     date: '',
     reading: ''
   });
@@ -88,145 +118,241 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     isComplete: false
   });
 
-  // Mock similar incidents finder - for demonstration only
-  const findSimilarIncidents = (): Incident[] => {
-    return [
-      {
-        id: 'similar-1',
-        number: 'INC-2024-001',
-        shortDescription: 'Similar sewage issue resolved',
-        category: incident.category,
-        subCategory: incident.subCategory,
-        status: 'resolved' as const,
-        priority: 'Medium',
-        createdAt: '2024-01-15T10:00:00Z',
-        caller: 'John Smith',
-        description: 'Similar issue was resolved by cleaning the drain and replacing damaged pipe.',
-        contactType: 'Phone',
-        impact: 'Moderate',
-        urgency: 'Medium',
-        reportedBy: 'john.smith@email.com'
-      } as Incident,
-      {
-        id: 'similar-2',
-        number: 'INC-2024-002',
-        shortDescription: 'Sewage overflow - quick fix',
-        category: incident.category,
-        subCategory: incident.subCategory,
-        status: 'closed' as const,
-        priority: 'High',
-        createdAt: '2024-01-10T14:30:00Z',
-        caller: 'Jane Doe',
-        description: 'Issue resolved by emergency response team within 2 hours.',
-        contactType: 'Email',
-        impact: 'Significant',
-        urgency: 'High',
-        reportedBy: 'jane.doe@email.com'
-      } as Incident
-    ];
-  };
+  // SLA Status state
+  const [slaStatus, setSlaStatus] = useState({
+    name: '',
+    type: '',
+    target: '',
+    stage: '',
+    businessTimeLeft: '',
+    businessTimeElapsed: '',
+    startTime: '',
+    percentage: 0
+  });
 
-  // Check if user has advanced edit permissions
+  useEffect(() => {
+    const user = getCurrentUser();
+    setCurrentUser(user);
+  }, []);
+
   const hasAdvancedEditPermissions = () => {
     const currentUserType = userType?.toLowerCase() || '';
     return currentUserType.includes('handler') ||
            currentUserType.includes('manager') ||
            currentUserType.includes('admin') ||
            currentUserType.includes('field_engineer') ||
-           currentUserType.includes('water_pollution_expert');
+           currentUserType.includes('expert_team');
   };
 
-  // Category and subcategory options
-  const categoryOptions = [
-    { id: '1', name: 'Inside home' },
-    { id: '2', name: 'Street Pavement' },
-    { id: '3', name: 'SP site' },
-    { id: '4', name: 'Outside drive way /garden' },
-    { id: '5', name: 'River strem or lake' }
-  ];
+  // Load master data from backend
+  const loadMasterData = async () => {
+    setMasterData(prev => ({ ...prev, loading: true, error: null }));
 
-  const subcategoryOptions: Record<string, Array<{id: string, name: string}>> = {
-    '1': [
-      { id: '1', name: 'Leak from my pipe' },
-      { id: '2', name: 'Toilet/sink /shower issues' },
-      { id: '3', name: 'Sewage spillout' },
-      { id: '4', name: 'Cover or lid is damaged' },
-      { id: '5', name: 'Sewage smell in my home' },
-      { id: '6', name: 'Blocked alarm' }
-    ],
-    '2': [
-      { id: '7', name: 'Manhole blocked /smelly' },
-      { id: '8', name: 'Cover or lid is damaged' },
-      { id: '9', name: 'Smelly sewage over flowing on the street' },
-      { id: '10', name: 'Roadside drain or gully that is blocked' }
-    ],
-    '3': [
-      { id: '11', name: 'Mark the site in the map or list of SP sites' }
-    ],
-    '4': [
-      { id: '12', name: 'Leak on my property outside' },
-      { id: '13', name: 'Blocked /smelly manhole on my property' },
-      { id: '14', name: 'Sewage overflow on my property' },
-      { id: '15', name: 'Blocked drain on my property' },
-      { id: '16', name: 'Sewage odour outside my home' }
-    ],
-    '5': []
-  };
+    try {
+      // UNCOMMENT THE LINES BELOW WHEN APIs ARE READY
+      // const [categoriesRes, contactTypesRes, impactsRes, urgenciesRes, incidentStatesRes, assetsRes, sitesRes, actionTypesRes, actionStatusesRes, actionPrioritiesRes] = await Promise.all([
+      //   fetchCategories(),
+      //   fetchContactTypes(),
+      //   fetchImpacts(),
+      //   fetchUrgencies(),
+      //   fetchIncidentStates(),
+      //   fetchAssets(),
+      //   fetchSites(),
+      //   fetchActionTypes(),
+      //   fetchActionStatuses(),
+      //   fetchActionPriorities()
+      // ]);
 
-  const getCategoryIdByName = (name: string) => {
-    const category = categoryOptions.find(cat => cat.name === name);
-    return category?.id || '';
-  };
+      // CURRENTLY WORKING APIs - UNCOMMENT AS NEEDED
+      const [impactsRes, urgenciesRes, incidentStatesRes, assetsRes, sitesRes] = await Promise.all([
+        fetchImpacts(),
+        fetchUrgencies(),
+        fetchIncidentStates(),
+        fetchAssets(),
+        fetchSites()
+      ]);
 
-  const getSubCategoryOptions = (categoryName: string) => {
-    const categoryId = getCategoryIdByName(categoryName);
-    if (!categoryId || !subcategoryOptions[categoryId]) {
-      return [];
+      setMasterData(prev => ({
+        ...prev,
+        // categories: categoriesRes.data || [], // UNCOMMENT WHEN API IS READY
+        categories: [], // EMPTY UNTIL API IS READY
+        // contactTypes: contactTypesRes.data || [], // UNCOMMENT WHEN API IS READY
+        contactTypes: [], // EMPTY UNTIL API IS READY
+        impacts: impactsRes.data || [],
+        urgencies: urgenciesRes.data || [],
+        incidentStates: incidentStatesRes.data || [],
+        assets: assetsRes.data || [],
+        sites: sitesRes.data || [],
+        // actionTypes: actionTypesRes.data || [], // UNCOMMENT WHEN API IS READY
+        actionTypes: [], // EMPTY UNTIL API IS READY
+        // actionStatuses: actionStatusesRes.data || [], // UNCOMMENT WHEN API IS READY
+        actionStatuses: [], // EMPTY UNTIL API IS READY
+        // actionPriorities: actionPrioritiesRes.data || [], // UNCOMMENT WHEN API IS READY
+        actionPriorities: [], // EMPTY UNTIL API IS READY
+        loading: false,
+        error: null
+      }));
+
+    } catch (error: any) {
+      console.error('Error loading master data:', error);
+      setMasterData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to load master data'
+      }));
     }
-    return subcategoryOptions[categoryId];
   };
 
-  // Load initial data and evidence from API
+  const loadSubCategories = async (categoryId: string) => {
+    if (!categoryId) {
+      setMasterData(prev => ({ ...prev, subCategories: [] }));
+      return;
+    }
+
+    try {
+      // UNCOMMENT WHEN SUBCATEGORIES API IS READY
+      // const response = await fetchSubcategories(categoryId);
+      // setMasterData(prev => ({ ...prev, subCategories: response.data || [] }));
+      // console.log(`Loaded subcategories for category ${categoryId}:`, response.data);
+
+      // TEMPORARY - REMOVE WHEN API IS READY
+      setMasterData(prev => ({ ...prev, subCategories: [] }));
+    } catch (error) {
+      console.error('Error loading subcategories from API:', error);
+      setMasterData(prev => ({ ...prev, subCategories: [] }));
+    }
+  };
+
+  // Load SLA status from backend
+  const loadSLAStatus = async () => {
+    try {
+      const incidentId = incident.id;
+      const response = await fetch(`${API_BASE}/incident-sla-details?incident_id=${incidentId}`);
+      if (response.ok) {
+        const slaData = await response.json();
+        if (slaData.success && slaData.data) {
+          setSlaStatus({
+            name: slaData.data.sla_name || '',
+            type: slaData.data.sla_type || '',
+            target: slaData.data.target_time || '',
+            stage: slaData.data.current_stage || '',
+            businessTimeLeft: slaData.data.business_time_left || '',
+            businessTimeElapsed: slaData.data.business_time_elapsed || '',
+            startTime: slaData.data.start_time || '',
+            percentage: slaData.data.percentage_elapsed || 0
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading SLA status:', error);
+    }
+  };
+
+  // Load existing evidence and actions
+  const loadExistingData = async () => {
+    if (!hasAdvancedEditPermissions()) return;
+
+    try {
+      const incidentId = incident.id;
+
+      // Load existing evidence photos
+      try {
+        const photosRes = await fetch(`${API_BASE}/incident-handeler/evidence-photos/${incidentId}`);
+        if (photosRes.ok) {
+          const photosData = await photosRes.json();
+          if (photosData.success && photosData.data) {
+            setUploadedImages(photosData.data.map((photo: any) => ({
+              id: photo.id,
+              name: photo.name || 'Evidence Photo',
+              url: photo.url,
+              uploadedAt: new Date(photo.created_at).toLocaleString(),
+              size: photo.size || 'Unknown'
+            })));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading photos:', error);
+      }
+
+      // Load existing ammonia readings
+      try {
+        const readingsRes = await fetch(`${API_BASE}/incident-handeler/ammonia-readings/${incidentId}`);
+        if (readingsRes.ok) {
+          const readingsData = await readingsRes.json();
+          if (readingsData.success && readingsData.data) {
+            setAmmoniaReadings(readingsData.data.map((reading: any) => ({
+              id: reading.id,
+              type: reading.type,
+              reading: reading.reading,
+              date: reading.sample_date,
+              unit: 'mg/L'
+            })));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading readings:', error);
+      }
+
+      // Load existing actions
+      try {
+        const actionsRes = await fetch(`${API_BASE}/incident-handeler/actions/${incidentId}`);
+        if (actionsRes.ok) {
+          const actionsData = await actionsRes.json();
+          if (actionsData.success && actionsData.data) {
+            setActions(actionsData.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading actions:', error);
+      }
+
+    } catch (error) {
+      console.error('Error loading existing data:', error);
+    }
+  };
+
   useEffect(() => {
     const loadIncidentData = async () => {
       try {
         setLoading(true);
 
-        // Initialize form data
+        // Load master data first
+        await loadMasterData();
+
         if (hasAdvancedEditPermissions()) {
+          // Populate advanced form with existing incident data
           setAdvancedEditForm({
-            shortDescription: incident.shortDescription || '',
+            shortDescription: incident.short_description || '',
             description: incident.description || '',
-            category: incident.category || '',
-            subCategory: incident.subCategory || '',
-            contactType: incident.contactType || '',
-            impact: incident.impact || '',
-            urgency: incident.urgency || '',
-            status: incident.status || 'pending',
-            narration: ''
+            categoryId: incident.category_id?.toString() || incident.category?.id?.toString() || '',
+            subCategoryId: incident.subcategory_id?.toString() || incident.subcategory?.id?.toString() || '',
+            contactTypeId: incident.contact_type_id?.toString() || incident.contact_type?.id?.toString() || '',
+            impactId: incident.impact_id?.toString() || incident.impact?.id?.toString() || '',
+            urgencyId: incident.urgency_id?.toString() || incident.urgency?.id?.toString() || '',
+            statusId: incident.incidentstate_id?.toString() || incident.incident_state?.id?.toString() || '',
+            narration: incident.narration || '',
+            assignedTo: incident.assigned_to?.name || '',
+            assetId: incident.asset_id?.toString() || incident.asset?.id?.toString() || '',
+            siteId: incident.site_id?.toString() || incident.site?.id?.toString() || ''
           });
+
+          // Load subcategories if category is selected
+          const categoryId = incident.category_id?.toString() || incident.category?.id?.toString();
+          if (categoryId) {
+            await loadSubCategories(categoryId);
+          }
+
+          // Load existing evidence and actions
+          await loadExistingData();
+
+          // Load SLA details
+          await loadSLAStatus();
         } else {
+          // Populate simple form with existing incident data
           setEditForm({
-            shortDescription: incident.shortDescription || '',
+            shortDescription: incident.short_description || '',
             description: incident.description || ''
           });
-        }
-
-        // Load evidence data from API if available
-        // TODO: Replace with actual API call
-        // const evidenceData = await fetchIncidentEvidence(incident.id);
-        // setUploadedImages(evidenceData.images || []);
-        // setAmmoniaReadings(evidenceData.readings || []);
-        // setActions(evidenceData.actions || []);
-
-        // Load similar incidents from API if handler
-        if (hasAdvancedEditPermissions()) {
-          // TODO: Replace with actual API call
-          // const similar = await fetchSimilarIncidents(incident.id);
-          // setSimilarIncidents(similar || []);
-
-          // For now, load mock data for demonstration
-          setSimilarIncidents(findSimilarIncidents());
         }
 
       } catch (error: any) {
@@ -240,45 +366,69 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     loadIncidentData();
   }, [incident]);
 
-  // Handle image upload
+  const handleCategoryChange = async (categoryId: string) => {
+    setAdvancedEditForm(prev => ({
+      ...prev,
+      categoryId,
+      subCategoryId: ''
+    }));
+    await loadSubCategories(categoryId);
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
     setLoading(true);
+    setError(null);
+
     try {
       for (const file of Array.from(files)) {
-        // TODO: Replace with actual API call
-        // const uploadResult = await uploadEvidencePhoto(incident.id, file);
+        const formData = new FormData();
+        formData.append('url', file);
+        formData.append('incident_id', incident.id.toString());
 
-        // For now, create local preview
-        const newImage = {
-          id: Date.now() + Math.random(),
-          name: file.name,
-          url: URL.createObjectURL(file),
-          uploadedAt: new Date().toLocaleString(),
-          size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
-        };
-        setUploadedImages(prev => [...prev, newImage]);
+        const response = await fetch(`${API_BASE}/incident-handeler/evidence-photo`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          const responseText = await response.text();
+          let uploadResult;
+
+          try {
+            uploadResult = JSON.parse(responseText);
+          } catch {
+            uploadResult = { success: true };
+          }
+
+          const newImage = {
+            id: uploadResult.photo_id || Date.now() + Math.random(),
+            name: file.name,
+            url: uploadResult.photo_url || URL.createObjectURL(file),
+            uploadedAt: new Date().toLocaleString(),
+            size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+          };
+
+          setUploadedImages(prev => [...prev, newImage]);
+          setSuccess('Image uploaded successfully');
+        } else {
+          const errorText = await response.text();
+          throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+        }
       }
-      setSuccess('Images uploaded successfully');
     } catch (error: any) {
+      console.error('Upload error:', error);
       setError(`Failed to upload images: ${error.message}`);
     } finally {
       setLoading(false);
+      event.target.value = '';
     }
   };
 
   const handleImageDelete = async (id: number) => {
-    try {
-      // TODO: Replace with actual API call
-      // await deleteEvidencePhoto(id);
-
-      setUploadedImages(prev => prev.filter(img => img.id !== id));
-      setSuccess('Image deleted successfully');
-    } catch (error: any) {
-      setError(`Failed to delete image: ${error.message}`);
-    }
+    setError('Image delete functionality temporarily disabled');
   };
 
   const handleAmmoniaSubmit = async () => {
@@ -288,20 +438,51 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     }
 
     setLoading(true);
-    try {
-      // TODO: Replace with actual API call
-      // await submitAmmoniaReading(incident.id, newAmmoniaReading);
+    setError(null);
 
-      const newReading = {
-        id: Date.now(),
+    try {
+      const requestBody = {
+        incident_id: parseInt(incident.id.toString()),
         type: newAmmoniaReading.type,
-        reading: `${newAmmoniaReading.reading} mg/L`,
-        date: newAmmoniaReading.date
+        sample_date: newAmmoniaReading.date,
+        reading: parseFloat(newAmmoniaReading.reading)
       };
-      setAmmoniaReadings(prev => [...prev, newReading]);
-      setNewAmmoniaReading({ type: 'Upstream', date: '', reading: '' });
-      setSuccess('Ammonia reading submitted successfully');
+
+      const response = await fetch(`${API_BASE}/incident-handeler/ammonia-reading`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        const responseText = await response.text();
+        let result;
+
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          result = { success: true };
+        }
+
+        const newReading = {
+          id: result.reading_id || Date.now(),
+          type: newAmmoniaReading.type,
+          reading: newAmmoniaReading.reading,
+          date: newAmmoniaReading.date,
+          unit: 'mg/L'
+        };
+
+        setAmmoniaReadings(prev => [...prev, newReading]);
+        setNewAmmoniaReading({ type: 'downstream', date: '', reading: '' });
+        setSuccess('Ammonia reading submitted successfully');
+      } else {
+        const errorText = await response.text();
+        throw new Error(`Submission failed: ${response.status} - ${errorText}`);
+      }
     } catch (error: any) {
+      console.error('Ammonia submission error:', error);
       setError(`Failed to submit ammonia reading: ${error.message}`);
     } finally {
       setLoading(false);
@@ -315,32 +496,76 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     }
 
     setLoading(true);
-    try {
-      // TODO: Replace with actual API call
-      // await submitAction(incident.id, newAction);
+    setError(null);
 
-      const newActionEntry = {
-        id: `ACT-${String(Date.now()).slice(-3)}`,
-        raised: newAction.raisedOn || new Date().toISOString().split('T')[0],
-        complete: newAction.isComplete,
-        age: '0 days',
-        type: newAction.actionType,
-        priority: newAction.priority || 'Medium',
-        detail: newAction.details,
-        status: newAction.actionStatus || 'Open',
-        createdAt: new Date().toLocaleString()
-      };
-      setActions(prev => [...prev, newActionEntry]);
-      setNewAction({
-        actionType: '',
-        actionStatus: '',
-        priority: '',
-        raisedOn: '',
-        details: '',
-        isComplete: false
-      });
-      setSuccess('Action submitted successfully');
+    try {
+      // UNCOMMENT WHEN ACTION API IS READY
+      // const requestBody = {
+      //   incident_id: parseInt(incident.id.toString()),
+      //   action_type_id: parseInt(newAction.actionType),
+      //   action_status_id: parseInt(newAction.actionStatus) || 1,
+      //   action_priority_id: parseInt(newAction.priority) || 1,
+      //   raised: newAction.raisedOn || new Date().toISOString().split('T')[0],
+      //   complete: newAction.isComplete ? 1 : 0,
+      //   detail: newAction.details,
+      //   created_by_id: parseInt(currentUser?.id || '1'),
+      //   updated_by_id: parseInt(currentUser?.id || '1')
+      // };
+
+      // console.log('Submitting action:', requestBody);
+
+      // const response = await fetch(`${API_BASE}/incident-handeler/action`, {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify(requestBody)
+      // });
+
+      // if (response.ok) {
+      //   const responseText = await response.text();
+      //   let result;
+
+      //   try {
+      //     result = JSON.parse(responseText);
+      //   } catch {
+      //     result = { success: true };
+      //   }
+
+      //   console.log('Action submission result:', result);
+
+      //   const newActionRecord = {
+      //     id: result.action_id || Date.now().toString(),
+      //     action_type_id: newAction.actionType,
+      //     action_status_id: newAction.actionStatus || '1',
+      //     action_priority_id: newAction.priority || '1',
+      //     detail: newAction.details,
+      //     raised: newAction.raisedOn || new Date().toISOString().split('T')[0],
+      //     complete: newAction.isComplete,
+      //     created_at: new Date().toISOString()
+      //   };
+
+      //   setActions(prev => [...prev, newActionRecord]);
+      //   setNewAction({
+      //     actionType: '',
+      //     actionStatus: '',
+      //     priority: '',
+      //     raisedOn: '',
+      //     details: '',
+      //     isComplete: false
+      //   });
+      //   setSuccess('Action submitted successfully');
+      // } else {
+      //   const errorText = await response.text();
+      //   console.error('Action submission error response:', errorText);
+      //   throw new Error(`Submission failed: ${response.status} - ${errorText}`);
+      // }
+
+      // TEMPORARY - REMOVE WHEN API IS READY
+      setError('Action API is not yet integrated. Please uncomment the code above when /incident-handeler/action endpoint is ready.');
+
     } catch (error: any) {
+      console.error('Action submission error:', error);
       setError(`Failed to submit action: ${error.message}`);
     } finally {
       setLoading(false);
@@ -348,46 +573,82 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
   };
 
   const handleSaveEdit = async () => {
+    if (!currentUser?.id) {
+      setError('User authentication error. Please log in again.');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       setSuccess(null);
 
-      // Prepare update data
-      let updateData: any = {};
+      let updateData: any = {
+        user_id: parseInt(currentUser.id),
+        incident_id: parseInt(incident.id.toString()),
+        from: parseInt(currentUser.id),
+        to: parseInt(currentUser.id)
+      };
 
       if (hasAdvancedEditPermissions()) {
         updateData = {
-          shortDescription: advancedEditForm.shortDescription,
+          ...updateData,
+          short_description: advancedEditForm.shortDescription,
           description: advancedEditForm.description,
-          category: advancedEditForm.category,
-          subCategory: advancedEditForm.subCategory,
-          contactType: advancedEditForm.contactType,
-          impact: advancedEditForm.impact,
-          urgency: advancedEditForm.urgency,
-          status: advancedEditForm.status,
-          narration: advancedEditForm.narration
+          category_id: advancedEditForm.categoryId ? parseInt(advancedEditForm.categoryId) : null,
+          subcategory_id: advancedEditForm.subCategoryId ? parseInt(advancedEditForm.subCategoryId) : null,
+          contact_type_id: advancedEditForm.contactTypeId ? parseInt(advancedEditForm.contactTypeId) : null,
+          impact_id: advancedEditForm.impactId ? parseInt(advancedEditForm.impactId) : null,
+          urgency_id: advancedEditForm.urgencyId ? parseInt(advancedEditForm.urgencyId) : null,
+          incidentstate_id: advancedEditForm.statusId ? parseInt(advancedEditForm.statusId) : null,
+          narration: advancedEditForm.narration || null,
+          asset_id: advancedEditForm.assetId ? parseInt(advancedEditForm.assetId) : null,
+          site_id: advancedEditForm.siteId ? parseInt(advancedEditForm.siteId) : null
         };
       } else {
         updateData = {
-          shortDescription: editForm.shortDescription,
+          ...updateData,
+          short_description: editForm.shortDescription,
           description: editForm.description
         };
       }
 
-      // TODO: Replace with actual API call
-      // const result = await updateIncident(incident.id, updateData);
-      console.log('Updating incident:', incident.id, updateData);
+      console.log('Sending update request:', updateData);
 
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch(`${API_BASE}/incident-handeler/edit-incident`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      });
 
-      setSuccess('Incident updated successfully');
+      console.log('Update response status:', response.status);
 
-      // Close modal after short delay to show success message
-      setTimeout(() => {
-        onSave();
-      }, 1500);
+      if (response.ok) {
+        const responseText = await response.text();
+        console.log('Update response:', responseText);
+
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          result = { success: true };
+        }
+
+        if (result.success !== false) {
+          setSuccess('Incident updated successfully');
+          setTimeout(() => {
+            onSave(); // Simplified callback
+          }, 1500);
+        } else {
+          throw new Error(result.message || 'Update failed');
+        }
+      } else {
+        const errorText = await response.text();
+        console.log('Update error response:', errorText);
+        throw new Error(`Update request failed: ${response.status} - ${errorText}`);
+      }
 
     } catch (error: any) {
       console.error('Error updating incident:', error);
@@ -402,13 +663,132 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     setSuccess(null);
   };
 
+  const getSLAColor = () => {
+    if (slaStatus.percentage >= 100) return 'danger';
+    if (slaStatus.percentage >= 80) return 'warning';
+    return 'success';
+  };
+
+  // Helper functions to get names from IDs
+  const getCategoryName = (id: string) => {
+    const category = masterData.categories.find(cat => cat.id === parseInt(id));
+    return category?.name || '';
+  };
+
+  const getSubCategoryName = (id: string) => {
+    const subCat = masterData.subCategories.find(sub => sub.id === parseInt(id));
+    return subCat?.name || '';
+  };
+
+  const getContactTypeName = (id: string) => {
+    const contactType = masterData.contactTypes.find(ct => ct.id === parseInt(id));
+    return contactType?.name || '';
+  };
+
+  const getImpactName = (id: string) => {
+    const impact = masterData.impacts.find(imp => imp.id === parseInt(id));
+    return impact?.name || '';
+  };
+
+  const getUrgencyName = (id: string) => {
+    const urgency = masterData.urgencies.find(urg => urg.id === parseInt(id));
+    return urgency?.name || '';
+  };
+
+  const getIncidentStateName = (id: string) => {
+    const state = masterData.incidentStates.find(state => state.id === parseInt(id));
+    return state?.name || '';
+  };
+
+  const getAssetName = (id: string) => {
+    const asset = masterData.assets.find(asset => asset.id === parseInt(id));
+    return asset?.name || '';
+  };
+
+  const getSiteName = (id: string) => {
+    const site = masterData.sites.find(site => site.id === parseInt(id));
+    return site?.name || '';
+  };
+
+  // Action helper functions
+  const getActionTypeName = (id: string) => {
+    const actionType = masterData.actionTypes.find(type => type.id === parseInt(id));
+    return actionType?.name || `Type ${id}`;
+  };
+
+  const getActionStatusName = (id: string) => {
+    const actionStatus = masterData.actionStatuses.find(status => status.id === parseInt(id));
+    return actionStatus?.name || `Status ${id}`;
+  };
+
+  const getActionPriorityName = (id: string) => {
+    const actionPriority = masterData.actionPriorities.find(priority => priority.id === parseInt(id));
+    return actionPriority?.name || `Priority ${id}`;
+  };
+
+  const getActionStatusColor = (id: string) => {
+    // UNCOMMENT WHEN ACTION STATUS API IS READY - MAP BASED ON ACTUAL STATUS NAMES
+    // const actionStatus = masterData.actionStatuses.find(status => status.id === parseInt(id));
+    // if (actionStatus?.name?.toLowerCase().includes('completed')) return 'success';
+    // if (actionStatus?.name?.toLowerCase().includes('progress')) return 'warning';
+    // if (actionStatus?.name?.toLowerCase().includes('hold')) return 'secondary';
+    // return 'info';
+
+    // TEMPORARY - REMOVE WHEN API IS READY
+    return 'info';
+  };
+
+  // Show loading state while master data is loading
+  if (masterData.loading) {
+    return (
+      <Modal isOpen={true} toggle={onClose} size="xl" style={{ maxWidth: '95vw', width: '95vw' }}>
+        <ModalHeader toggle={onClose}>
+          Edit Incident - {incident.incident_no || incident.number || 'N/A'}
+        </ModalHeader>
+        <ModalBody style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading form data...</span>
+            </div>
+            <p className="mt-2 text-muted">Loading incident details and options...</p>
+          </div>
+        </ModalBody>
+      </Modal>
+    );
+  }
+
+  // Show error state if master data failed to load
+  if (masterData.error) {
+    return (
+      <Modal isOpen={true} toggle={onClose} size="xl" style={{ maxWidth: '95vw', width: '95vw' }}>
+        <ModalHeader toggle={onClose}>
+          Edit Incident - {incident.incident_no || incident.number || 'N/A'}
+        </ModalHeader>
+        <ModalBody style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+          <Alert color="danger">
+            <strong>Error loading form data:</strong> {masterData.error}
+            <div className="mt-2">
+              <Button color="danger" size="sm" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </div>
+          </Alert>
+        </ModalBody>
+      </Modal>
+    );
+  }
+
   return (
     <Modal isOpen={true} toggle={onClose} size="xl" style={{ maxWidth: '95vw', width: '95vw' }}>
       <ModalHeader toggle={onClose}>
-        Edit Incident - {incident.number}
+        Edit Incident - {incident.incident_no || incident.number || 'N/A'}
+        {currentUser && (
+          <div className="ms-3">
+            <small className="text-muted">Editing as: {currentUser.name} (ID: {currentUser.id})</small>
+          </div>
+        )}
       </ModalHeader>
       <ModalBody style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-        {/* Success/Error Messages */}
         {error && (
           <Alert color="danger" toggle={clearMessages}>
             <strong>Error:</strong> {error}
@@ -420,7 +800,6 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
           </Alert>
         )}
 
-        {/* Status Flow Visualization */}
         {hasAdvancedEditPermissions() && (
           <div className="mb-4">
             <h6 className="text-dark mb-3">Incident State Flow</h6>
@@ -484,7 +863,6 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
           </div>
         )}
 
-        {/* Navigation Tabs */}
         {hasAdvancedEditPermissions() ? (
           <Nav tabs className="mb-4">
             <NavItem>
@@ -502,7 +880,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                 onClick={() => setActiveTab('evidence')}
                 style={{ cursor: 'pointer' }}
               >
-                Evidence
+                Evidence ({uploadedImages.length + ammoniaReadings.length})
               </NavLink>
             </NavItem>
             <NavItem>
@@ -511,7 +889,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                 onClick={() => setActiveTab('action')}
                 style={{ cursor: 'pointer' }}
               >
-                Action
+                Actions ({actions.length})
               </NavLink>
             </NavItem>
             <NavItem>
@@ -520,14 +898,13 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                 onClick={() => setActiveTab('knowledge')}
                 style={{ cursor: 'pointer' }}
               >
-                Knowledge Base
+                Knowledge Base ({similarIncidents.length})
               </NavLink>
             </NavItem>
           </Nav>
         ) : null}
 
         <TabContent activeTab={hasAdvancedEditPermissions() ? activeTab : 'details'}>
-          {/* Incident Details Tab */}
           <TabPane tabId="details">
             {hasAdvancedEditPermissions() ? (
               <>
@@ -540,7 +917,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="text"
                           id="incidentNo"
-                          value={incident.number}
+                          value={incident.incident_no || incident.number || 'N/A'}
                           disabled
                           className="bg-light"
                         />
@@ -552,15 +929,13 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="contactType"
-                          value={advancedEditForm.contactType}
-                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, contactType: e.target.value})}
+                          value={advancedEditForm.contactTypeId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, contactTypeId: e.target.value})}
                         >
                           <option value="">Select Contact Type</option>
-                          <option value="SelfService">SelfService</option>
-                          <option value="Phone">Phone</option>
-                          <option value="Email">Email</option>
-                          <option value="Walk-in">Walk-in</option>
-                          <option value="Walking">Walking</option>
+                          {masterData.contactTypes.map(type => (
+                            <option key={type.id} value={type.id}>{type.name}</option>
+                          ))}
                         </Input>
                       </FormGroup>
                     </Col>
@@ -573,19 +948,12 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="category"
-                          value={advancedEditForm.category}
-                          onChange={(e) => {
-                            const newCategory = e.target.value;
-                            setAdvancedEditForm({
-                              ...advancedEditForm,
-                              category: newCategory,
-                              subCategory: ''
-                            });
-                          }}
+                          value={advancedEditForm.categoryId}
+                          onChange={(e) => handleCategoryChange(e.target.value)}
                         >
                           <option value="">Select Category</option>
-                          {categoryOptions.map(category => (
-                            <option key={category.id} value={category.name}>{category.name}</option>
+                          {masterData.categories.map(category => (
+                            <option key={category.id} value={category.id}>{category.name}</option>
                           ))}
                         </Input>
                       </FormGroup>
@@ -596,13 +964,48 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="subCategory"
-                          value={advancedEditForm.subCategory}
-                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, subCategory: e.target.value})}
-                          disabled={!advancedEditForm.category}
+                          value={advancedEditForm.subCategoryId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, subCategoryId: e.target.value})}
+                          disabled={!advancedEditForm.categoryId}
                         >
                           <option value="">Select Sub Category</option>
-                          {getSubCategoryOptions(advancedEditForm.category).map(subCat => (
-                            <option key={subCat.id} value={subCat.name}>{subCat.name}</option>
+                          {masterData.subCategories.map(subCat => (
+                            <option key={subCat.id} value={subCat.id}>{subCat.name}</option>
+                          ))}
+                        </Input>
+                      </FormGroup>
+                    </Col>
+                  </Row>
+
+                  <Row>
+                    <Col md={6}>
+                      <FormGroup>
+                        <Label for="asset" className="text-dark">Asset</Label>
+                        <Input
+                          type="select"
+                          id="asset"
+                          value={advancedEditForm.assetId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, assetId: e.target.value})}
+                        >
+                          <option value="">Select Asset</option>
+                          {masterData.assets.map(asset => (
+                            <option key={asset.id} value={asset.id}>{asset.name}</option>
+                          ))}
+                        </Input>
+                      </FormGroup>
+                    </Col>
+                    <Col md={6}>
+                      <FormGroup>
+                        <Label for="site" className="text-dark">Site</Label>
+                        <Input
+                          type="select"
+                          id="site"
+                          value={advancedEditForm.siteId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, siteId: e.target.value})}
+                        >
+                          <option value="">Select Site</option>
+                          {masterData.sites.map(site => (
+                            <option key={site.id} value={site.id}>{site.name}</option>
                           ))}
                         </Input>
                       </FormGroup>
@@ -643,13 +1046,13 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="impact"
-                          value={advancedEditForm.impact}
-                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, impact: e.target.value})}
+                          value={advancedEditForm.impactId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, impactId: e.target.value})}
                         >
                           <option value="">Select Impact</option>
-                          <option value="Significant">Significant</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="Low">Low</option>
+                          {masterData.impacts.map(impact => (
+                            <option key={impact.id} value={impact.id}>{impact.name}</option>
+                          ))}
                         </Input>
                       </FormGroup>
                     </Col>
@@ -659,13 +1062,13 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="urgency"
-                          value={advancedEditForm.urgency}
-                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, urgency: e.target.value})}
+                          value={advancedEditForm.urgencyId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, urgencyId: e.target.value})}
                         >
                           <option value="">Select Urgency</option>
-                          <option value="High">High</option>
-                          <option value="Medium">Medium</option>
-                          <option value="Low">Low</option>
+                          {masterData.urgencies.map(urgency => (
+                            <option key={urgency.id} value={urgency.id}>{urgency.name}</option>
+                          ))}
                         </Input>
                       </FormGroup>
                     </Col>
@@ -678,13 +1081,13 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <Input
                           type="select"
                           id="incidentState"
-                          value={advancedEditForm.status}
-                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, status: e.target.value})}
+                          value={advancedEditForm.statusId}
+                          onChange={(e) => setAdvancedEditForm({...advancedEditForm, statusId: e.target.value})}
                         >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="resolved">Resolved</option>
-                          <option value="closed">Closed</option>
+                          <option value="">Select Incident State</option>
+                          {masterData.incidentStates.map(state => (
+                            <option key={state.id} value={state.id}>{state.name}</option>
+                          ))}
                         </Input>
                       </FormGroup>
                     </Col>
@@ -736,14 +1139,63 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                 </Form>
               </>
             )}
+
+            <hr />
+
+            <div className="mb-3">
+              <h6 className="text-dark">SLA Status</h6>
+              <div className="p-3 bg-light rounded">
+                <Row className="gx-4 gy-2 align-items-start">
+                  <Col md={3} className="text-dark">
+                    <strong>SLA Name:</strong>
+                    <div className="text-primary">{slaStatus.name || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Type:</strong>
+                    <div className="text-muted">{slaStatus.type || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Target:</strong>
+                    <div className="text-muted">{slaStatus.target || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Stage:</strong>
+                    <div className="text-muted">{slaStatus.stage || 'Not specified'}</div>
+                  </Col>
+                </Row>
+                <Row className="gx-4 gy-2 align-items-start mt-2">
+                  <Col md={3} className="text-dark">
+                    <strong>Time Left:</strong>
+                    <div className="text-info">{slaStatus.businessTimeLeft || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Time Elapsed:</strong>
+                    <div className="text-warning">{slaStatus.businessTimeElapsed || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Start Time:</strong>
+                    <div className="text-muted">{slaStatus.startTime || 'Not specified'}</div>
+                  </Col>
+                  <Col md={3} className="text-dark">
+                    <strong>Progress:</strong>
+                    <div className="progress mt-1" style={{ height: '20px' }}>
+                      <div
+                        className={`progress-bar bg-${getSLAColor()}`}
+                        style={{ width: `${Math.min(slaStatus.percentage, 100)}%` }}
+                      >
+                        {slaStatus.percentage}%
+                      </div>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+            </div>
           </TabPane>
 
-          {/* Evidence Tab */}
           {hasAdvancedEditPermissions() && (
             <TabPane tabId="evidence">
               <h5 className="text-dark mb-4">Evidence Collection</h5>
 
-              {/* Photo Upload Section */}
               <div className="mb-4">
                 <h6 className="text-dark">Upload Photos</h6>
                 <FormGroup>
@@ -798,7 +1250,6 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
 
               <hr />
 
-              {/* Ammonia Reading Section */}
               <div className="mb-4">
                 <h6 className="text-dark">Ammonia Reading</h6>
                 <Row>
@@ -810,8 +1261,8 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         value={newAmmoniaReading.type}
                         onChange={(e) => setNewAmmoniaReading({...newAmmoniaReading, type: e.target.value})}
                       >
-                        <option value="Upstream">Upstream</option>
-                        <option value="Downstream">Downstream</option>
+                        <option value="downstream">Downstream</option>
+                        <option value="upstream">Upstream</option>
                       </Input>
                     </FormGroup>
                   </Col>
@@ -831,6 +1282,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                       <div className="d-flex gap-2">
                         <Input
                           type="number"
+                          step="0.01"
                           placeholder="Enter reading"
                           value={newAmmoniaReading.reading}
                           onChange={(e) => setNewAmmoniaReading({...newAmmoniaReading, reading: e.target.value})}
@@ -854,14 +1306,20 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         <tr>
                           <th>Type</th>
                           <th>Reading</th>
+                          <th>Unit</th>
                           <th>Date</th>
                         </tr>
                       </thead>
                       <tbody>
                         {ammoniaReadings.map((reading) => (
                           <tr key={reading.id}>
-                            <td>{reading.type}</td>
+                            <td>
+                              <Badge color={reading.type === 'downstream' ? 'info' : 'warning'}>
+                                {reading.type}
+                              </Badge>
+                            </td>
                             <td>{reading.reading}</td>
+                            <td>{reading.unit}</td>
                             <td>{reading.date}</td>
                           </tr>
                         ))}
@@ -873,7 +1331,6 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
             </TabPane>
           )}
 
-          {/* Action Tab */}
           {hasAdvancedEditPermissions() && (
             <TabPane tabId="action">
               <h5 className="text-dark mb-4">Action Management</h5>
@@ -889,10 +1346,12 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         onChange={(e) => setNewAction({...newAction, actionType: e.target.value})}
                       >
                         <option value="">Select Action Type</option>
-                        <option value="Investigation">Investigation</option>
-                        <option value="Resolution">Resolution</option>
-                        <option value="Follow-up">Follow-up</option>
-                        <option value="Escalation">Escalation</option>
+                        <option value="1">Investigation</option>
+                        <option value="2">Resolution</option>
+                        <option value="3">Follow-up</option>
+                        <option value="4">Escalation</option>
+                        <option value="5">Site Visit</option>
+                        <option value="6">Customer Contact</option>
                       </Input>
                     </FormGroup>
                   </Col>
@@ -905,10 +1364,11 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         onChange={(e) => setNewAction({...newAction, actionStatus: e.target.value})}
                       >
                         <option value="">Select Status</option>
-                        <option value="Open">Open</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Cancelled">Cancelled</option>
+                        <option value="1">Open</option>
+                        <option value="2">In Progress</option>
+                        <option value="3">Completed</option>
+                        <option value="4">Cancelled</option>
+                        <option value="5">On Hold</option>
                       </Input>
                     </FormGroup>
                   </Col>
@@ -924,9 +1384,9 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         onChange={(e) => setNewAction({...newAction, priority: e.target.value})}
                       >
                         <option value="">Select Priority</option>
-                        <option value="High">High</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Low">Low</option>
+                        <option value="1">High</option>
+                        <option value="2">Medium</option>
+                        <option value="3">Low</option>
                       </Input>
                     </FormGroup>
                   </Col>
@@ -987,7 +1447,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                           <th>Status</th>
                           <th>Priority</th>
                           <th>Details</th>
-                          <th>Created</th>
+                          <th>Due Date</th>
                           <th>Complete</th>
                         </tr>
                       </thead>
@@ -995,15 +1455,20 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                         {actions.map((action) => (
                           <tr key={action.id}>
                             <td><small>{action.id}</small></td>
-                            <td>{action.type}</td>
                             <td>
-                              <Badge color={action.status === 'Completed' ? 'success' : action.status === 'In Progress' ? 'warning' : 'secondary'}>
-                                {action.status}
+                              {getActionTypeName(action.action_type_id)}
+                            </td>
+                            <td>
+                              <Badge color={getActionStatusColor(action.action_status_id)}>
+                                {getActionStatusName(action.action_status_id)}
                               </Badge>
                             </td>
                             <td>
-                              <Badge color={action.priority === 'High' ? 'danger' : action.priority === 'Medium' ? 'warning' : 'info'}>
-                                {action.priority}
+                              <Badge color={
+                                action.action_priority_id === '1' ? 'danger' :
+                                action.action_priority_id === '2' ? 'warning' : 'info'
+                              }>
+                                {getActionPriorityName(action.action_priority_id)}
                               </Badge>
                             </td>
                             <td>
@@ -1011,7 +1476,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
                                 {action.detail}
                               </div>
                             </td>
-                            <td><small>{action.createdAt}</small></td>
+                            <td><small>{action.raised}</small></td>
                             <td>
                               <Badge color={action.complete ? 'success' : 'warning'}>
                                 {action.complete ? 'Yes' : 'No'}
@@ -1027,81 +1492,27 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
             </TabPane>
           )}
 
-          {/* Knowledge Base Tab */}
           {hasAdvancedEditPermissions() && (
             <TabPane tabId="knowledge">
               <h5 className="text-dark mb-4">Knowledge Base</h5>
               <p className="text-muted mb-4">
-                Similar resolved incidents that may help with this case. In production, this data will be loaded from the API.
+                Similar resolved incidents that may help with this case.
               </p>
 
-              {similarIncidents.length > 0 ? (
-                <div className="table-responsive">
-                  <Table>
-                    <thead>
-                      <tr>
-                        <th>Incident Number</th>
-                        <th>Description</th>
-                        <th>Category</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                        <th>Resolution Date</th>
-                        <th>Solution</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {similarIncidents.map((similarIncident) => (
-                        <tr key={similarIncident.id}>
-                          <td>
-                            <span className="fw-medium text-primary">{similarIncident.number}</span>
-                          </td>
-                          <td>
-                            <div>
-                              <div className="fw-medium">{similarIncident.shortDescription}</div>
-                              <small className="text-muted">{similarIncident.category}</small>
-                            </div>
-                          </td>
-                          <td>{similarIncident.category}</td>
-                          <td>
-                            <Badge style={{ backgroundColor: getStatusColor(similarIncident.status), color: 'white' }}>
-                              {similarIncident.status.replace('_', ' ')}
-                            </Badge>
-                          </td>
-                          <td>
-                            <Badge style={{ backgroundColor: getPriorityColor(similarIncident.priority), color: 'white' }}>
-                              {similarIncident.priority}
-                            </Badge>
-                          </td>
-                          <td>
-                            <small>{formatDate(similarIncident.createdAt).split(',')[0]}</small>
-                          </td>
-                          <td>
-                            <div style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {similarIncident.description}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+              <div className="text-center py-5">
+                <div className="mb-3">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14,2 14,8 20,8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
                 </div>
-              ) : (
-                <div className="text-center py-5">
-                  <div className="mb-3">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14,2 14,8 20,8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                  </div>
-                  <h6 className="text-muted">No Similar Incidents Found</h6>
-                  <p className="text-muted">
-                    Similar incidents will be loaded from the knowledge base API when available.
-                    This helps handlers find solutions from previously resolved cases.
-                  </p>
-                </div>
-              )}
+                <h6 className="text-muted">Knowledge Base Coming Soon</h6>
+                <p className="text-muted">
+                  Knowledge base functionality will be available once the API endpoint is ready.
+                </p>
+              </div>
             </TabPane>
           )}
         </TabContent>
