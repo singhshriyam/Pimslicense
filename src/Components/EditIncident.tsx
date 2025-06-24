@@ -149,22 +149,12 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     setMasterData(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      // UNCOMMENT THE LINES BELOW WHEN APIs ARE READY
-      // const [categoriesRes, contactTypesRes, impactsRes, urgenciesRes, incidentStatesRes, assetsRes, sitesRes, actionTypesRes, actionStatusesRes, actionPrioritiesRes] = await Promise.all([
-      //   fetchCategories(),
-      //   fetchContactTypes(),
-      //   fetchImpacts(),
-      //   fetchUrgencies(),
-      //   fetchIncidentStates(),
-      //   fetchAssets(),
-      //   fetchSites(),
-      //   fetchActionTypes(),
-      //   fetchActionStatuses(),
-      //   fetchActionPriorities()
-      // ]);
+      console.log('🔄 Loading master data...');
 
-      // CURRENTLY WORKING APIs - UNCOMMENT AS NEEDED
-      const [impactsRes, urgenciesRes, incidentStatesRes, assetsRes, sitesRes] = await Promise.all([
+      // Load all master data in parallel
+      const [categoriesRes, contactTypesRes, impactsRes, urgenciesRes, incidentStatesRes, assetsRes, sitesRes] = await Promise.all([
+        fetchCategories(),
+        fetchContactTypes(),
         fetchImpacts(),
         fetchUrgencies(),
         fetchIncidentStates(),
@@ -172,29 +162,35 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
         fetchSites()
       ]);
 
+      console.log('✅ Master data loaded:', {
+        categories: categoriesRes.data?.length || 0,
+        contactTypes: contactTypesRes.data?.length || 0,
+        impacts: impactsRes.data?.length || 0,
+        urgencies: urgenciesRes.data?.length || 0,
+        incidentStates: incidentStatesRes.data?.length || 0,
+        assets: assetsRes.data?.length || 0,
+        sites: sitesRes.data?.length || 0
+      });
+
       setMasterData(prev => ({
         ...prev,
-        // categories: categoriesRes.data || [], // UNCOMMENT WHEN API IS READY
-        categories: [], // EMPTY UNTIL API IS READY
-        // contactTypes: contactTypesRes.data || [], // UNCOMMENT WHEN API IS READY
-        contactTypes: [], // EMPTY UNTIL API IS READY
+        categories: categoriesRes.data || [],
+        contactTypes: contactTypesRes.data || [],
         impacts: impactsRes.data || [],
         urgencies: urgenciesRes.data || [],
         incidentStates: incidentStatesRes.data || [],
         assets: assetsRes.data || [],
         sites: sitesRes.data || [],
-        // actionTypes: actionTypesRes.data || [], // UNCOMMENT WHEN API IS READY
-        actionTypes: [], // EMPTY UNTIL API IS READY
-        // actionStatuses: actionStatusesRes.data || [], // UNCOMMENT WHEN API IS READY
-        actionStatuses: [], // EMPTY UNTIL API IS READY
-        // actionPriorities: actionPrioritiesRes.data || [], // UNCOMMENT WHEN API IS READY
-        actionPriorities: [], // EMPTY UNTIL API IS READY
+        // Initialize empty arrays for action-related data (to be implemented later)
+        actionTypes: [],
+        actionStatuses: [],
+        actionPriorities: [],
         loading: false,
         error: null
       }));
 
     } catch (error: any) {
-      console.error('Error loading master data:', error);
+      console.error('❌ Error loading master data:', error);
       setMasterData(prev => ({
         ...prev,
         loading: false,
@@ -210,15 +206,16 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     }
 
     try {
-      // UNCOMMENT WHEN SUBCATEGORIES API IS READY
-      // const response = await fetchSubcategories(categoryId);
-      // setMasterData(prev => ({ ...prev, subCategories: response.data || [] }));
-      // console.log(`Loaded subcategories for category ${categoryId}:`, response.data);
+      console.log('🔄 Loading subcategories for category:', categoryId);
+      const response = await fetchSubcategories(categoryId);
+      console.log('✅ Subcategories loaded:', response.data);
 
-      // TEMPORARY - REMOVE WHEN API IS READY
-      setMasterData(prev => ({ ...prev, subCategories: [] }));
-    } catch (error) {
-      console.error('Error loading subcategories from API:', error);
+      setMasterData(prev => ({
+        ...prev,
+        subCategories: response.data || []
+      }));
+    } catch (error: any) {
+      console.error('❌ Error loading subcategories:', error);
       setMasterData(prev => ({ ...prev, subCategories: [] }));
     }
   };
@@ -315,17 +312,28 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
     const loadIncidentData = async () => {
       try {
         setLoading(true);
+        console.log('🔄 Loading incident data for:', incident);
 
         // Load master data first
         await loadMasterData();
 
         if (hasAdvancedEditPermissions()) {
-          // Populate advanced form with existing incident data
+          // FIXED: Populate advanced form with ACTUAL incident data
+          const categoryId = incident.category_id?.toString() || incident.category?.id?.toString() || '';
+          const subCategoryId = incident.subcategory_id?.toString() || incident.subcategory?.id?.toString() || '';
+
+          console.log('📝 Setting form data:', {
+            categoryId,
+            subCategoryId,
+            shortDescription: incident.short_description,
+            description: incident.description
+          });
+
           setAdvancedEditForm({
             shortDescription: incident.short_description || '',
             description: incident.description || '',
-            categoryId: incident.category_id?.toString() || incident.category?.id?.toString() || '',
-            subCategoryId: incident.subcategory_id?.toString() || incident.subcategory?.id?.toString() || '',
+            categoryId: categoryId,
+            subCategoryId: subCategoryId,
             contactTypeId: incident.contact_type_id?.toString() || incident.contact_type?.id?.toString() || '',
             impactId: incident.impact_id?.toString() || incident.impact?.id?.toString() || '',
             urgencyId: incident.urgency_id?.toString() || incident.urgency?.id?.toString() || '',
@@ -337,7 +345,6 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
           });
 
           // Load subcategories if category is selected
-          const categoryId = incident.category_id?.toString() || incident.category?.id?.toString();
           if (categoryId) {
             await loadSubCategories(categoryId);
           }
@@ -356,7 +363,7 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
         }
 
       } catch (error: any) {
-        console.error('Error loading incident data:', error);
+        console.error('❌ Error loading incident data:', error);
         setError('Failed to load incident data');
       } finally {
         setLoading(false);
@@ -367,10 +374,11 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
   }, [incident]);
 
   const handleCategoryChange = async (categoryId: string) => {
+    console.log('🔄 Category changed to:', categoryId);
     setAdvancedEditForm(prev => ({
       ...prev,
       categoryId,
-      subCategoryId: ''
+      subCategoryId: '' // Reset subcategory when category changes
     }));
     await loadSubCategories(categoryId);
   };
@@ -613,21 +621,25 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
         };
       }
 
-      console.log('Sending update request:', updateData);
+      console.log('📤 Sending update request:', updateData);
 
+      // FIXED: Added proper authentication headers
+      const authToken = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE}/incident-handeler/edit-incident`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/json'
         },
         body: JSON.stringify(updateData)
       });
 
-      console.log('Update response status:', response.status);
+      console.log('📨 Update response status:', response.status);
 
       if (response.ok) {
         const responseText = await response.text();
-        console.log('Update response:', responseText);
+        console.log('📨 Update response:', responseText);
 
         let result;
         try {
@@ -639,19 +651,19 @@ const EditIncident: React.FC<EditIncidentProps> = ({ incident, userType, onClose
         if (result.success !== false) {
           setSuccess('Incident updated successfully');
           setTimeout(() => {
-            onSave(); // Simplified callback
+            onSave(); // Trigger parent refresh
           }, 1500);
         } else {
           throw new Error(result.message || 'Update failed');
         }
       } else {
         const errorText = await response.text();
-        console.log('Update error response:', errorText);
+        console.log('❌ Update error response:', errorText);
         throw new Error(`Update request failed: ${response.status} - ${errorText}`);
       }
 
     } catch (error: any) {
-      console.error('Error updating incident:', error);
+      console.error('❌ Error updating incident:', error);
       setError(error.message || 'Failed to update incident');
     } finally {
       setLoading(false);

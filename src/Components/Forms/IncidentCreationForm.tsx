@@ -77,23 +77,12 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
   });
 
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showCancelMessage, setShowCancelMessage] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [loadingAddress, setLoadingAddress] = useState(false);
-  const [loadingLocation, setLoadingLocation] = useState(false);
+  const [subcategoriesLoading, setSubcategoriesLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  const [locationStatus, setLocationStatus] = useState<string>('');
-  const [spellCheckResults, setSpellCheckResults] = useState<any[]>([]);
-  const [isSpellChecking, setIsSpellChecking] = useState(false);
 
-  // AI Description Generation states
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  // Backend data states
   const [masterData, setMasterData] = useState({
     categories: [] as Array<{id: number, name: string}>,
     subcategories: [] as Array<{id: number, name: string, category_id: number}>,
@@ -106,14 +95,12 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     error: null as string | null
   });
 
-  // Load master data from backend
   useEffect(() => {
     const loadMasterData = async () => {
       setMasterData(prev => ({ ...prev, loading: true, error: null }));
 
       try {
-        // PRODUCTION: Load all working APIs with proper authentication
-        console.log('Loading all master data...');
+        console.log('🔄 Loading master data for incident creation...');
 
         const [categoriesRes, contactTypesRes, impactsRes, urgenciesRes, assetsRes, sitesRes] = await Promise.all([
           fetchCategories(),
@@ -124,60 +111,41 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
           fetchSites()
         ]);
 
-        // Validate API responses
-        if (!categoriesRes || !categoriesRes.data || categoriesRes.data.length === 0) {
-          throw new Error('Categories API returned no data');
-        }
-        if (!contactTypesRes || !contactTypesRes.data || contactTypesRes.data.length === 0) {
-          throw new Error('Contact Types API returned no data');
-        }
-        if (!impactsRes || !impactsRes.data || impactsRes.data.length === 0) {
-          throw new Error('Impacts API returned no data');
-        }
-        if (!urgenciesRes || !urgenciesRes.data || urgenciesRes.data.length === 0) {
-          throw new Error('Urgencies API returned no data');
-        }
-        if (!assetsRes || !assetsRes.data || assetsRes.data.length === 0) {
-          throw new Error('Assets API returned no data');
-        }
-        if (!sitesRes || !sitesRes.data || sitesRes.data.length === 0) {
-          throw new Error('Sites API returned no data');
-        }
+        console.log('✅ Master data loaded:', {
+          categories: categoriesRes.data?.length || 0,
+          contactTypes: contactTypesRes.data?.length || 0,
+          impacts: impactsRes.data?.length || 0,
+          urgencies: urgenciesRes.data?.length || 0,
+          assets: assetsRes.data?.length || 0,
+          sites: sitesRes.data?.length || 0
+        });
 
         setMasterData(prev => ({
           ...prev,
-          categories: categoriesRes.data,
-          contactTypes: contactTypesRes.data,
-          impacts: impactsRes.data,
-          urgencies: urgenciesRes.data,
-          assets: assetsRes.data,
-          sites: sitesRes.data,
+          categories: categoriesRes.data || [],
+          contactTypes: contactTypesRes.data || [],
+          impacts: impactsRes.data || [],
+          urgencies: urgenciesRes.data || [],
+          assets: assetsRes.data || [],
+          sites: sitesRes.data || [],
           loading: false,
           error: null
         }));
 
-        // Set default values only after successful API load
+        // Set default values for required fields
         setFormData(prev => ({
           ...prev,
-          contact_type_id: contactTypesRes.data[0]?.id?.toString() || '',
-          impact_id: impactsRes.data[0]?.id?.toString() || '',
-          urgency_id: urgenciesRes.data[0]?.id?.toString() || ''
+          contact_type_id: contactTypesRes.data?.[0]?.id?.toString() || '',
+          impact_id: impactsRes.data?.[0]?.id?.toString() || '',
+          urgency_id: urgenciesRes.data?.[0]?.id?.toString() || ''
         }));
 
-        console.log('Form initialized with default values');
-
       } catch (error: any) {
-        console.error('Error loading master data:', error);
+        console.error('❌ Error loading master data:', error);
         setMasterData(prev => ({
           ...prev,
-          categories: [],
-          contactTypes: [],
-          impacts: [],
-          urgencies: [],
-          assets: [],
-          sites: [],
           loading: false,
-          error: error.message || 'Failed to load form data. Please check your connection and try again.'
+          error: error.message || 'Failed to load form data'
         }));
       }
     };
@@ -185,264 +153,56 @@ const IncidentCreationForm: React.FC<IncidentCreationFormProps> = ({
     loadMasterData();
   }, []);
 
-  // Load subcategories when category changes - PRODUCTION API
   const loadSubcategories = async (categoryId: string) => {
+    console.log('🔄 loadSubcategories called with categoryId:', categoryId);
+
     if (!categoryId) {
+      console.log('❌ No categoryId provided, clearing subcategories');
       setMasterData(prev => ({ ...prev, subcategories: [] }));
+      setFormData(prev => ({ ...prev, subcategory_id: '' }));
       return;
     }
 
+    setSubcategoriesLoading(true);
     try {
+      console.log('📡 Calling fetchSubcategories API...');
       const subcategoriesRes = await fetchSubcategories(categoryId);
-
-      if (!subcategoriesRes || !subcategoriesRes.data) {
-        throw new Error('Subcategories API returned no data');
-      }
+      console.log('✅ Subcategories response:', subcategoriesRes);
 
       setMasterData(prev => ({
         ...prev,
-        subcategories: subcategoriesRes.data
+        subcategories: subcategoriesRes.data || []
       }));
+
+      console.log('✅ Subcategories loaded successfully:', subcategoriesRes.data);
     } catch (error: any) {
-      console.error(`Error loading subcategories for category ${categoryId}:`, error);
+      console.error('❌ Error loading subcategories:', error);
       setMasterData(prev => ({ ...prev, subcategories: [] }));
       setError(`Failed to load subcategories: ${error.message}`);
-    }
-  };
-
-  // Helper functions
-  const debounce = (func: Function, wait: number) => {
-    let timeout: NodeJS.Timeout;
-    return function executedFunction(...args: any[]) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  };
-
-  const checkSpelling = async (text: string) => {
-    if (!text || text.length < 10) {
-      setSpellCheckResults([]);
-      return;
-    }
-
-    setIsSpellChecking(true);
-    try {
-      const response = await fetch('https://api.languagetool.org/v2/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ text: text, language: 'en-US' })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSpellCheckResults(data.matches || []);
-      } else {
-        setSpellCheckResults([]);
-      }
-    } catch (error) {
-      setSpellCheckResults([]);
     } finally {
-      setIsSpellChecking(false);
-    }
-  };
-
-  const debouncedSpellCheck = React.useCallback(debounce((text: string) => checkSpelling(text), 1500), []);
-
-  const applySuggestion = (errorIndex: number, suggestion: string) => {
-    const error = spellCheckResults[errorIndex];
-    if (!error) return;
-
-    const currentText = formData.description;
-    const beforeError = currentText.substring(0, error.offset);
-    const afterError = currentText.substring(error.offset + error.length);
-    const newText = beforeError + suggestion + afterError;
-
-    setFormData(prev => ({ ...prev, description: newText }));
-    setTimeout(() => checkSpelling(newText), 500);
-  };
-
-  const generateAIDescriptions = async () => {
-    if (!formData.category_id || !formData.subcategory_id) {
-      setAiError('Please select both category and subcategory first.');
-      return;
-    }
-
-    setIsGeneratingAI(true);
-    setAiError(null);
-    setAiSuggestions([]);
-
-    try {
-      const categoryName = getCategoryName(formData.category_id);
-      const subcategoryName = getSubCategoryName(formData.subcategory_id);
-
-      const prompt = `You are writing incident reports for customers reporting ${subcategoryName.toLowerCase()} issues in ${categoryName.toLowerCase()} areas.
-
-Write 3 different customer complaints. Each should be 30-60 words, direct and simple.
-
-Examples of good reports:
-- "Manhole cover on my street is broken and smells terrible. Water pooling around it."
-- "Toilet keeps backing up and overflowing. Need urgent help."
-- "Strong sewage smell from drain in my garden. Getting worse each day."
-
-Write 3 similar reports for ${subcategoryName.toLowerCase()} problems. Separate each with |||
-
-Just write the 3 reports, nothing else:`;
-
-      const response = await fetch('/api/generate-description', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-
-      if (!response.ok) {
-        throw new Error(`AI service error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      let descriptions: string[] = [];
-
-      if (data.content) {
-        descriptions = data.content.split('|||')
-          .map((desc: string) => desc.trim())
-          .filter((desc: string) => desc.length > 20);
-      }
-
-      if (descriptions.length === 0) {
-        throw new Error('No valid descriptions generated');
-      }
-
-      setAiSuggestions(descriptions);
-
-    } catch (error) {
-      setAiError('AI service is currently unavailable. Please write your description manually.');
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
-
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationStatus('Geolocation is not supported by this browser.');
-      return;
-    }
-
-    setLoadingLocation(true);
-    setLocationStatus('Getting your location...');
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude = position.coords.latitude.toString();
-        const longitude = position.coords.longitude.toString();
-
-        setFormData(prev => ({ ...prev, latitude, longitude }));
-        setLocationStatus(`Location captured: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
-        setLoadingLocation(false);
-        reverseGeocode(latitude, longitude);
-      },
-      (error) => {
-        let errorMessage = 'Unable to get location: ';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += 'Location access denied by user.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information unavailable.';
-            break;
-          case error.TIMEOUT:
-            errorMessage += 'Location request timed out.';
-            break;
-          default:
-            errorMessage += 'An unknown error occurred.';
-            break;
-        }
-        setLocationStatus(errorMessage);
-        setLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  const reverseGeocode = async (latitude: string, longitude: string) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.display_name) {
-          const address = data.display_name;
-          const postcode = data.address?.postcode || '';
-          setFormData(prev => ({ ...prev, address: address, postcode: postcode }));
-        }
-      }
-    } catch (error) {
-      console.log('Reverse geocoding failed:', error);
-    }
-  };
-
-  const lookupPostcode = async (postcode: string) => {
-    if (!postcode || postcode.length < 5) return;
-
-    setLoadingAddress(true);
-    try {
-      const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}`);
-      const data = await response.json();
-
-      if (data.status === 200 && data.result) {
-        const result = data.result;
-        const fullAddress = [result.admin_district, result.admin_county, result.country]
-          .filter(Boolean).join(', ');
-
-        const latitude = result.latitude ? result.latitude.toString() : '';
-        const longitude = result.longitude ? result.longitude.toString() : '';
-
-        setFormData(prev => ({ ...prev, address: fullAddress, latitude, longitude }));
-
-        if (latitude && longitude) {
-          setLocationStatus(`Location from postcode: ${latitude.substring(0, 8)}, ${longitude.substring(0, 8)}`);
-        }
-      }
-    } catch (error) {
-      // Silently fail postcode lookup
-    } finally {
-      setLoadingAddress(false);
+      setSubcategoriesLoading(false);
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
+    console.log('📝 Input changed:', { name, value });
+
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
 
+      // FIXED: Handle category change properly
       if (name === 'category_id') {
-        newData.subcategory_id = '';
-        setAiSuggestions([]);
-        setAiError(null);
-        loadSubcategories(value);
-      }
-
-      if (name === 'subcategory_id') {
-        setAiSuggestions([]);
-        setAiError(null);
-      }
-
-      if (name === 'postcode' && value.length >= 5) {
-        setTimeout(() => lookupPostcode(value), 500);
-      }
-
-      if (name === 'description') {
-        debouncedSpellCheck(value);
+        console.log('🔄 Category changed, clearing subcategory and loading new ones');
+        newData.subcategory_id = ''; // Clear subcategory when category changes
+        loadSubcategories(value); // Load new subcategories
       }
 
       return newData;
     });
 
+    // Clear validation error for this field
     if (validationErrors[name]) {
       setValidationErrors(prev => {
         const newErrors = { ...prev };
@@ -461,27 +221,8 @@ Just write the 3 reports, nothing else:`;
     if (!formData.contact_type_id) errors.contact_type_id = 'Contact Type is required';
     if (!formData.impact_id) errors.impact_id = 'Impact is required';
     if (!formData.urgency_id) errors.urgency_id = 'Urgency is required';
-
-    if (!formData.short_description.trim()) {
-      errors.short_description = 'Short description is required';
-    } else if (formData.short_description.length < 10) {
-      errors.short_description = 'Short description must be at least 10 characters';
-    }
-    if (!formData.description.trim()) {
-      errors.description = 'Detailed description is required';
-    } else if (formData.description.length < 20) {
-      errors.description = 'Detailed description must be at least 20 characters';
-    }
-    if (!formData.address.trim()) {
-      errors.address = 'Address/Location is required';
-    } else if (formData.address.length < 5) {
-      errors.address = 'Address must be at least 5 characters';
-    }
-    if (!formData.postcode.trim()) {
-      errors.postcode = 'Postcode is required';
-    } else if (!/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(formData.postcode.trim())) {
-      errors.postcode = 'Please enter a valid postcode';
-    }
+    if (!formData.short_description.trim()) errors.short_description = 'Short description is required';
+    if (!formData.description.trim()) errors.description = 'Detailed description is required';
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -497,42 +238,40 @@ Just write the 3 reports, nothing else:`;
     setShowConfirmModal(false);
     setIsSubmitting(true);
     setError(null);
-    setShowCancelMessage(false);
 
     try {
       const currentUser = getCurrentUser();
-      if (!currentUser?.id) throw new Error('User not authenticated. Please log in again.');
-
-      const parsedUserId = parseInt(currentUser.id, 10);
-      if (isNaN(parsedUserId)) throw new Error('Invalid user ID. Please log in again.');
-
-      if (!formData.category_id || !formData.subcategory_id) {
-        throw new Error('Category and Sub Category are required');
-      }
+      if (!currentUser?.id) throw new Error('User not authenticated');
 
       const incidentData = {
-        user_id: parsedUserId,
+        user_id: parseInt(currentUser.id, 10),
         incidentstate_id: 1,
         urgency_id: parseInt(formData.urgency_id, 10),
         category_id: parseInt(formData.category_id, 10),
         subcategory_id: parseInt(formData.subcategory_id, 10),
         contact_type_id: parseInt(formData.contact_type_id, 10),
-        impact_id: formData.impact_id ? parseInt(formData.impact_id, 10) : null,
+        impact_id: parseInt(formData.impact_id, 10),
         short_description: formData.short_description,
         description: formData.description,
-        address: formData.address,
-        postcode: formData.postcode,
+        address: formData.address || '',
+        postcode: formData.postcode || '',
         lat: formData.latitude || null,
         lng: formData.longitude || null,
         asset_id: formData.asset_id ? parseInt(formData.asset_id, 10) : null,
         site_id: formData.site_id ? parseInt(formData.site_id, 10) : null
       };
 
+      console.log('📤 Creating incident with data:', incidentData);
+
       const createdIncident = await createIncident(incidentData);
+
+      console.log('✅ Incident created successfully:', createdIncident);
 
       if (onIncidentCreated) {
         onIncidentCreated(createdIncident);
       }
+
+      setShowSuccess(true);
 
       // Reset form
       setFormData({
@@ -552,66 +291,40 @@ Just write the 3 reports, nothing else:`;
         site_id: ''
       });
 
-      setValidationErrors({});
-      setLocationStatus('');
-      setAiSuggestions([]);
-      setAiError(null);
-      setSpellCheckResults([]);
-      setShowSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Clear subcategories since category was reset
+      setMasterData(prev => ({ ...prev, subcategories: [] }));
 
       setTimeout(() => {
         setShowSuccess(false);
         if (onSuccess) onSuccess();
-      }, 5000);
+      }, 3000);
 
     } catch (error: any) {
-      console.error('Create incident error:', error);
-      setError(error.message || 'Failed to create incident. Please try again.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      console.error('❌ Error creating incident:', error);
+      setError(error.message || 'Failed to create incident');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCancelSubmit = () => {
-    setShowConfirmModal(false);
-    setFormData({
-      caller: userName || '',
-      category_id: '',
-      subcategory_id: '',
-      short_description: '',
-      contact_type_id: masterData.contactTypes[0]?.id?.toString() || '',
-      impact_id: masterData.impacts[0]?.id?.toString() || '',
-      urgency_id: masterData.urgencies[0]?.id?.toString() || '',
-      description: '',
-      address: '',
-      postcode: '',
-      latitude: '',
-      longitude: '',
-      asset_id: '',
-      site_id: ''
+  const getSubCategoryOptions = () => {
+    console.log('🔍 getSubCategoryOptions called');
+    console.log('🔍 All subcategories:', masterData.subcategories);
+    console.log('🔍 Selected category ID:', formData.category_id);
+
+    if (!formData.category_id) {
+      console.log('🔍 No category selected, returning empty array');
+      return [];
+    }
+
+    const filtered = masterData.subcategories.filter(subcat => {
+      const categoryMatch = subcat.category_id === parseInt(formData.category_id);
+      console.log(`🔍 Subcategory "${subcat.name}" (category_id: ${subcat.category_id}) matches selected category ${formData.category_id}:`, categoryMatch);
+      return categoryMatch;
     });
 
-    setValidationErrors({});
-    setLocationStatus('');
-    setAiSuggestions([]);
-    setAiError(null);
-    setSpellCheckResults([]);
-    setShowCancelMessage(true);
-    setShowSuccess(false);
-    setError(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    setTimeout(() => setShowCancelMessage(false), 4000);
-  };
-
-  const handleCloseModal = () => setShowConfirmModal(false);
-
-  const getSubCategoryOptions = () => {
-    return masterData.subcategories.filter(subcat =>
-      subcat.category_id === parseInt(formData.category_id)
-    );
+    console.log('🔍 Filtered subcategories:', filtered);
+    return filtered;
   };
 
   const getCategoryName = (id: string) => {
@@ -639,27 +352,16 @@ Just write the 3 reports, nothing else:`;
     return contactType?.name || '';
   };
 
-  const getAssetName = (id: string) => {
-    const asset = masterData.assets.find(asset => asset.id === parseInt(id));
-    return asset?.name || '';
-  };
-
-  const getSiteName = (id: string) => {
-    const site = masterData.sites.find(site => site.id === parseInt(id));
-    return site?.name || '';
-  };
-
-  // Show loading state
   if (masterData.loading) {
     return (
-      <Container fluid className={compactMode ? "p-2" : "p-4"}>
+      <Container fluid>
         <Card>
           <CardBody>
             <div className="text-center py-5">
               <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading form data...</span>
+                <span className="visually-hidden">Loading...</span>
               </div>
-              <p className="mt-2 text-muted">Loading categories and options...</p>
+              <p className="mt-2">Loading form data...</p>
             </div>
           </CardBody>
         </Card>
@@ -667,14 +369,13 @@ Just write the 3 reports, nothing else:`;
     );
   }
 
-  // Show error state
   if (masterData.error) {
     return (
-      <Container fluid className={compactMode ? "p-2" : "p-4"}>
+      <Container fluid>
         <Card>
           <CardBody>
             <Alert color="danger">
-              <strong>Error loading form data:</strong> {masterData.error}
+              <strong>Error:</strong> {masterData.error}
               <div className="mt-2">
                 <Button color="danger" size="sm" onClick={() => window.location.reload()}>
                   Retry
@@ -688,46 +389,30 @@ Just write the 3 reports, nothing else:`;
   }
 
   return (
-    <Container fluid className={compactMode ? "p-2" : "p-4"}>
+    <Container fluid>
       <Card>
         <CardBody>
-          {!compactMode && (
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <div>
-                <h4 className="mb-0">New Incident Creation</h4>
-                <small className="text-muted">Reporting as: {userRole} ({userName})</small>
-              </div>
-              {showBackButton && onCancel && (
-                <Button color="secondary" size="sm" onClick={onCancel}>
-                  ← Back to Dashboard
-                </Button>
-              )}
+          <div className="d-flex justify-content-between align-items-center mb-4">
+            <div>
+              <h4 className="mb-0">New Incident Creation</h4>
+              <small className="text-muted">Reporting as: {userRole} ({userName})</small>
             </div>
-          )}
-
-          {compactMode && (
-            <div className="mb-3">
-              <h5 className="mb-1">Report New Incident</h5>
-              <small className="text-muted">Reporting as: {userRole}</small>
-            </div>
-          )}
+            {showBackButton && onCancel && (
+              <Button color="secondary" size="sm" onClick={onCancel}>
+                ← Back to Dashboard
+              </Button>
+            )}
+          </div>
 
           {error && (
             <Alert color="danger" className="mb-4">
-              <strong>Error!</strong> Failed to create incident: {error}
+              <strong>Error!</strong> {error}
             </Alert>
           )}
 
           {showSuccess && (
             <Alert color="success" className="mb-4">
               <strong>Success!</strong> Incident has been created successfully!
-              {!compactMode && <div className="mt-2">You can now view it in your incidents list.</div>}
-            </Alert>
-          )}
-
-          {showCancelMessage && (
-            <Alert color="warning" className="mb-4">
-              <strong>Cancelled!</strong> Incident creation was cancelled. The form has been reset.
             </Alert>
           )}
 
@@ -808,14 +493,28 @@ Just write the 3 reports, nothing else:`;
                     value={formData.subcategory_id}
                     onChange={handleInputChange}
                     required
-                    disabled={!formData.category_id}
+                    disabled={!formData.category_id || subcategoriesLoading}
                     invalid={!!validationErrors.subcategory_id}
                   >
-                    <option value="">Select Sub Category</option>
+                    <option value="">
+                      {subcategoriesLoading
+                        ? "Loading subcategories..."
+                        : !formData.category_id
+                          ? "Select Category first"
+                          : getSubCategoryOptions().length === 0
+                            ? "No subcategories available"
+                            : "Select Sub Category"}
+                    </option>
                     {getSubCategoryOptions().map(subCat => (
                       <option key={subCat.id} value={subCat.id}>{subCat.name}</option>
                     ))}
                   </Input>
+                  {subcategoriesLoading && (
+                    <small className="text-info">
+                      <i className="fa fa-spinner fa-spin me-1"></i>
+                      Loading subcategories...
+                    </small>
+                  )}
                   {validationErrors.subcategory_id && (
                     <div className="invalid-feedback">{validationErrors.subcategory_id}</div>
                   )}
@@ -834,7 +533,6 @@ Just write the 3 reports, nothing else:`;
                     value={formData.impact_id}
                     onChange={handleInputChange}
                     required
-                    disabled={userRole === 'User' || userRole === 'EndUser'}
                     invalid={!!validationErrors.impact_id}
                   >
                     <option value="">Select Impact</option>
@@ -857,7 +555,6 @@ Just write the 3 reports, nothing else:`;
                     value={formData.urgency_id}
                     onChange={handleInputChange}
                     required
-                    disabled={userRole === 'User' || userRole === 'EndUser'}
                     invalid={!!validationErrors.urgency_id}
                   >
                     <option value="">Select Urgency</option>
@@ -872,224 +569,6 @@ Just write the 3 reports, nothing else:`;
               </Col>
             </Row>
 
-            <Row>
-              <Col md={6}>
-                <FormGroup>
-                  <Label for="postcode">Postcode *</Label>
-                  <Input
-                    type="text"
-                    id="postcode"
-                    name="postcode"
-                    value={formData.postcode}
-                    onChange={handleInputChange}
-                    placeholder="e.g., SW1A 1AA"
-                    required
-                    invalid={!!validationErrors.postcode}
-                    style={{ textTransform: 'uppercase' }}
-                  />
-                  {loadingAddress && (
-                    <small className="text-info">
-                      <i className="fa fa-spinner fa-spin me-1"></i>
-                      Looking up address...
-                    </small>
-                  )}
-                  {validationErrors.postcode && (
-                    <div className="invalid-feedback">{validationErrors.postcode}</div>
-                  )}
-                </FormGroup>
-              </Col>
-              <Col md={6}>
-                <FormGroup>
-                  <Label for="address">Address/Location *</Label>
-                  <Input
-                    type="text"
-                    id="address"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="Address will be auto-filled from postcode"
-                    required
-                    invalid={!!validationErrors.address}
-                  />
-                  <small className="text-muted d-block mt-1">
-                    Address will be auto-filled from postcode
-                  </small>
-                  {validationErrors.address && (
-                    <div className="invalid-feedback">{validationErrors.address}</div>
-                  )}
-                </FormGroup>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={12}>
-                <FormGroup>
-                  <Label for="short_description">Short Description *</Label>
-                  <Input
-                    type="text"
-                    id="short_description"
-                    name="short_description"
-                    value={formData.short_description}
-                    onChange={handleInputChange}
-                    placeholder="Brief summary of the incident (min 10 characters)"
-                    required
-                    maxLength={100}
-                    invalid={!!validationErrors.short_description}
-                  />
-                  <small className="text-muted">
-                    {formData.short_description.length}/100 characters
-                  </small>
-                  {validationErrors.short_description && (
-                    <div className="invalid-feedback">{validationErrors.short_description}</div>
-                  )}
-                </FormGroup>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={12}>
-                <FormGroup>
-                  <Label for="description">
-                    Detailed Description *
-                    {isSpellChecking && (
-                      <small className="text-info ms-2">
-                        <i className="fa fa-spinner fa-spin"></i> Checking spelling...
-                      </small>
-                    )}
-                    {spellCheckResults.length > 0 && !isSpellChecking && (
-                      <small className="text-warning ms-2">
-                        <i className="fa fa-exclamation-triangle"></i> {spellCheckResults.length} spelling/grammar issue(s) found
-                      </small>
-                    )}
-                  </Label>
-
-                  {/* AI-Generated Suggestions */}
-                  {formData.category_id && formData.subcategory_id && (
-                    <div className="mb-3">
-                      <div className="d-flex align-items-center justify-content-between mb-2">
-                        <Button
-                          type="button"
-                          color="info"
-                          size="sm"
-                          onClick={generateAIDescriptions}
-                          disabled={isGeneratingAI}
-                          className="d-flex align-items-center"
-                        >
-                          {isGeneratingAI ? (
-                            <>
-                              <i className="fa fa-spinner fa-spin me-1"></i>
-                              Generating...
-                            </>
-                          ) : (
-                            <>
-                              <i className="fa fa-magic me-1"></i>
-                              Generate AI Suggestions
-                            </>
-                          )}
-                        </Button>
-                      </div>
-
-                      {aiError && (
-                        <div className="alert alert-warning alert-sm p-2 mb-2">
-                          <small>{aiError}</small>
-                        </div>
-                      )}
-
-                      {aiSuggestions.length > 0 && (
-                        <div className="border rounded p-2 bg-light">
-                          <small className="text-muted d-block mb-2">
-                            Click on any suggestion to use it as your description:
-                          </small>
-                          {aiSuggestions.map((suggestion, index) => (
-                            <div key={index} className="mb-2">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary text-start w-100"
-                                style={{
-                                  fontSize: '0.85rem',
-                                  padding: '0.5rem',
-                                  height: 'auto',
-                                  whiteSpace: 'normal',
-                                  textAlign: 'left',
-                                  lineHeight: '1.4'
-                                }}
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, description: suggestion }));
-                                  setTimeout(() => checkSpelling(suggestion), 500);
-                                }}
-                                title="Click to use this AI-generated suggestion"
-                              >
-                                <strong>Option {index + 1}:</strong><br />
-                                {suggestion}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div>
-                    <Input
-                      type="textarea"
-                      id="description"
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      placeholder="Provide detailed information about the incident, including location, severity, and any immediate actions taken (min 20 characters). Use the AI suggestions above for help!"
-                      rows={4}
-                      required
-                      invalid={!!validationErrors.description}
-                      spellCheck={true}
-                    />
-
-                    {/* Spell check suggestions */}
-                    {spellCheckResults.length > 0 && (
-                      <div className="mt-2 p-2 border rounded bg-light">
-                        <small className="text-muted d-block mb-2">
-                          <i className="fa fa-spell-check"></i> Found {spellCheckResults.length} spelling/grammar suggestion(s):
-                        </small>
-                        {spellCheckResults.slice(0, 5).map((error, index) => (
-                          <div key={index} className="mb-2 p-2 border rounded bg-white">
-                            <div className="d-flex justify-content-between align-items-start">
-                              <div>
-                                <strong className="text-danger">"{formData.description.substring(error.offset, error.offset + error.length)}"</strong>
-                                <small className="text-muted d-block">{error.message}</small>
-                              </div>
-                              <div className="ms-2">
-                                {error.replacements && error.replacements.length > 0 && (
-                                  <div className="d-flex flex-wrap gap-1">
-                                    {error.replacements.slice(0, 3).map((replacement: any, repIndex: number) => (
-                                      <Button
-                                        key={repIndex}
-                                        size="sm"
-                                        color="outline-success"
-                                        onClick={() => applySuggestion(index, replacement.value)}
-                                      >
-                                        {replacement.value}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <small className="text-muted">
-                    {formData.description.length} characters (minimum 20 required)
-                  </small>
-                  {validationErrors.description && (
-                    <div className="invalid-feedback">{validationErrors.description}</div>
-                  )}
-                </FormGroup>
-              </Col>
-            </Row>
-
-            {/* Assets and Sites */}
             <Row>
               <Col md={6}>
                 <FormGroup>
@@ -1127,38 +606,77 @@ Just write the 3 reports, nothing else:`;
               </Col>
             </Row>
 
-            {/* Location Section */}
+            <Row>
+              <Col md={6}>
+                <FormGroup>
+                  <Label for="postcode">Postcode</Label>
+                  <Input
+                    type="text"
+                    id="postcode"
+                    name="postcode"
+                    value={formData.postcode}
+                    onChange={handleInputChange}
+                    placeholder="e.g., SW1A 1AA"
+                  />
+                </FormGroup>
+              </Col>
+              <Col md={6}>
+                <FormGroup>
+                  <Label for="address">Address/Location</Label>
+                  <Input
+                    type="text"
+                    id="address"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    placeholder="Enter address or location"
+                  />
+                </FormGroup>
+              </Col>
+            </Row>
+
             <Row>
               <Col md={12}>
                 <FormGroup>
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <Label className="mb-0">Location Services</Label>
-                    <Button
-                      type="button"
-                      color="outline-primary"
-                      size="sm"
-                      onClick={getCurrentLocation}
-                      disabled={loadingLocation}
-                      className="d-flex align-items-center"
-                    >
-                      {loadingLocation ? (
-                        <>
-                          <i className="fa fa-spinner fa-spin me-1"></i>
-                          Getting Location...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fa fa-map-marker me-1"></i>
-                          Get Current Location
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  {locationStatus && (
-                    <small className={`d-block ${locationStatus.includes('error') || locationStatus.includes('Unable') ? 'text-danger' : 'text-success'}`}>
-                      <i className={`fa ${locationStatus.includes('error') || locationStatus.includes('Unable') ? 'fa-exclamation-triangle' : 'fa-check-circle'} me-1`}></i>
-                      {locationStatus}
-                    </small>
+                  <Label for="short_description">Short Description *</Label>
+                  <Input
+                    type="text"
+                    id="short_description"
+                    name="short_description"
+                    value={formData.short_description}
+                    onChange={handleInputChange}
+                    placeholder="Brief summary of the incident"
+                    required
+                    maxLength={100}
+                    invalid={!!validationErrors.short_description}
+                  />
+                  <small className="text-muted">
+                    {formData.short_description.length}/100 characters
+                  </small>
+                  {validationErrors.short_description && (
+                    <div className="invalid-feedback">{validationErrors.short_description}</div>
+                  )}
+                </FormGroup>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col md={12}>
+                <FormGroup>
+                  <Label for="description">Detailed Description *</Label>
+                  <Input
+                    type="textarea"
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    placeholder="Provide detailed information about the incident"
+                    rows={4}
+                    required
+                    invalid={!!validationErrors.description}
+                  />
+                  {validationErrors.description && (
+                    <div className="invalid-feedback">{validationErrors.description}</div>
                   )}
                 </FormGroup>
               </Col>
@@ -1196,78 +714,30 @@ Just write the 3 reports, nothing else:`;
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">
-                  <i className="fa fa-exclamation-triangle text-warning me-2"></i>
-                  Confirm Incident Submission
-                </h5>
+                <h5 className="modal-title">Confirm Incident Submission</h5>
                 <button
                   type="button"
                   className="btn-close"
-                  aria-label="Close"
-                  onClick={handleCloseModal}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '1.5rem',
-                    fontWeight: 'bold',
-                    opacity: 0.5,
-                    cursor: 'pointer'
-                  }}
+                  onClick={() => setShowConfirmModal(false)}
                 >
-                  ×
                 </button>
               </div>
               <div className="modal-body">
-                <p className="mb-3">Are you sure you want to submit this incident?</p>
+                <p>Are you sure you want to submit this incident?</p>
                 <div className="bg-light p-3 rounded">
-                  <div className="row text-black">
-                    <div className="col-6">
-                      <strong>Category:</strong> {getCategoryName(formData.category_id)}<br/>
-                      <strong>Sub Category:</strong> {getSubCategoryName(formData.subcategory_id)}<br/>
-                    </div>
-                    <div className="col-6">
-                      <strong>Impact:</strong> {getImpactName(formData.impact_id)}<br/>
-                      <strong>Urgency:</strong> {getUrgencyName(formData.urgency_id)}<br/>
-                      <strong>Contact Type:</strong> {getContactTypeName(formData.contact_type_id)}
-                    </div>
-                  </div>
-                  <div className="mt-2 text-black">
-                    <strong>Location:</strong> {formData.address}
-                  </div>
-                  {(formData.asset_id || formData.site_id) && (
-                    <div className="mt-2 text-black">
-                      {formData.asset_id && <><strong>Asset:</strong> {getAssetName(formData.asset_id)}<br/></>}
-                      {formData.site_id && <><strong>Site:</strong> {getSiteName(formData.site_id)}</>}
-                    </div>
-                  )}
-                  <div className="mt-2 text-black">
-                    <strong>Description:</strong> {formData.short_description}
-                  </div>
-                </div>
-                <div className="mt-3 p-2 bg-info bg-opacity-10 rounded">
-                  <small className="text-info">
-                    <i className="fa fa-info-circle me-1"></i>
-                    <strong>Tip:</strong> Click the × button above if you need to edit any details before submitting.
-                  </small>
+                  <strong>Category:</strong> {getCategoryName(formData.category_id)}<br/>
+                  <strong>Sub Category:</strong> {getSubCategoryName(formData.subcategory_id)}<br/>
+                  <strong>Contact Type:</strong> {getContactTypeName(formData.contact_type_id)}<br/>
+                  <strong>Description:</strong> {formData.short_description}
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary"
-                  onClick={handleCancelSubmit}
-                >
-                  <i className="fa fa-times me-1"></i>
+                <Button color="secondary" onClick={() => setShowConfirmModal(false)}>
                   Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleConfirmSubmit}
-                >
-                  <i className="fa fa-check me-1"></i>
+                </Button>
+                <Button color="primary" onClick={handleConfirmSubmit}>
                   Submit
-                </button>
+                </Button>
               </div>
             </div>
           </div>

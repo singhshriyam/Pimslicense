@@ -166,6 +166,7 @@ const AdminMenuList: MenuItem[] = [
       title: "Master Settings",
       type: "submenu",
       children: [
+        createMenuItem("Category", "/dashboard/admin?tab=category"),
         createMenuItem("Sub-Category", "/dashboard/admin?tab=subcategory"),
         createMenuItem("Contact Type", "/dashboard/admin?tab=contact-type"),
         createMenuItem("Incident State", "/dashboard/admin?tab=state"),

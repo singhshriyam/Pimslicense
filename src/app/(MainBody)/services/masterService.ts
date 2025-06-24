@@ -3,6 +3,8 @@ const API_BASE = 'https://apexwpc.apextechno.co.uk/api';
 // Helper function to get authentication headers
 const getAuthHeaders = () => {
   const authToken = localStorage.getItem('authToken');
+  console.log('🔑 Auth token:', authToken ? 'Present' : 'Missing');
+
   return {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -11,166 +13,147 @@ const getAuthHeaders = () => {
   };
 };
 
-// Roles
-export async function fetchRoles() {
-  const res = await fetch(`${API_BASE}/master/roles`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
+// Generic API call function with better error handling
+const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+  const url = `${API_BASE}${endpoint}`;
+  console.log(`📡 API Call: ${options.method || 'GET'} ${url}`);
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...options.headers
+    },
     credentials: 'include'
   });
-  if (!res.ok) throw new Error('Failed to fetch roles');
-  return res.json();
+
+  console.log(`📨 Response: ${response.status} ${response.statusText}`);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ API Error:', errorText);
+    throw new Error(`API Error ${response.status}: ${errorText || response.statusText}`);
+  }
+
+  const data = await response.json();
+  console.log('📦 Response data:', data);
+
+  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
+  if (data.success && data.data !== undefined) {
+    return { data: data.data };
+  } else if (data.success === false) {
+    throw new Error(data.message || 'API request failed');
+  } else {
+    // Handle cases where API doesn't follow the standard format
+    return { data: data };
+  }
+};
+
+// Roles
+export async function fetchRoles() {
+  console.log('🔄 Fetching roles...');
+  return await apiCall('/master/roles');
 }
 
 // Categories
 export async function fetchCategories() {
-  const res = await fetch(`${API_BASE}/master/categories`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch categories');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch categories');
-  }
+  console.log('🔄 Fetching categories...');
+  return await apiCall('/master/categories');
 }
 
-// Subcategories (filtered by category if given)
+// Subcategories - FIXED to use correct endpoint with proper authentication
 export async function fetchSubcategories(categoryId?: string) {
-  let url;
+  let endpoint;
   if (categoryId) {
-    // Use the working endpoint for subcategories by category ID
-    url = `${API_BASE}/master/subcategories-by-category-id?category_id=${categoryId}`;
+    // Use the correct endpoint with category filter
+    endpoint = `/master/sub-categories?category_id=${categoryId}`;
+    console.log('🔄 Fetching subcategories for category:', categoryId);
   } else {
     // Use general subcategories endpoint
-    url = `${API_BASE}/master/subcategories`;
+    endpoint = '/master/sub-categories';
+    console.log('🔄 Fetching all subcategories...');
   }
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch subcategories');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch subcategories');
+  try {
+    const result = await apiCall(endpoint);
+    console.log('✅ Subcategories loaded:', result.data);
+    return result;
+  } catch (error) {
+    console.error('❌ Error fetching subcategories:', error);
+    throw error;
   }
 }
 
 // Contact Types
 export async function fetchContactTypes() {
-  const res = await fetch(`${API_BASE}/master/contact-types`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch contact types');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch contact types');
-  }
+  console.log('🔄 Fetching contact types...');
+  return await apiCall('/master/contact-types');
 }
 
 // Impacts
 export async function fetchImpacts() {
-  const res = await fetch(`${API_BASE}/master/impacts`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch impacts');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch impacts');
-  }
+  console.log('🔄 Fetching impacts...');
+  return await apiCall('/master/impacts');
 }
 
 // Urgencies
 export async function fetchUrgencies() {
-  const res = await fetch(`${API_BASE}/master/urgencies`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch urgencies');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch urgencies');
-  }
+  console.log('🔄 Fetching urgencies...');
+  return await apiCall('/master/urgencies');
 }
 
 // Incident States
 export async function fetchIncidentStates() {
-  const res = await fetch(`${API_BASE}/master/incident-states`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch incident states');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch incident states');
-  }
+  console.log('🔄 Fetching incident states...');
+  return await apiCall('/master/incident-states');
 }
 
 // Assets
 export async function fetchAssets() {
-  const res = await fetch(`${API_BASE}/master/assets`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch assets');
-  const response = await res.json();
-
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch assets');
-  }
+  console.log('🔄 Fetching assets...');
+  return await apiCall('/master/assets');
 }
 
 // Sites
 export async function fetchSites() {
-  const res = await fetch(`${API_BASE}/master/sites`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error('Failed to fetch sites');
-  const response = await res.json();
+  console.log('🔄 Fetching sites...');
+  return await apiCall('/master/sites');
+}
 
-  // Handle the API response format: { "success": true, "data": [...], "message": "..." }
-  if (response.success && response.data) {
-    return { data: response.data };
-  } else {
-    throw new Error(response.message || 'Failed to fetch sites');
+// Additional helper functions for action-related master data (when APIs become available)
+
+// Action Types - PLACEHOLDER (uncomment when API is ready)
+// export async function fetchActionTypes() {
+//   console.log('🔄 Fetching action types...');
+//   return await apiCall('/master/action-types');
+// }
+
+// Action Statuses - PLACEHOLDER (uncomment when API is ready)
+// export async function fetchActionStatuses() {
+//   console.log('🔄 Fetching action statuses...');
+//   return await apiCall('/master/action-statuses');
+// }
+
+// Action Priorities - PLACEHOLDER (uncomment when API is ready)
+// export async function fetchActionPriorities() {
+//   console.log('🔄 Fetching action priorities...');
+//   return await apiCall('/master/action-priorities');
+// }
+
+// Test authentication
+export async function testAuth() {
+  console.log('🔄 Testing authentication...');
+  try {
+    const response = await fetch(`${API_BASE}/test-auth`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+
+    console.log('🔑 Auth test response:', response.status);
+    return response.ok;
+  } catch (error) {
+    console.error('❌ Auth test failed:', error);
+    return false;
   }
 }

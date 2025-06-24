@@ -1,46 +1,118 @@
+// Enhanced page.tsx for Admin Dashboard - Frontend Only
 'use client'
 import React, { useState, useEffect } from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table } from 'reactstrap'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AdminForms from '../../../../Components/AdminForms'
+import { getCurrentUser, isAuthenticated } from '../../../(MainBody)/services/userService'
 
-import {
-  fetchAllIncidents,
-  getIncidentStats,
-  type Incident
-} from '../../../(MainBody)/services/incidentService'
+// Mock data for dashboard
+const mockPendingApprovals = [
+  {
+    id: '1',
+    type: 'User Registration',
+    module: 'User Management',
+    description: 'New user registration request for John Smith',
+    requestedBy: 'john.smith@company.com',
+    pendingSince: '2025-06-20T10:00:00Z',
+    priority: 'high' as const
+  },
+  {
+    id: '2',
+    type: 'Role Assignment',
+    module: 'Access Control',
+    description: 'Manager role assignment for existing user',
+    requestedBy: 'admin@company.com',
+    pendingSince: '2025-06-19T15:30:00Z',
+    priority: 'medium' as const
+  },
+  {
+    id: '3',
+    type: 'Asset Creation',
+    module: 'Asset Management',
+    description: 'New water treatment facility asset registration',
+    requestedBy: 'facility.manager@company.com',
+    pendingSince: '2025-06-18T09:15:00Z',
+    priority: 'low' as const
+  }
+]
 
-import {
-  getCurrentUser,
-  isAuthenticated
-} from '../../../(MainBody)/services/userService'
+const mockLicenseInfo = [
+  {
+    id: '1',
+    moduleName: 'Incident Management',
+    licenseType: 'Enterprise',
+    isActive: true,
+    expiryDate: '2025-12-31',
+    usersCount: 50,
+    maxUsers: 100
+  },
+  {
+    id: '2',
+    moduleName: 'Asset Management',
+    licenseType: 'Professional',
+    isActive: true,
+    expiryDate: '2025-06-30',
+    usersCount: 25,
+    maxUsers: 50
+  },
+  {
+    id: '3',
+    moduleName: 'Reporting Suite',
+    licenseType: 'Standard',
+    isActive: false,
+    expiryDate: '2025-03-15',
+    usersCount: 0,
+    maxUsers: 20
+  }
+]
 
-import AllIncidents from '../../../../Components/AllIncidents'
+const mockActiveUsers = [
+  { id: '1', name: 'John Smith', role: 'Administrator', isOnline: true },
+  { id: '2', name: 'Jane Doe', role: 'Manager', isOnline: true },
+  { id: '3', name: 'Bob Wilson', role: 'Handler', isOnline: false },
+  { id: '4', name: 'Alice Cooper', role: 'Engineer', isOnline: true },
+  { id: '5', name: 'Charlie Brown', role: 'User', isOnline: true }
+];
 
-interface User {
-  id: string
-  name: string
-  email: string
-  team: string
-  lastActivity?: string
-}
-
-interface Request {
-  id: string
-  type: string
-  description: string
-  requestedBy: string
-  status: string
-  createdAt: string
+const mockSystemStats = {
+  totalUsers: 156,
+  activeUsers: 142,
+  totalGroups: 12,
+  totalRoles: 8,
+  totalPermissions: 45,
+  pendingApprovals: 3,
+  systemHealth: 'good' as const
 }
 
 interface PendingApproval {
   id: string
   type: string
+  module: string
   description: string
   requestedBy: string
   pendingSince: string
-  priority: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+interface LicenseInfo {
+  id: string
+  moduleName: string
+  licenseType: string
+  isActive: boolean
+  expiryDate: string
+  usersCount: number
+  maxUsers: number
+}
+
+interface SystemStats {
+  totalUsers: number
+  activeUsers: number
+  totalGroups: number
+  totalRoles: number
+  totalPermissions: number
+  pendingApprovals: number
+  systemHealth: 'good' | 'warning' | 'critical'
 }
 
 const AdminDashboard = () => {
@@ -53,6 +125,7 @@ const AdminDashboard = () => {
   // Enhanced tab checking - include all possible tabs from your menu
   const shouldShowForms = tabParam && [
     // Master Settings
+    'category',
     'subcategory',
     'contact-type',
     'state',
@@ -84,25 +157,17 @@ const AdminDashboard = () => {
     // SLA Management
     'sla-definitions',
     'sla-conditions',
-    // Incident Management
-    'create-incident',
+    // Incident Management Forms
     'create-manager',
-    'create-handler',
-    'pending-approval',
-    'sla-define',
-    'sla-report'
+    'create-handler'
   ].includes(tabParam)
 
-  const [showAllIncidents, setShowAllIncidents] = useState(viewParam === 'all-incidents')
-
   const [dashboardData, setDashboardData] = useState({
-    incidents: [] as Incident[],
-    totalIncidents: 0,
-    resolvedIncidents: 0,
-    inProgressIncidents: 0,
-    pendingIncidents: 0,
-    closedIncidents: 0,
-    loading: true,
+    systemStats: mockSystemStats,
+    pendingApprovals: mockPendingApprovals,
+    licenseInfo: mockLicenseInfo,
+    activeUsers: mockActiveUsers,
+    loading: false,
     error: null as string | null
   })
 
@@ -113,175 +178,31 @@ const AdminDashboard = () => {
     userId: ''
   })
 
-  const [loggedInUsers] = useState<User[]>([])
-  const [requests, setRequests] = useState<Request[]>([])
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
-  const [requestsLoading, setRequestsLoading] = useState(false)
-  const [approvalsLoading, setApprovalsLoading] = useState(false)
-
-  // Enhanced tab to form mapping - matches your AdminForms configuration
-  const getFormTypeFromTab = (tab: string): string => {
-    const tabMapping: { [key: string]: string } = {
-      // Master Settings
-      'subcategory': 'sub-categories',
-      'contact-type': 'contact-type',
-      'state': 'incident-states',
-      'impact': 'impacts',
-      'urgency': 'urgencies',
-      // Asset Management
-      'asset-state': 'asset-states',
-      'asset-substate': 'asset-substates',
-      'asset-function': 'asset-functions',
-      'asset-location': 'asset-locations',
-      'department': 'departments',
-      'company': 'companies',
-      'stock-room': 'stock-rooms',
-      'aisle': 'aisles',
-      'add-asset': 'assets',
-      // Site Management
-      'site-type': 'site-types',
-      'sites': 'sites',
-      // User Management
-      'users': 'users',
-      // Groups
-      'all-groups': 'groups',
-      'create-group': 'groups',
-      // Roles & Permissions
-      'all-roles': 'roles',
-      'create-roles': 'roles',
-      'all-permissions': 'permissions',
-      'create-permission': 'permissions',
-      // SLA Management
-      'sla-definitions': 'sla-definitions',
-      'sla-conditions': 'sla-conditions',
-      // Incident Management
-      'create-incident': 'incidents',
-      'create-manager': 'managers',
-      'create-handler': 'handlers',
-      'pending-approval': 'approvals',
-      'sla-define': 'sla-define',
-      'sla-report': 'sla-report'
-    }
-    return tabMapping[tab] || 'categories'
-  }
-
-  // Debug logging with more details
+  // Load user data on mount
   useEffect(() => {
-    console.log('URL Parameters Debug:', {
-      viewParam,
-      tabParam,
-      shouldShowForms,
-      formType: tabParam ? getFormTypeFromTab(tabParam) : 'none',
-      currentPath: typeof window !== 'undefined' ? window.location.href : 'SSR'
+    if (!isAuthenticated()) {
+      router.replace('/auth/login')
+      return
+    }
+
+    const currentUser = getCurrentUser()
+    setUser({
+      name: currentUser?.name || 'Administrator',
+      team: currentUser?.team || 'Administrator',
+      email: currentUser?.email || '',
+      userId: currentUser?.id || ''
     })
-  }, [viewParam, tabParam, shouldShowForms])
+  }, [router])
 
-  // Handle special views first
-  useEffect(() => {
-    const currentViewParam = searchParams.get('view')
-    setShowAllIncidents(currentViewParam === 'all-incidents')
-  }, [searchParams])
+  // Mock approval action
+  const handleApproval = (id: string, action: 'approve' | 'reject') => {
+    setDashboardData(prev => ({
+      ...prev,
+      pendingApprovals: prev.pendingApprovals.filter(approval => approval.id !== id)
+    }))
 
-  // Fetch data function
-  const fetchData = async () => {
-    try {
-      setDashboardData(prev => ({ ...prev, loading: true, error: null }))
-
-      if (!isAuthenticated()) {
-        router.replace('/auth/login')
-        return
-      }
-
-      const currentUser = getCurrentUser()
-      setUser({
-        name: currentUser?.name || 'Administrator',
-        team: currentUser?.team || 'Administrator',
-        email: currentUser?.email || '',
-        userId: currentUser?.id || ''
-      })
-
-      const allIncidents = await fetchAllIncidents()
-      const stats = getIncidentStats(allIncidents)
-
-      setDashboardData({
-        incidents: allIncidents,
-        totalIncidents: stats.total,
-        resolvedIncidents: stats.resolved,
-        inProgressIncidents: stats.inProgress,
-        pendingIncidents: stats.pending,
-        closedIncidents: stats.closed,
-        loading: false,
-        error: null
-      })
-
-    } catch (error: any) {
-      setDashboardData(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message || 'Failed to load dashboard data'
-      }))
-    }
-  }
-
-  // Placeholder functions for future API integration
-  const fetchRequests = async () => {
-    setRequestsLoading(true)
-    try {
-      setTimeout(() => {
-        setRequests([])
-        setRequestsLoading(false)
-      }, 1000)
-    } catch (error) {
-      console.error('Failed to fetch requests:', error)
-      setRequestsLoading(false)
-    }
-  }
-
-  const fetchPendingApprovals = async () => {
-    setApprovalsLoading(true)
-    try {
-      setTimeout(() => {
-        setPendingApprovals([])
-        setApprovalsLoading(false)
-      }, 1000)
-    } catch (error) {
-      console.error('Failed to fetch pending approvals:', error)
-      setApprovalsLoading(false)
-    }
-  }
-
-  const handleApproval = async (id: string, action: 'approve' | 'reject') => {
-    try {
-      console.log(`${action} approval for ID: ${id}`)
-      fetchPendingApprovals()
-    } catch (error) {
-      console.error(`Failed to ${action} approval:`, error)
-    }
-  }
-
-  // Load data only when showing dashboard (not forms or incidents view)
-  useEffect(() => {
-    if (!shouldShowForms && !showAllIncidents) {
-      fetchData()
-      fetchRequests()
-      fetchPendingApprovals()
-    }
-  }, [router, shouldShowForms, showAllIncidents])
-
-  const handleViewAllIncidents = () => {
-    setShowAllIncidents(true)
-    const newUrl = new URL(window.location.href)
-    newUrl.searchParams.set('view', 'all-incidents')
-    newUrl.searchParams.delete('tab') // Clear tab when switching to incidents view
-    window.history.pushState({}, '', newUrl.toString())
-  }
-
-  const handleBackToDashboard = () => {
-    setShowAllIncidents(false)
-    const newUrl = new URL(window.location.href)
-    newUrl.searchParams.delete('view')
-    newUrl.searchParams.delete('tab')
-    window.history.pushState({}, '', newUrl.toString())
+    // Show success message (you can add toast notification here)
+    console.log(`${action === 'approve' ? 'Approved' : 'Rejected'} request ${id}`)
   }
 
   const formatDateLocal = (dateString: string) => {
@@ -292,10 +213,25 @@ const AdminDashboard = () => {
     }
   }
 
+  const formatRelativeTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+      if (diffDays === 0) return 'Today'
+      if (diffDays === 1) return 'Yesterday'
+      if (diffDays < 7) return `${diffDays} days ago`
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+      return `${Math.floor(diffDays / 30)} months ago`
+    } catch (error) {
+      return 'Unknown'
+    }
+  }
+
   // Render AdminForms if a form tab is selected
   if (shouldShowForms) {
-    const formType = getFormTypeFromTab(tabParam!)
-    console.log(`Rendering AdminForms with formType: ${formType}`)
 
     return (
       <Container fluid>
@@ -319,7 +255,7 @@ const AdminDashboard = () => {
             </Card>
           </Col>
         </Row>
-        <AdminForms initialTab={formType} />
+        <AdminForms initialTab={tabParam} />
       </Container>
     )
   }
@@ -337,24 +273,7 @@ const AdminDashboard = () => {
     )
   }
 
-  // Show error state
-  if (dashboardData.error) {
-    return (
-      <Container fluid>
-        <div className="alert alert-danger mt-3">
-          <strong>Error:</strong> {dashboardData.error}
-          <Button color="link" onClick={fetchData} className="p-0 ms-2">Try again</Button>
-        </div>
-      </Container>
-    )
-  }
-
-  // Show all incidents view
-  if (showAllIncidents) {
-    return <AllIncidents userType="admin" onBack={handleBackToDashboard} />
-  }
-
-  // Show main dashboard
+  // Show main admin dashboard
   return (
     <Container fluid>
       {/* Welcome Header */}
@@ -365,21 +284,14 @@ const AdminDashboard = () => {
               <div className="d-flex justify-content-between align-items-center">
                 <div>
                   <h4 className="mb-1">Welcome {user.name}!</h4>
-                  <p className="text-muted mb-0">Admin Dashboard - Manage your system</p>
                 </div>
-                <Button
-                  color="primary"
-                  onClick={handleViewAllIncidents}
-                >
-                  View All Incidents
-                </Button>
               </div>
             </CardBody>
           </Card>
         </Col>
       </Row>
 
-      {/* Stats Cards */}
+      {/* System Stats Cards */}
       <Row className="mb-4">
         <Col lg={3} md={6} className="mb-3">
           <Card className="border-left-primary h-100">
@@ -387,10 +299,10 @@ const AdminDashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <div className="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                    Total Incidents
+                    Total Users
                   </div>
                   <div className="h5 mb-0 font-weight-bold text-gray-800">
-                    {dashboardData.totalIncidents}
+                    {dashboardData.systemStats.totalUsers}
                   </div>
                 </div>
               </div>
@@ -399,15 +311,15 @@ const AdminDashboard = () => {
         </Col>
 
         <Col lg={3} md={6} className="mb-3">
-          <Card className="border-left-success h-100">
+          <Card className="border-left-info h-100">
             <CardBody>
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
-                  <div className="text-xs font-weight-bold text-success text-uppercase mb-1">
-                    Resolved
+                  <div className="text-xs font-weight-bold text-info text-uppercase mb-1">
+                    Groups & Roles
                   </div>
                   <div className="h5 mb-0 font-weight-bold text-gray-800">
-                    {dashboardData.resolvedIncidents}
+                    {dashboardData.systemStats.totalGroups + dashboardData.systemStats.totalRoles}
                   </div>
                 </div>
               </div>
@@ -421,10 +333,10 @@ const AdminDashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <div className="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                    Total Requests
+                    Pending Approvals
                   </div>
                   <div className="h5 mb-0 font-weight-bold text-gray-800">
-                    {requests.length}
+                    {dashboardData.pendingApprovals.length}
                   </div>
                 </div>
               </div>
@@ -433,15 +345,15 @@ const AdminDashboard = () => {
         </Col>
 
         <Col lg={3} md={6} className="mb-3">
-          <Card className="border-left-danger h-100">
+          <Card className="border-left-success h-100">
             <CardBody>
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
-                  <div className="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                    Pending Approvals
+                  <div className="text-xs font-weight-bold text-success text-uppercase mb-1">
+                    Active Licenses
                   </div>
                   <div className="h5 mb-0 font-weight-bold text-gray-800">
-                    {pendingApprovals.length}
+                    {dashboardData.licenseInfo.filter(l => l.isActive).length}
                   </div>
                 </div>
               </div>
@@ -450,68 +362,13 @@ const AdminDashboard = () => {
         </Col>
       </Row>
 
-      {/* Admin Quick Actions and System Overview */}
+      {/* Admin Quick Actions and License Information */}
       <Row className="mb-4">
-        {/* Admin Quick Actions */}
+        {/* Active users */}
         <Col lg={6}>
           <Card className="h-100">
             <CardHeader className="pb-0">
-              <h5>Admin Quick Actions</h5>
-            </CardHeader>
-            <CardBody>
-              <div className="d-grid gap-2">
-                <Button
-                  color="primary"
-                  onClick={() => router.push('/dashboard/admin?tab=subcategory')}
-                  className="text-start"
-                >
-                  Manage Sub-Categories
-                </Button>
-                <Button
-                  color="info"
-                  onClick={() => router.push('/dashboard/admin?tab=contact-type')}
-                  className="text-start"
-                >
-                  Manage Contact Types
-                </Button>
-                <Button
-                  color="success"
-                  onClick={() => router.push('/dashboard/admin?tab=sites')}
-                  className="text-start"
-                >
-                  Manage Sites
-                </Button>
-                <Button
-                  color="warning"
-                  onClick={() => router.push('/dashboard/admin?tab=impact')}
-                  className="text-start"
-                >
-                  Manage Impacts
-                </Button>
-                <Button
-                  color="secondary"
-                  onClick={() => router.push('/dashboard/admin?tab=urgency')}
-                  className="text-start"
-                >
-                  Manage Urgencies
-                </Button>
-                <Button
-                  color="dark"
-                  onClick={() => router.push('/dashboard/admin?tab=state')}
-                  className="text-start"
-                >
-                  Manage Incident States
-                </Button>
-              </div>
-            </CardBody>
-          </Card>
-        </Col>
-
-        {/* Currently Logged In Users */}
-        <Col lg={6}>
-          <Card className="h-100">
-            <CardHeader className="pb-0">
-              <h5>Currently Logged In Users</h5>
+              <h5>Currently Active Users</h5>
             </CardHeader>
             <CardBody>
               <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
@@ -519,117 +376,70 @@ const AdminDashboard = () => {
                   <thead className="table-light">
                     <tr>
                       <th>Name</th>
-                      <th>Team</th>
+                      <th>Role</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {loggedInUsers.length > 0 ? (
-                      loggedInUsers.map((loggedUser) => (
-                        <tr key={loggedUser.id}>
-                          <td className="fw-medium">{loggedUser.name}</td>
-                          <td>
-                            <Badge color="primary" size="sm">{loggedUser.team}</Badge>
-                          </td>
-                          <td>
-                            <Badge color="success" size="sm">
-                              Online
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3} className="text-center text-muted py-4">
-                          No active users found
+                    {dashboardData.activeUsers.map((user) => (
+                      <tr key={user.id}>
+                        <td className="fw-medium">{user.name}</td>
+                        <td>
+                          <Badge color="info" size="sm">{user.role}</Badge>
+                        </td>
+                        <td>
+                          <Badge
+                            color={user.isOnline ? 'success' : 'secondary'}
+                            size="sm"
+                          >
+                            {user.isOnline ? 'Online' : 'Offline'}
+                          </Badge>
                         </td>
                       </tr>
-                    )}
+                    ))}
                   </tbody>
                 </Table>
               </div>
             </CardBody>
           </Card>
-        </Col>
-      </Row>
+          </Col>
 
-      {/* Requests List */}
-      <Row className="mb-4">
-        <Col xs={12}>
-          <Card>
-            <CardHeader>
-              <div className="d-flex justify-content-between align-items-center">
-                <h5>System Requests</h5>
-                <Button color="outline-primary" size="sm">
-                  New Request
-                </Button>
-              </div>
+        {/* License Information */}
+        <Col lg={6}>
+          <Card className="h-100">
+            <CardHeader className="pb-0">
+              <h5>License Information</h5>
             </CardHeader>
             <CardBody>
-              {requestsLoading ? (
-                <div className="text-center py-3">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading requests...</span>
-                  </div>
-                </div>
-              ) : requests.length > 0 ? (
-                <div className="table-responsive">
-                  <Table hover className="table-borderless">
-                    <thead className="table-light">
-                      <tr>
-                        <th>ID</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                        <th>Requested By</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th>Actions</th>
+              <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <Table hover className="table-borderless table-sm">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Module</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.licenseInfo.map((license) => (
+                      <tr key={license.id}>
+                        <td className="fw-medium">{license.moduleName}</td>
+                        <td>
+                          <Badge color="info" size="sm">{license.licenseType}</Badge>
+                        </td>
+                        <td>
+                          <Badge
+                            color={license.isActive ? 'success' : 'danger'}
+                            size="sm"
+                          >
+                            {license.isActive ? 'Active' : 'Expired'}
+                          </Badge>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {requests.map((request) => (
-                        <tr key={request.id}>
-                          <td>
-                            <span className="fw-medium text-primary">{request.id}</span>
-                          </td>
-                          <td>
-                            <Badge color="info">{request.type}</Badge>
-                          </td>
-                          <td>{request.description}</td>
-                          <td>{request.requestedBy}</td>
-                          <td>
-                            <Badge
-                              color={
-                                request.status === 'approved' ? 'success' :
-                                request.status === 'rejected' ? 'danger' :
-                                request.status === 'pending' ? 'warning' : 'secondary'
-                              }
-                            >
-                              {request.status}
-                            </Badge>
-                          </td>
-                          <td>{formatDateLocal(request.createdAt)}</td>
-                          <td>
-                            <div className="d-flex gap-1">
-                              <Button color="outline-primary" size="sm">
-                                View
-                              </Button>
-                              <Button color="outline-secondary" size="sm">
-                                Edit
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </div>
-              ) : (
-                <div className="text-center py-5">
-                  <p className="text-muted mb-0">No requests found</p>
-                  <small className="text-muted">Requests will appear here when available from the backend API</small>
-                </div>
-              )}
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
             </CardBody>
           </Card>
         </Col>
@@ -643,18 +453,12 @@ const AdminDashboard = () => {
               <div className="d-flex justify-content-between align-items-center">
                 <h5>Pending Approvals</h5>
                 <Badge color="danger" className="fs-6">
-                  {pendingApprovals.length} Pending
+                  {dashboardData.pendingApprovals.length} Pending
                 </Badge>
               </div>
             </CardHeader>
             <CardBody>
-              {approvalsLoading ? (
-                <div className="text-center py-3">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading approvals...</span>
-                  </div>
-                </div>
-              ) : pendingApprovals.length > 0 ? (
+              {dashboardData.pendingApprovals.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
@@ -664,12 +468,11 @@ const AdminDashboard = () => {
                         <th>Description</th>
                         <th>Requested By</th>
                         <th>Priority</th>
-                        <th>Pending Since</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pendingApprovals.map((approval) => (
+                      {dashboardData.pendingApprovals.map((approval) => (
                         <tr key={approval.id}>
                           <td>
                             <span className="fw-medium text-primary">{approval.id}</span>
@@ -689,7 +492,6 @@ const AdminDashboard = () => {
                               {approval.priority}
                             </Badge>
                           </td>
-                          <td>{formatDateLocal(approval.pendingSince)}</td>
                           <td>
                             <div className="d-flex gap-1">
                               <Button
@@ -708,9 +510,9 @@ const AdminDashboard = () => {
                               >
                                 ✗
                               </Button>
-                              <Button color="outline-primary" size="sm" title="View Details">
+                              {/* <Button color="outline-primary" size="sm" title="View Details">
                                 View
-                              </Button>
+                              </Button> */}
                             </div>
                           </td>
                         </tr>
@@ -721,7 +523,7 @@ const AdminDashboard = () => {
               ) : (
                 <div className="text-center py-5">
                   <p className="text-muted mb-0">No pending approvals</p>
-                  <small className="text-muted">Pending approvals will appear here when available from the backend API</small>
+                  <small className="text-muted">All requests have been processed</small>
                 </div>
               )}
             </CardBody>
