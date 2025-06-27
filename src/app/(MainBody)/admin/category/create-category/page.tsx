@@ -1,12 +1,16 @@
 'use client'
+
+
+import CreateCategory from "@/Components/Admin/Category/CreateCategory";
 import CreateRole from "@/Components/Admin/Roles/CreateRole";
 import { redirect} from "next/navigation";
+
 import React from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table } from 'reactstrap'
 
 
 
-const Role = () => {
+const AddCategory = () => {
 
   if (localStorage.getItem("userTeam") === "Administrator" ) {
      return (
@@ -18,10 +22,10 @@ const Role = () => {
            <Col xs={12} >
              <Card>
                <CardHeader>
-                <h1>Role</h1>
+                <h1>Category</h1>
                </CardHeader>
                <CardBody>
-              <CreateRole></CreateRole>
+           <CreateCategory></CreateCategory>
                </CardBody>
              </Card>
            </Col>
@@ -34,4 +38,4 @@ const Role = () => {
   }
 };
 
-export default Role;
+export default AddCategory;
