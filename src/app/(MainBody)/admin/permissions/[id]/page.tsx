@@ -1,12 +1,12 @@
 'use client'
-import CategoryData from "@/Components/Miscellaneous/Knowledgebase/CategoryData/CategoryData";
+
 import axios from "axios";
 import { redirect } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Swal from "sweetalert2";
 
-type CategoryType = {
+type PermissionType = {
   id: number,
   name: string
   created_at?: string,
@@ -15,26 +15,26 @@ type CategoryType = {
 }
   const token = localStorage.getItem("authToken");
   
-const Category =  ({ params }: { params: { id: string } }) => {
+const Permission =  ({ params }: { params: { id: string } }) => {
   
-const [category, setCategory] = useState<CategoryType | null>()
+const [permission, setPermission] = useState<PermissionType | null>()
 const [name,setName]=useState({name:''})
   const id = params.id;
   console.log("id=", id)
   useEffect(() => {
     if (id) {
       
-     fetchCategory();
-     setName({name:category?category.name:""})
+     fetchPermission();
+     setName({name:permission?permission.name:""})
     }
     document.title=id
   },[id]);
 
-  const fetchCategory = async () => {
+  const fetchPermission = async () => {
 
   
     const response = await axios.get(
-      `https://apexwpc.apextechno.co.uk/api/master/categories/${id}`,
+      `https://apexwpc.apextechno.co.uk/api/permissions/${id}`,
 
       {
         headers: {
@@ -44,7 +44,7 @@ const [name,setName]=useState({name:''})
       }
     )
    
-    setCategory(response.data.data)
+    setPermission(response.data.data)
     setName({name:response.data.data.name})
 
   }
@@ -53,7 +53,7 @@ const [name,setName]=useState({name:''})
         console.log('Form data:', name);
         try {
           const response = await axios.put(
-            `https://apexwpc.apextechno.co.uk/api/master/categories/${id}`,
+            `https://apexwpc.apextechno.co.uk/api/permissions/${id}`,
             { name: name.name },
             {
               headers: {
@@ -69,10 +69,10 @@ const [name,setName]=useState({name:''})
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Category edited Successfully!",
+              text: "Permission edited Successfully!",
             }).then((result) => {
       if (result.isConfirmed) {
-        redirect('/admin/category/create-category'); // Redirect to /dashboard on confirmation
+        redirect('/admin/permissions/create-permission'); // Redirect to /dashboard on confirmation
       }
     });
           }
@@ -99,10 +99,10 @@ const [name,setName]=useState({name:''})
              <Col xs={6} >
                <Card>
                  <CardHeader>
-                  <h1>Edit Category</h1>
+                  <h1>Edit Permission</h1>
                  </CardHeader>
                  <CardBody>
-               {category &&(
+               {permission &&(
     <form onSubmit={handleSubmit}>
       <input className="form-control" type="text" name="name" value={name.name} onChange={handleChange} />
      <br/>
@@ -117,5 +117,5 @@ const [name,setName]=useState({name:''})
   </>
 }
 
-export default Category;
+export default Permission;
 

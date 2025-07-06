@@ -4,7 +4,10 @@ const nextConfig: NextConfig = {
   images: {
     domains: ["lh3.googleusercontent.com"],
   },
-  reactStrictMode: false
+  reactStrictMode: false,
+  env:{
+    API_BASE_URL:process.env.API_BASE_URL
+  }
 };
 
 module.exports = {

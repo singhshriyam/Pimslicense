@@ -138,7 +138,7 @@ try {
                       <td>{cat.id}</td>
                       <td>{cat.name}</td>
                       <td>{cat.created_at}</td>
-                      <td><Link className="btn btn-primary" href={`/admin/roles/${cat.id}`}>Edit</Link></td>
+                      <td><Link className="btn btn-primary" href={`/admin/category/${cat.id}`}>Edit</Link></td>
                      <td><button className="btn btn-danger" onClick={()=>handleDelete(cat.id)}>Delete</button></td>
                     </tr>
                   </>

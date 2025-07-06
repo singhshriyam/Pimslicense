@@ -126,25 +126,25 @@ const AdminMenuList: MenuItem[] = [
       title: "Groups",
       type: "submenu",
       children: [
-        createMenuItem("All Groups", "/dashboard/admin?tab=all-groups"),
-        createMenuItem("Create Group", "/dashboard/admin?tab=create-group")
+        createMenuItem("All Groups", "/admin/teams/create-team"),
+        createMenuItem("Create Group", "/admin/teams/create-team")
       ]
     },
     {
       title: "Users",
       type: "submenu",
       children: [
-        createMenuItem("All Users", "/dashboard/admin?tab=users")
+        createMenuItem("All Users", "/admin/users/create-user")
       ]
     },
     {
       title: "Roles & Permissions",
       type: "submenu",
       children: [
-        createMenuItem("All Roles", "/dashboard/admin?tab=all-roles"),
-        createMenuItem("Create Roles", "/dashboard/admin?tab=create-roles"),
-        createMenuItem("All Permissions", "/dashboard/admin?tab=all-permissions"),
-        createMenuItem("Create Permission", "/dashboard/admin?tab=create-permission")
+        createMenuItem("All Roles", "/admin/roles/create-role"),
+        createMenuItem("Create Roles", "/admin/roles/create-role"),
+        createMenuItem("All Permissions", "/admin/permissions/create-permission"),
+        createMenuItem("Create Permission", "/admin/permissions/create-permission")
       ]
     }
   ]),
@@ -166,7 +166,7 @@ const AdminMenuList: MenuItem[] = [
       title: "Master Settings",
       type: "submenu",
       children: [
-        createMenuItem("Category", "/dashboard/admin?tab=category"),
+        createMenuItem("Category", "/admin/category/create-category"),
         createMenuItem("Sub-Category", "/dashboard/admin?tab=subcategory"),
         createMenuItem("Contact Type", "/dashboard/admin?tab=contact-type"),
         createMenuItem("Incident State", "/dashboard/admin?tab=state"),

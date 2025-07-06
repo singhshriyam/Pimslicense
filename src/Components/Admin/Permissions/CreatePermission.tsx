@@ -7,28 +7,26 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const initialValues = {
-  team_id:"",
   name: "",
 };
-const roleSchema = Yup.object({
-  team_id:Yup.string().required("Please Enter Team Id"),
-  name: Yup.string().required("Please enter role name"),
+const categorySchema = Yup.object({
+  name: Yup.string().required("Please enter category name"),
 });
 const API_BASE_URL = process.env.API_BASE_URL;
 const token = localStorage.getItem("authToken");
 
-const createRole=()=> {
-  const [role, setRole] = useState([]);
-  const[teams,setTeams]=useState([])
+const CreatePermission=()=> {
+  const [permission, setPermission] = useState([]);
   useEffect(() => {
-    getRoles();
-    getTeams();
+    getPermissions();
   }, []);
 
   const handleDelete=async(id:number)=>{
-try {
+
+    try {
       const response = await axios.delete(
-        `https://apexwpc.apextechno.co.uk/api/master/roles/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/permissions/${id}`,
+
         {
           headers: {
             "Content-Type": "application/json",
@@ -36,14 +34,14 @@ try {
           },
         }
       );
-     const filterRoles=role.filter((r:any)=>r.id!==id);
-     setRole(filterRoles);
+     const filterPermission=permission.filter((per:any)=>per.id!==id);
+     setPermission(filterPermission);
     } catch (error) {}
   }
-  const getRoles = async () => {
+  const getPermissions = async () => {
     try {
       const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/roles",
+        "https://apexwpc.apextechno.co.uk/api/permissions",
 
         {
           headers: {
@@ -52,36 +50,20 @@ try {
           },
         }
       );
-      setRole(response.data.data);
-      console.log("roles", role);
+      setPermission(response.data.data);
+      console.log("permission", permission);
     } catch (error) {}
   };
-   const getTeams = async () => {
-    try {
-      const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/teams",
-
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token} `,
-          },
-        }
-      );
-      setTeams(response.data.data);
-      console.log("teams", teams);
-    } catch (error) {}
-  };
-
+  console.log(`${API_BASE_URL}/master/categories`);
   const { values, handleBlur, handleChange, handleSubmit, errors, touched } =
     useFormik({
       initialValues,
-      validationSchema: roleSchema,
+      validationSchema: categorySchema,
       onSubmit: async (values) => {
         try {
           const response = await axios.post(
-            `https://apexwpc.apextechno.co.uk/api/roles`,
-            { name: values.name,team_id:values.team_id },
+            `https://apexwpc.apextechno.co.uk/api/permissions`,
+            { name: values.name },
             {
               headers: {
                 "Content-Type": "application/json",
@@ -91,14 +73,13 @@ try {
           );
 
           if (response.status === 200) {
-            getRoles();
+            getPermissions();
             {values.name=''}
-            {values.team_id=''}
             console.log("Response=", response);
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Role Created Successfully!",
+              text: "Category Created Successfully!",
             });
           }
         } catch (error: any) {
@@ -116,32 +97,8 @@ try {
     <>
       <div className="container">
         <div className="col-md-6">
-          <h1>Add Role</h1>
+          <h3>Add Permission</h3>
           <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="">Select Team/Group</label>
-                <select className="form-control"
-                name="team_id" 
-                value={values.team_id}
-                onBlur={handleBlur}
-                onChange={handleChange}>
-                   <option value="">--Select Team--</option>
-                  {teams && (
-                    teams.map((team:any)=>{
-                      return <>
-                        <option value={team.id}>{team.name}</option>
-                      </>
-                    })
-                  )
-                  }
-    
-      
-        
-      </select>
-              {errors.team_id && touched.team_id && (
-                <p className="text-danger">{errors.team_id}</p>
-              )}
-            </div>
             <div className="form-group">
               <label htmlFor="">Name</label>
               <input
@@ -163,29 +120,27 @@ try {
           <br />
         </div>
         <div className="col-md-12">
-          <h2>All Roles</h2>
+          <h2>All Permissions</h2>
 
           <table className="table table-bordered">
             <thead>
               <tr>
                 <th>Id</th>
-                <th>Team/Group</th>
-                <th>Category Name</th>
+                <th>Permission Name</th>
                 <th>Created At</th>
                 <th colSpan={2}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {role.map((myRole: any) => {
+              {permission.map((per: any) => {
                 return (
                   <>
                     <tr>
-                      <td>{myRole.id}</td>
-                      <td>{myRole.team_id}</td>
-                      <td>{myRole.name}</td>
-                      <td>{myRole.created_at}</td>
-                      <td><Link className="btn btn-primary" href={`/admin/roles/${myRole.id}`}>Edit</Link></td>
-                     <td><button className="btn btn-danger" onClick={()=>handleDelete(myRole.id)}>Delete</button></td>
+                      <td>{per.id}</td>
+                      <td>{per.name}</td>
+                      <td>{per.created_at}</td>
+                      <td><Link className="btn btn-primary" href={`/admin/permissions/${per.id}`}>Edit</Link></td>
+                     <td><button className="btn btn-danger" onClick={()=>handleDelete(per.id)}>Delete</button></td>
                     </tr>
                   </>
                 );
@@ -200,4 +155,4 @@ try {
 
 
 
-export default createRole;
+export default CreatePermission;
