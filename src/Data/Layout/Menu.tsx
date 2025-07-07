@@ -153,11 +153,11 @@ const AdminMenuList: MenuItem[] = [
       title: "Incidents",
       type: "submenu",
       children: [
-        createMenuItem("All Incidents", "/dashboard/admin?view=all-incidents"),
+        createMenuItem("All Incidents", "/admin/all-incidents"),
         createMenuItem("Create Incident", "/dashboard/admin?tab=create-incident"),
         createMenuItem("Assign Incidents", "/dashboard/admin?view=assign-incidents"),
-        createMenuItem("Manager Registration", "/dashboard/admin?tab=create-manager"),
-        createMenuItem("Handler Registration", "/dashboard/admin?tab=create-handler")
+        createMenuItem("Manager Registration", "/admin/incident-manager-registration"),
+        createMenuItem("Handler Registration", "/admin/incident-handler-registration")
       ]
     }
   ]),
