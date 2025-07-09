@@ -124,7 +124,7 @@ const User = ({ params }: { params: { id: string } }) => {
             <Card>
                <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Edit User</h5>
+                <h5>Edit Sub Category</h5>
                
               </div>
             </CardHeader>
@@ -135,7 +135,7 @@ const User = ({ params }: { params: { id: string } }) => {
                       <div className="col-md-4">
                         <div className="form-group">
                           <label htmlFor="">
-                            Category Name <span className="text-danger">*</span>
+                            Subcategory Name <span className="text-danger">*</span>
                           </label>
                           <input
                             className="form-control"

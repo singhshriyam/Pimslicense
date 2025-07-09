@@ -8,21 +8,23 @@ import Link from "next/link";
 import { Row, Col, Card, CardHeader, Badge, CardBody, Table, Button, Container } from "reactstrap";
 
 const initialValues = {
-    name:""
+    address:"",
+    lat:"",
+    lng:""
 };
-const UrgencySchema = Yup.object({
+const AssetLocationSchema = Yup.object({
 
-  name: Yup.string().required("Please enter impact name"),
+  address: Yup.string().required("Please enter address"),
  });
 const API_BASE_URL = process.env.API_BASE_URL;
 const token = localStorage.getItem("authToken");
 
-const CreateUrgency = () => {
+const CreateAssetLocation = () => {
 
-  const [urgencies, setUrgencies] = useState([]);
+  const [assetLocations, setAssetLocations] = useState([]);
  
   useEffect(() => {
-    getUrgencies();
+    getAssetLocations();
    
   }, []);
 
@@ -40,7 +42,7 @@ const CreateUrgency = () => {
 if (result.isConfirmed) {
     try {
       const response =  axios.delete(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-location/${id}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -48,8 +50,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      const filterUrgencies = urgencies.filter((u: any) => u.id !== id);
-      setUrgencies(filterUrgencies);
+      const filterAssetLocation = assetLocations.filter((location: any) => location.id !== id);
+      setAssetLocations(filterAssetLocation);
     } catch (error) {}
   }
   });
@@ -63,10 +65,10 @@ if (result.isConfirmed) {
 
 
 
-  const getUrgencies = async () => {
+  const getAssetLocations = async () => {
     try {
       const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/master/urgencies",
+        "https://apexwpc.apextechno.co.uk/api/asset/asset-location",
 
         {
           headers: {
@@ -75,8 +77,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      setUrgencies(response.data.data);
-      console.log("Urgencies=",urgencies);
+      setAssetLocations(response.data.data);
+     
     } catch (error) {}
   };
 
@@ -84,13 +86,15 @@ if (result.isConfirmed) {
   const { values, handleBlur, handleChange, handleSubmit, errors, touched } =
     useFormik({
       initialValues,
-      validationSchema: UrgencySchema,
+      validationSchema: AssetLocationSchema,
       onSubmit: async (values) => {
         try {
           const response = await axios.post(
-            `https://apexwpc.apextechno.co.uk/api/master/urgencies`,
+            `https://apexwpc.apextechno.co.uk/api/asset/asset-location`,
             {
-              name: values.name,
+              address: values.address,
+              lat:values.lat,
+              lng:values.lng
              },
             {
               headers: {
@@ -101,13 +105,13 @@ if (result.isConfirmed) {
           );
 
           if (response.status === 200) {
-           getUrgencies();
+           getAssetLocations();
 
             console.log("Response=", response);
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Urgency  Created Successfully!",
+              text: "Asset Location  Created Successfully!",
             });
           }
         } catch (error: any) {
@@ -131,18 +135,48 @@ if (result.isConfirmed) {
       
           <form onSubmit={handleSubmit}>
             <div className="row">
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <div className="form-group">
-                  <label htmlFor=""> Urgency Name <span className="text-danger">*</span></label>
+                  <label htmlFor="">Address <span className="text-danger">*</span></label>
                   <input
                     className="form-control"
-                    name="name"
-                    value={values.name}
+                    name="address"
+                    value={values.address}
                     onBlur={handleBlur}
                     onChange={handleChange}
                   />
-                  {errors.name && touched.name && (
-                    <p className="text-danger">{errors.name}</p>
+                  {errors.address && touched.address && (
+                    <p className="text-danger">{errors.address}</p>
+                  )}
+                </div>
+              </div>
+               <div className="col-md-3">
+                <div className="form-group">
+                  <label htmlFor="">Lattitude</label>
+                  <input
+                    className="form-control"
+                    name="lat"
+                    value={values.lat}
+                    onBlur={handleBlur}
+                    onChange={handleChange}
+                  />
+                  {errors.lat && touched.lat && (
+                    <p className="text-danger">{errors.lat}</p>
+                  )}
+                </div>
+              </div>
+                <div className="col-md-3">
+                <div className="form-group">
+                  <label htmlFor="">Longitude</label>
+                  <input
+                    className="form-control"
+                    name="lng"
+                    value={values.lng}
+                    onBlur={handleBlur}
+                    onChange={handleChange}
+                  />
+                  {errors.lng && touched.lng && (
+                    <p className="text-danger">{errors.lng}</p>
                   )}
                 </div>
               </div>
@@ -170,35 +204,43 @@ if (result.isConfirmed) {
           <Card>
             <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Impacts</h5>
+                <h5>Asset State</h5>
                 <Badge color="danger" className="fs-6">
-                  {urgencies.length} Impacts
+                  {assetLocations.length} Asset State
                 </Badge>
               </div>
             </CardHeader>
             <CardBody>
-              {urgencies.length > 0 ? (
+              {assetLocations.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
                       <tr>
                 <th>Id</th>
-                <th>Name</th>
+                <th>Address</th>
+                <th>Lattitude</th>
+                <th>Longitude</th>
                 <th colSpan={2}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {urgencies.map((urgency:any) => (
-                        <tr key={urgency.id}>
+                      {assetLocations.map((location:any) => (
+                        <tr key={location.id}>
                           <td>
-                            <span className="fw-medium text-primary">{urgency.id}</span>
+                            <span className="fw-medium text-primary">{location.id}</span>
                           </td>
                           <td>
-                           {urgency.name} 
+                           {location['address']} 
                           </td>
                          
                           <td>
-                            {urgency.category_name}
+                            {location.lat}
+                          </td>
+                           <td>
+                            {location.lng}
+                          </td>
+                          <td>
+                            Action
                           </td>
                           <td>
                             <div className="d-flex gap-1">
@@ -206,7 +248,7 @@ if (result.isConfirmed) {
 
                                 <Link
                           className="btn btn-primary"
-                          href={`/admin/urgency/${urgency.id}`}
+                          href={`/admin/asset-location/${location.id}`}
                         >
                          ✎
                         </Link>
@@ -214,7 +256,7 @@ if (result.isConfirmed) {
                                 color="danger"
                                 size="sm"
                                 title="Reject"
-                                onClick={() => handleDelete(urgency.id)}
+                                onClick={() => handleDelete(location.id)}
                               >
                                 ✗
                               </Button>
@@ -230,7 +272,7 @@ if (result.isConfirmed) {
                 </div>
               ) : (
                 <div className="text-center py-5">
-                  <p className="text-muted mb-0">No Sub Categories</p>
+                  <p className="text-muted mb-0">No Asset Locations</p>
                   <small className="text-muted">All requests have been processed</small>
                 </div>
               )}
@@ -244,4 +286,4 @@ if (result.isConfirmed) {
   );
 };
 
-export default CreateUrgency;
+export default CreateAssetLocation;

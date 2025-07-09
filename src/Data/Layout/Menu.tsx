@@ -167,26 +167,26 @@ const AdminMenuList: MenuItem[] = [
       type: "submenu",
       children: [
         createMenuItem("Category", "/admin/category/create-category"),
-        createMenuItem("Sub-Category", "/dashboard/admin?tab=subcategory"),
-        createMenuItem("Contact Type", "/dashboard/admin?tab=contact-type"),
-        createMenuItem("Incident State", "/dashboard/admin?tab=state"),
-        createMenuItem("Impact", "/dashboard/admin?tab=impact"),
-        createMenuItem("Urgency", "/dashboard/admin?tab=urgency")
+        createMenuItem("Sub-Category", "/admin/sub-category/create-sub-category"),
+        createMenuItem("Contact Type", "/admin/contact-type/create-contact-type"),
+        createMenuItem("Incident State", "/admin/incident-state/create-incident-state"),
+        createMenuItem("Impact", "/admin/impact/create-impact"),
+        createMenuItem("Urgency", "/admin/urgency/create-urgency")
       ]
     },
     {
       title: "Asset Management",
       type: "submenu",
       children: [
-        createMenuItem("Asset State", "/dashboard/admin?tab=asset-state"),
-        createMenuItem("Asset Sub State", "/dashboard/admin?tab=asset-substate"),
-        createMenuItem("Asset Function", "/dashboard/admin?tab=asset-function"),
-        createMenuItem("Asset Location", "/dashboard/admin?tab=asset-location"),
-        createMenuItem("Department", "/dashboard/admin?tab=department"),
-        createMenuItem("Company", "/dashboard/admin?tab=company"),
-        createMenuItem("Stock Room", "/dashboard/admin?tab=stock-room"),
-        createMenuItem("Aisle", "/dashboard/admin?tab=aisle"),
-        createMenuItem("Add Asset", "/dashboard/admin?tab=add-asset")
+        createMenuItem("Asset State", "/admin/asset-state/create-asset-state"),
+        createMenuItem("Asset Sub State", "/admin/asset-sub-state/create-asset-sub-state"),
+        createMenuItem("Asset Function", "/admin/asset-function/create-asset-function"),
+        createMenuItem("Asset Location", "/admin/asset-location/create-asset-location"),
+        createMenuItem("Department", "/admin/asset-department/create-asset-department"),
+        createMenuItem("Company", "/admin/asset-company/create-asset-company"),
+        createMenuItem("Stock Room", "/admin/asset-stock-room/create-asset-stock-room"),
+        createMenuItem("Aisle", "admin/asset-aisle/create-asset-aisle"),
+        createMenuItem("Add Asset", "admin/asset/create-asset")
       ]
     },
     {

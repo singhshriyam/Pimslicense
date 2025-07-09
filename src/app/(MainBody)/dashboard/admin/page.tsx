@@ -5,6 +5,7 @@ import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table }
 import { useRouter, useSearchParams } from 'next/navigation'
 import AdminForms from '../../../../Components/AdminForms'
 import { getCurrentUser, isAuthenticated } from '../../../(MainBody)/services/userService'
+import axios from 'axios'
 
 // Mock data for dashboard
 const mockPendingApprovals = [
@@ -114,10 +115,12 @@ interface SystemStats {
   pendingApprovals: number
   systemHealth: 'good' | 'warning' | 'critical'
 }
-
+const token = localStorage.getItem("authToken");
 const AdminDashboard = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [users,setUsers]=useState([]);
+  const [loggedinUsers,setLoggedinUsers]=useState([])
 
   const viewParam = searchParams.get('view')
   const tabParam = searchParams.get('tab')
@@ -192,7 +195,44 @@ const AdminDashboard = () => {
       email: currentUser?.email || '',
       userId: currentUser?.id || ''
     })
+    getUsers()
+    getLoggedinUsers()
+    
   }, [router])
+
+  const getUsers = async () => {
+    try {
+      const response = await axios.get(
+        "https://apexwpc.apextechno.co.uk/api/users",
+
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token} `,
+          },
+        }
+      );
+      setUsers(response.data.data);
+      console.log("users=", users);
+    } catch (error) {}
+  };
+   const getLoggedinUsers = async () => {
+    try {
+      const response = await axios.get(
+        "https://apexwpc.apextechno.co.uk/api/loggedin-users",
+
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token} `,
+          },
+        }
+      );
+      setLoggedinUsers(response.data.data);
+      console.log("Logged in Users",response.data.data)
+     
+    } catch (error) {}
+  };
 
   // Mock approval action
   const handleApproval = (id: string, action: 'approve' | 'reject') => {
@@ -299,10 +339,10 @@ const AdminDashboard = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <div className="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                    Total Users
+                    Total Users 
                   </div>
                   <div className="h5 mb-0 font-weight-bold text-gray-800">
-                    {dashboardData.systemStats.totalUsers}
+                    {users.length}
                   </div>
                 </div>
               </div>
@@ -381,18 +421,18 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboardData.activeUsers.map((user) => (
-                      <tr key={user.id}>
-                        <td className="fw-medium">{user.name}</td>
+                    {loggedinUsers.map((user:any) => (
+                      <tr key={user.user_id}>
+                        <td className="fw-medium">{user.user.name}</td>
                         <td>
-                          <Badge color="info" size="sm">{user.role}</Badge>
+                          <Badge color="info" size="sm">{user.team_name}</Badge>
                         </td>
                         <td>
                           <Badge
-                            color={user.isOnline ? 'success' : 'secondary'}
+                            color={user.isOnline ? 'success' : 'success'}
                             size="sm"
                           >
-                            {user.isOnline ? 'Online' : 'Offline'}
+                            online
                           </Badge>
                         </td>
                       </tr>

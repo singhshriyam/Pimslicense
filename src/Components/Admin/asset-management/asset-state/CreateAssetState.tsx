@@ -10,19 +10,19 @@ import { Row, Col, Card, CardHeader, Badge, CardBody, Table, Button, Container }
 const initialValues = {
     name:""
 };
-const UrgencySchema = Yup.object({
+const AssetStateSchema = Yup.object({
 
-  name: Yup.string().required("Please enter impact name"),
+  name: Yup.string().required("Please enter asset state name"),
  });
 const API_BASE_URL = process.env.API_BASE_URL;
 const token = localStorage.getItem("authToken");
 
-const CreateUrgency = () => {
+const CreateAssetState = () => {
 
-  const [urgencies, setUrgencies] = useState([]);
+  const [assetStates, setAssetStates] = useState([]);
  
   useEffect(() => {
-    getUrgencies();
+    getAssetState();
    
   }, []);
 
@@ -40,7 +40,7 @@ const CreateUrgency = () => {
 if (result.isConfirmed) {
     try {
       const response =  axios.delete(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-state/${id}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -48,8 +48,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      const filterUrgencies = urgencies.filter((u: any) => u.id !== id);
-      setUrgencies(filterUrgencies);
+      const filterAssetState = assetStates.filter((state: any) => state.id !== id);
+      setAssetStates(filterAssetState);
     } catch (error) {}
   }
   });
@@ -63,10 +63,10 @@ if (result.isConfirmed) {
 
 
 
-  const getUrgencies = async () => {
+  const getAssetState = async () => {
     try {
       const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/master/urgencies",
+        "https://apexwpc.apextechno.co.uk/api/asset/asset-state",
 
         {
           headers: {
@@ -75,8 +75,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      setUrgencies(response.data.data);
-      console.log("Urgencies=",urgencies);
+      setAssetStates(response.data.data);
+     
     } catch (error) {}
   };
 
@@ -84,11 +84,11 @@ if (result.isConfirmed) {
   const { values, handleBlur, handleChange, handleSubmit, errors, touched } =
     useFormik({
       initialValues,
-      validationSchema: UrgencySchema,
+      validationSchema: AssetStateSchema,
       onSubmit: async (values) => {
         try {
           const response = await axios.post(
-            `https://apexwpc.apextechno.co.uk/api/master/urgencies`,
+            `https://apexwpc.apextechno.co.uk/api/asset/asset-state`,
             {
               name: values.name,
              },
@@ -101,13 +101,13 @@ if (result.isConfirmed) {
           );
 
           if (response.status === 200) {
-           getUrgencies();
+           getAssetState();
 
             console.log("Response=", response);
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Urgency  Created Successfully!",
+              text: "Asset State  Created Successfully!",
             });
           }
         } catch (error: any) {
@@ -133,7 +133,7 @@ if (result.isConfirmed) {
             <div className="row">
               <div className="col-md-4">
                 <div className="form-group">
-                  <label htmlFor=""> Urgency Name <span className="text-danger">*</span></label>
+                  <label htmlFor="">Asset State Name <span className="text-danger">*</span></label>
                   <input
                     className="form-control"
                     name="name"
@@ -170,14 +170,14 @@ if (result.isConfirmed) {
           <Card>
             <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Impacts</h5>
+                <h5>Asset State</h5>
                 <Badge color="danger" className="fs-6">
-                  {urgencies.length} Impacts
+                  {assetStates.length} Asset State
                 </Badge>
               </div>
             </CardHeader>
             <CardBody>
-              {urgencies.length > 0 ? (
+              {assetStates.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
@@ -188,17 +188,17 @@ if (result.isConfirmed) {
                       </tr>
                     </thead>
                     <tbody>
-                      {urgencies.map((urgency:any) => (
-                        <tr key={urgency.id}>
+                      {assetStates.map((state:any) => (
+                        <tr key={state.id}>
                           <td>
-                            <span className="fw-medium text-primary">{urgency.id}</span>
+                            <span className="fw-medium text-primary">{state.id}</span>
                           </td>
                           <td>
-                           {urgency.name} 
+                           {state.name} 
                           </td>
                          
                           <td>
-                            {urgency.category_name}
+                            {state.category_name}
                           </td>
                           <td>
                             <div className="d-flex gap-1">
@@ -206,7 +206,7 @@ if (result.isConfirmed) {
 
                                 <Link
                           className="btn btn-primary"
-                          href={`/admin/urgency/${urgency.id}`}
+                          href={`/admin/asset-state/${state.id}`}
                         >
                          ✎
                         </Link>
@@ -214,7 +214,7 @@ if (result.isConfirmed) {
                                 color="danger"
                                 size="sm"
                                 title="Reject"
-                                onClick={() => handleDelete(urgency.id)}
+                                onClick={() => handleDelete(state.id)}
                               >
                                 ✗
                               </Button>
@@ -244,4 +244,4 @@ if (result.isConfirmed) {
   );
 };
 
-export default CreateUrgency;
+export default CreateAssetState;

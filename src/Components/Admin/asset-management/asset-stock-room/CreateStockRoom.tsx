@@ -10,19 +10,19 @@ import { Row, Col, Card, CardHeader, Badge, CardBody, Table, Button, Container }
 const initialValues = {
     name:""
 };
-const UrgencySchema = Yup.object({
+const AssetStockRoomSchema = Yup.object({
 
-  name: Yup.string().required("Please enter impact name"),
+  name: Yup.string().required("Please enter asset stock room name"),
  });
 const API_BASE_URL = process.env.API_BASE_URL;
 const token = localStorage.getItem("authToken");
 
-const CreateUrgency = () => {
+const CreateAssetStockRoom = () => {
 
-  const [urgencies, setUrgencies] = useState([]);
+  const [assetStockRooms, setAssetStockRooms] = useState([]);
  
   useEffect(() => {
-    getUrgencies();
+    getAssetStockRooms();
    
   }, []);
 
@@ -40,7 +40,7 @@ const CreateUrgency = () => {
 if (result.isConfirmed) {
     try {
       const response =  axios.delete(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-stock-room/${id}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -48,8 +48,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      const filterUrgencies = urgencies.filter((u: any) => u.id !== id);
-      setUrgencies(filterUrgencies);
+      const filterAssetStockRoom = assetStockRooms.filter((assetStockRoom: any) => assetStockRoom.id !== id);
+      setAssetStockRooms(filterAssetStockRoom);
     } catch (error) {}
   }
   });
@@ -63,10 +63,10 @@ if (result.isConfirmed) {
 
 
 
-  const getUrgencies = async () => {
+  const getAssetStockRooms = async () => {
     try {
       const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/master/urgencies",
+        "https://apexwpc.apextechno.co.uk/api/asset/asset-stock-room",
 
         {
           headers: {
@@ -75,8 +75,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      setUrgencies(response.data.data);
-      console.log("Urgencies=",urgencies);
+      setAssetStockRooms(response.data.data);
+     
     } catch (error) {}
   };
 
@@ -84,11 +84,11 @@ if (result.isConfirmed) {
   const { values, handleBlur, handleChange, handleSubmit, errors, touched } =
     useFormik({
       initialValues,
-      validationSchema: UrgencySchema,
+      validationSchema: AssetStockRoomSchema,
       onSubmit: async (values) => {
         try {
           const response = await axios.post(
-            `https://apexwpc.apextechno.co.uk/api/master/urgencies`,
+            `https://apexwpc.apextechno.co.uk/api/asset/asset-stock-room`,
             {
               name: values.name,
              },
@@ -101,13 +101,13 @@ if (result.isConfirmed) {
           );
 
           if (response.status === 200) {
-           getUrgencies();
+           getAssetStockRooms();
 
             console.log("Response=", response);
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Urgency  Created Successfully!",
+              text: "Asset Stock Room   Created Successfully!",
             });
           }
         } catch (error: any) {
@@ -133,7 +133,7 @@ if (result.isConfirmed) {
             <div className="row">
               <div className="col-md-4">
                 <div className="form-group">
-                  <label htmlFor=""> Urgency Name <span className="text-danger">*</span></label>
+                  <label htmlFor="">Asset Stock Room Name <span className="text-danger">*</span></label>
                   <input
                     className="form-control"
                     name="name"
@@ -170,14 +170,14 @@ if (result.isConfirmed) {
           <Card>
             <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Impacts</h5>
+                <h5>Asset State</h5>
                 <Badge color="danger" className="fs-6">
-                  {urgencies.length} Impacts
+                  {assetStockRooms.length} Asset State
                 </Badge>
               </div>
             </CardHeader>
             <CardBody>
-              {urgencies.length > 0 ? (
+              {assetStockRooms.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
@@ -188,17 +188,17 @@ if (result.isConfirmed) {
                       </tr>
                     </thead>
                     <tbody>
-                      {urgencies.map((urgency:any) => (
-                        <tr key={urgency.id}>
+                      {assetStockRooms.map((assetStockRoom:any) => (
+                        <tr key={assetStockRoom.id}>
                           <td>
-                            <span className="fw-medium text-primary">{urgency.id}</span>
+                            <span className="fw-medium text-primary">{assetStockRoom.id}</span>
                           </td>
                           <td>
-                           {urgency.name} 
+                           {assetStockRoom.name} 
                           </td>
                          
                           <td>
-                            {urgency.category_name}
+                            {assetStockRoom.category_name}
                           </td>
                           <td>
                             <div className="d-flex gap-1">
@@ -206,7 +206,7 @@ if (result.isConfirmed) {
 
                                 <Link
                           className="btn btn-primary"
-                          href={`/admin/urgency/${urgency.id}`}
+                          href={`/admin/asset-stock-room/${assetStockRoom.id}`}
                         >
                          ✎
                         </Link>
@@ -214,7 +214,7 @@ if (result.isConfirmed) {
                                 color="danger"
                                 size="sm"
                                 title="Reject"
-                                onClick={() => handleDelete(urgency.id)}
+                                onClick={() => handleDelete(assetStockRoom.id)}
                               >
                                 ✗
                               </Button>
@@ -244,4 +244,4 @@ if (result.isConfirmed) {
   );
 };
 
-export default CreateUrgency;
+export default CreateAssetStockRoom;

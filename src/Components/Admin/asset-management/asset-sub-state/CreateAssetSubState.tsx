@@ -8,22 +8,23 @@ import Link from "next/link";
 import { Row, Col, Card, CardHeader, Badge, CardBody, Table, Button, Container } from "reactstrap";
 
 const initialValues = {
-    name:""
+  asset_state_id:"",
+  name:""
 };
-const UrgencySchema = Yup.object({
-
-  name: Yup.string().required("Please enter impact name"),
+const assetStateSchema = Yup.object({
+  asset_state_id: Yup.number().required("Please select Asset state "),
+  name: Yup.string().required("Please enter Asset Sub State name"),
  });
 const API_BASE_URL = process.env.API_BASE_URL;
 const token = localStorage.getItem("authToken");
 
-const CreateUrgency = () => {
-
-  const [urgencies, setUrgencies] = useState([]);
- 
+const CreateAssetSubState = () => {
+  const [asstSubState, setAssetSubStae] = useState([]);
+  const [assetSubStates, setAssetSubStates] = useState([]);
+  const [assetStaes, setAssetStaes] = useState([]);
   useEffect(() => {
-    getUrgencies();
-   
+    getAssetSubStates();
+    getAssetStates();
   }, []);
 
   const handleDelete =  (id: number) => {
@@ -40,7 +41,7 @@ const CreateUrgency = () => {
 if (result.isConfirmed) {
     try {
       const response =  axios.delete(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-sub-state/${id}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -48,8 +49,8 @@ if (result.isConfirmed) {
           },
         }
       );
-      const filterUrgencies = urgencies.filter((u: any) => u.id !== id);
-      setUrgencies(filterUrgencies);
+      const filter = assetSubStates.filter((a: any) => a.id !== id);
+      setAssetSubStates(filter);
     } catch (error) {}
   }
   });
@@ -63,10 +64,10 @@ if (result.isConfirmed) {
 
 
 
-  const getUrgencies = async () => {
+  const getAssetSubStates = async () => {
     try {
       const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/master/urgencies",
+        "https://apexwpc.apextechno.co.uk/api/asset/asset-sub-state",
 
         {
           headers: {
@@ -75,23 +76,39 @@ if (result.isConfirmed) {
           },
         }
       );
-      setUrgencies(response.data.data);
-      console.log("Urgencies=",urgencies);
+      setAssetSubStates(response.data.data);
+   
     } catch (error) {}
   };
+  const getAssetStates = async () => {
+    try {
+      const response = await axios.get(
+        "https://apexwpc.apextechno.co.uk/api/asset/asset-state",
 
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token} `,
+          },
+        }
+      );
+      setAssetStaes(response.data.data);
+   
+    } catch (error) {}
+  };
 
   const { values, handleBlur, handleChange, handleSubmit, errors, touched } =
     useFormik({
       initialValues,
-      validationSchema: UrgencySchema,
+      validationSchema: assetStateSchema,
       onSubmit: async (values) => {
         try {
           const response = await axios.post(
-            `https://apexwpc.apextechno.co.uk/api/master/urgencies`,
+            `https://apexwpc.apextechno.co.uk/api/asset/asset-sub-state`,
             {
               name: values.name,
-             },
+              asset_state_id: values.asset_state_id,
+            },
             {
               headers: {
                 "Content-Type": "application/json",
@@ -101,13 +118,13 @@ if (result.isConfirmed) {
           );
 
           if (response.status === 200) {
-           getUrgencies();
+            getAssetSubStates();
 
             console.log("Response=", response);
             Swal.fire({
               icon: "success",
               title: "Success!",
-              text: "Urgency  Created Successfully!",
+              text: "Asset Sub State  Created Successfully!",
             });
           }
         } catch (error: any) {
@@ -133,7 +150,7 @@ if (result.isConfirmed) {
             <div className="row">
               <div className="col-md-4">
                 <div className="form-group">
-                  <label htmlFor=""> Urgency Name <span className="text-danger">*</span></label>
+                  <label htmlFor="">Asset Sub State Name <span className="text-danger">*</span></label>
                   <input
                     className="form-control"
                     name="name"
@@ -146,7 +163,31 @@ if (result.isConfirmed) {
                   )}
                 </div>
               </div>
-            
+               <div className="col-md-4">
+                <div className="form-group">
+                  <label htmlFor="">Select Asset State <span className="text-danger">*</span></label>
+                  <select
+                    className="form-control"
+                    name="asset_state_id"
+                    value={values.asset_state_id}
+                    onBlur={handleBlur}
+                    onChange={handleChange}
+                  >
+                    <option value="">--Select Category--</option>
+                    {assetStaes &&
+                      assetStaes.map((assetState: any) => {
+                        return (
+                          <>
+                            <option value={assetState.id}>{assetState.name}</option>
+                          </>
+                        );
+                      })}
+                  </select>
+                  {errors.asset_state_id && touched.asset_state_id && (
+                    <p className="text-danger">{errors.asset_state_id}</p>
+                  )}
+                </div>
+              </div>
              <div className="col-md-4">
                 <br />
 
@@ -170,35 +211,36 @@ if (result.isConfirmed) {
           <Card>
             <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Impacts</h5>
+                <h5>Pending Approvals</h5>
                 <Badge color="danger" className="fs-6">
-                  {urgencies.length} Impacts
+                  {assetSubStates.length} assetSubStates
                 </Badge>
               </div>
             </CardHeader>
             <CardBody>
-              {urgencies.length > 0 ? (
+              {assetSubStates.length > 0 ? (
                 <div className="table-responsive">
                   <Table hover className="table-borderless">
                     <thead className="table-light">
                       <tr>
                 <th>Id</th>
                 <th>Name</th>
+                <th>Category</th>
                 <th colSpan={2}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {urgencies.map((urgency:any) => (
-                        <tr key={urgency.id}>
+                      {assetSubStates.map((assetSubState:any) => (
+                        <tr key={assetSubState.id}>
                           <td>
-                            <span className="fw-medium text-primary">{urgency.id}</span>
+                            <span className="fw-medium text-primary">{assetSubState.id}</span>
                           </td>
                           <td>
-                           {urgency.name} 
+                           {assetSubState.name} 
                           </td>
                          
                           <td>
-                            {urgency.category_name}
+                            {assetSubState.asset_state_name}
                           </td>
                           <td>
                             <div className="d-flex gap-1">
@@ -206,7 +248,7 @@ if (result.isConfirmed) {
 
                                 <Link
                           className="btn btn-primary"
-                          href={`/admin/urgency/${urgency.id}`}
+                          href={`/admin/asset-sub-state/${assetSubState.id}`}
                         >
                          ✎
                         </Link>
@@ -214,7 +256,7 @@ if (result.isConfirmed) {
                                 color="danger"
                                 size="sm"
                                 title="Reject"
-                                onClick={() => handleDelete(urgency.id)}
+                                onClick={() => handleDelete(assetSubState.id)}
                               >
                                 ✗
                               </Button>
@@ -230,7 +272,7 @@ if (result.isConfirmed) {
                 </div>
               ) : (
                 <div className="text-center py-5">
-                  <p className="text-muted mb-0">No Sub Categories</p>
+                  <p className="text-muted mb-0">No Asset Sub Assets </p>
                   <small className="text-muted">All requests have been processed</small>
                 </div>
               )}
@@ -244,4 +286,4 @@ if (result.isConfirmed) {
   );
 };
 
-export default CreateUrgency;
+export default CreateAssetSubState;

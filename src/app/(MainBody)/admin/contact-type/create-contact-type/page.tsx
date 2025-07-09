@@ -11,7 +11,7 @@ import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table }
 
 const Role = () => {
 
-     document.title = `Create Sub Category`;
+     document.title = `Create Contact Type`;
   if (localStorage.getItem("userTeam") === "Administrator" ) {
      return (
        <Container fluid>
@@ -23,7 +23,7 @@ const Role = () => {
              <Card>
               <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Add Sub Category</h5>
+                <h5>Add Contact Type</h5>
                
               </div>
             </CardHeader>

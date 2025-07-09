@@ -1,13 +1,13 @@
 'use client'
-
-import CreateUrgency from "@/Components/Admin/urgency/CreateUrgency";
+import CreateAssetFunction from "@/Components/Admin/asset-management/asset-function/CreateAssetFunction";
+import CreateAssetState from "@/Components/Admin/asset-management/asset-state/CreateAssetState";
 import { redirect} from "next/navigation";
 import React from 'react'
 import { Container, Row, Col, Card, CardBody, CardHeader, Button, Badge, Table } from 'reactstrap'
 
 
 
-const Role = () => {
+const AssetFunction = () => {
 
      document.title = `Create Sub Category`;
   if (localStorage.getItem("userTeam") === "Administrator" ) {
@@ -21,12 +21,12 @@ const Role = () => {
              <Card>
               <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Add Urgency</h5>
+                <h5>Add Asset Function</h5>
                
               </div>
             </CardHeader>
                <CardBody>
-<CreateUrgency></CreateUrgency>
+   <CreateAssetFunction></CreateAssetFunction>
                </CardBody>
              </Card>
            </Col>
@@ -39,4 +39,4 @@ const Role = () => {
   }
 };
 
-export default Role;
+export default AssetFunction;

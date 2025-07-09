@@ -6,36 +6,36 @@ import { useEffect, useState } from "react";
 import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Swal from "sweetalert2";
 
-type UrgencyType = {
+type AssetDepartmentType = {
   id?: number;
   name: string;
-    created_at?: string;
+  created_at?: string;
   updated_at?: string;
   deleted_at?: string;
 };
 
 const token = localStorage.getItem("authToken");
 const User = ({ params }: { params: { id: string } }) => {
-  const [urgency,setUrgency] = useState<UrgencyType | null>();
-  const [formData, setFormData] = useState<UrgencyType>();
+  const [assetDepartment,setAssetDepartment] = useState<AssetDepartmentType | null>();
+  const [formData, setFormData] = useState<AssetDepartmentType>();
 
   const id = params.id;
   console.log("id=", id);
   useEffect(() => {
     if (id) {
-      fetchUrgency();
+      fetchAssetDepartment();
       // setName({ name: role ? role.name : "" });
     
     }
-    document.title = `Edit Contact Type ${id}`;
+    document.title = `Edit Asset Department ${id}`;
   }, [id]);
 
 
  
 
-  const fetchUrgency= async () => {
+  const fetchAssetDepartment= async () => {
     const response = await axios.get(
-      `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+      `https://apexwpc.apextechno.co.uk/api/asset/asset-department/${id}`,
 
       {
         headers: {
@@ -45,16 +45,16 @@ const User = ({ params }: { params: { id: string } }) => {
       }
     );
   
-    setUrgency(response.data.data);
+    setAssetDepartment(response.data.data);
     setFormData(response.data.data);
-    console.log("Urgency=",response.data);
+    console.log("contact type=",response.data);
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default browser form submission
     console.log("Form data:", formData);
     try {
       const response = await axios.put(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-department/${id}`,
         formData,
         {
           headers: {
@@ -69,10 +69,10 @@ const User = ({ params }: { params: { id: string } }) => {
         Swal.fire({
           icon: "success",
           title: "Success!",
-          text: "Impact edited Successfully!",
+          text: "Asset Department edited Successfully!",
         }).then((result) => {
           if (result.isConfirmed) {
-            redirect("/admin/urgency/create-urgency"); // Redirect to /dashboard on confirmation
+            redirect("/admin/asset-department/create-asset-department"); // Redirect to /dashboard on confirmation
           }
         });
       }
@@ -104,18 +104,18 @@ const User = ({ params }: { params: { id: string } }) => {
             <Card>
                <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Edit Urgency</h5>
+                <h5>Edit Asset Department</h5>
                
               </div>
             </CardHeader>
               <CardBody>
-                {urgency && (
+                {assetDepartment && (
                   <form onSubmit={handleSubmit}>
                     <div className="row">
                       <div className="col-md-4">
                         <div className="form-group">
                           <label htmlFor="">
-                         Urgency Name <span className="text-danger">*</span>
+                         Asset Department Name <span className="text-danger">*</span>
                           </label>
                           <input
                             className="form-control"

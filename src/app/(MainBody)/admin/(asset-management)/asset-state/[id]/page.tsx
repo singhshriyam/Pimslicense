@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Swal from "sweetalert2";
 
-type UrgencyType = {
+type AssetStateType = {
   id?: number;
   name: string;
     created_at?: string;
@@ -16,14 +16,14 @@ type UrgencyType = {
 
 const token = localStorage.getItem("authToken");
 const User = ({ params }: { params: { id: string } }) => {
-  const [urgency,setUrgency] = useState<UrgencyType | null>();
-  const [formData, setFormData] = useState<UrgencyType>();
+  const [assetState,setAssetState] = useState<AssetStateType | null>();
+  const [formData, setFormData] = useState<AssetStateType>();
 
   const id = params.id;
   console.log("id=", id);
   useEffect(() => {
     if (id) {
-      fetchUrgency();
+      fetchAssetState();
       // setName({ name: role ? role.name : "" });
     
     }
@@ -33,9 +33,9 @@ const User = ({ params }: { params: { id: string } }) => {
 
  
 
-  const fetchUrgency= async () => {
+  const fetchAssetState= async () => {
     const response = await axios.get(
-      `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+      `https://apexwpc.apextechno.co.uk/api/asset/asset-state/${id}`,
 
       {
         headers: {
@@ -45,16 +45,16 @@ const User = ({ params }: { params: { id: string } }) => {
       }
     );
   
-    setUrgency(response.data.data);
+    setAssetState(response.data.data);
     setFormData(response.data.data);
-    console.log("Urgency=",response.data);
+    console.log("contact type=",response.data);
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default browser form submission
     console.log("Form data:", formData);
     try {
       const response = await axios.put(
-        `https://apexwpc.apextechno.co.uk/api/master/urgencies/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/asset/asset-state/${id}`,
         formData,
         {
           headers: {
@@ -69,10 +69,10 @@ const User = ({ params }: { params: { id: string } }) => {
         Swal.fire({
           icon: "success",
           title: "Success!",
-          text: "Impact edited Successfully!",
+          text: "Asset State  edited Successfully!",
         }).then((result) => {
           if (result.isConfirmed) {
-            redirect("/admin/urgency/create-urgency"); // Redirect to /dashboard on confirmation
+            redirect("/admin/asset-state/create-asset-state"); // Redirect to /dashboard on confirmation
           }
         });
       }
@@ -104,18 +104,18 @@ const User = ({ params }: { params: { id: string } }) => {
             <Card>
                <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Edit Urgency</h5>
+                <h5>Edit Asset State</h5>
                
               </div>
             </CardHeader>
               <CardBody>
-                {urgency && (
+                {assetState && (
                   <form onSubmit={handleSubmit}>
                     <div className="row">
                       <div className="col-md-4">
                         <div className="form-group">
                           <label htmlFor="">
-                         Urgency Name <span className="text-danger">*</span>
+                         Asset State Name <span className="text-danger">*</span>
                           </label>
                           <input
                             className="form-control"
