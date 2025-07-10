@@ -6,56 +6,36 @@ import { useEffect, useState } from "react";
 import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Swal from "sweetalert2";
 
-type AssetAisleType = {
-
+type SiteTypeType = {
   id?: number;
-  asset_stock_room_id: number;
   name: string;
-  asset_stock_room_name: string;
-  created_at?: string;
+    created_at?: string;
   updated_at?: string;
   deleted_at?: string;
 };
 
 const token = localStorage.getItem("authToken");
-const User = ({ params }: { params: { id: string } }) => {
-  const [assetAisle, setAssetAisle] = useState<AssetAisleType | null>();
- const [formData, setFormData]  = useState<AssetAisleType>();
- const [assetStockRooms, setAssetStockRooms]= useState([]);
-  
- 
+const EditSiteType = ({ params }: { params: { id: string } }) => {
+  const [siteType,setSiteType] = useState<SiteTypeType | null>();
+  const [formData, setFormData] = useState<SiteTypeType>();
+
   const id = params.id;
   console.log("id=", id);
   useEffect(() => {
     if (id) {
-      fetchAssetAisle();
+      fetchSiteType();
       // setName({ name: role ? role.name : "" });
-     getAssetStockRooms()
+    
     }
-    document.title = `Edit Asset Aisle ${id}`;
+    document.title = `Edit Contact Type ${id}`;
   }, [id]);
 
 
-  const getAssetStockRooms = async () => {
-    try {
-      const response = await axios.get(
-        "https://apexwpc.apextechno.co.uk/api/asset/asset-stock-room",
+ 
 
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token} `,
-          },
-        }
-      );
-      setAssetStockRooms(response.data.data);
-     
-    } catch (error) {}
-  };
-
-  const fetchAssetAisle = async () => {
+  const fetchSiteType= async () => {
     const response = await axios.get(
-      `https://apexwpc.apextechno.co.uk/api/asset/asset-aisle/${id}`,
+      `https://apexwpc.apextechno.co.uk/api/master/site-types/${id}`,
 
       {
         headers: {
@@ -65,15 +45,16 @@ const User = ({ params }: { params: { id: string } }) => {
       }
     );
   
-    setAssetAisle(response.data.data);
+    setSiteType(response.data.data);
     setFormData(response.data.data);
+   
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default browser form submission
     console.log("Form data:", formData);
     try {
       const response = await axios.put(
-        `https://apexwpc.apextechno.co.uk/api/asset/asset-aisle/${id}`,
+        `https://apexwpc.apextechno.co.uk/api/master/site-types/${id}`,
         formData,
         {
           headers: {
@@ -88,10 +69,10 @@ const User = ({ params }: { params: { id: string } }) => {
         Swal.fire({
           icon: "success",
           title: "Success!",
-          text: "Sub Category edited Successfully!",
+          text: "Asset State  edited Successfully!",
         }).then((result) => {
           if (result.isConfirmed) {
-            redirect("/admin/asset-aisle/create-asset-aisle"); // Redirect to /dashboard on confirmation
+            redirect("/admin/site-type/create-site-type"); // Redirect to /dashboard on confirmation
           }
         });
       }
@@ -123,18 +104,18 @@ const User = ({ params }: { params: { id: string } }) => {
             <Card>
                <CardHeader>
               <div className="d-flex justify-content-between align-items-center">
-                <h5>Edit Asset Aisle</h5>
+                <h5>Edit Site Type</h5>
                
               </div>
             </CardHeader>
               <CardBody>
-                {assetAisle && (
+                {siteType && (
                   <form onSubmit={handleSubmit}>
                     <div className="row">
                       <div className="col-md-4">
                         <div className="form-group">
                           <label htmlFor="">
-                           Asset Aisle Name <span className="text-danger">*</span>
+                         Site Type Name <span className="text-danger">*</span>
                           </label>
                           <input
                             className="form-control"
@@ -146,36 +127,7 @@ const User = ({ params }: { params: { id: string } }) => {
                           />
                         </div>
                       </div>
-                      <div className="col-md-4">
-                        <div className="form-group">
-                          <label htmlFor="">
-                           Select Asset Stock Room{assetStockRooms.length}
-                            <span className="text-danger">*</span>
-                          </label>
-                          <select
-                            className="form-control"
-                            name="asset_stock_room_id"
-                            value={formData?.asset_stock_room_id}
-                            onChange={handleChange}
-                            required
-                          >
-                            <option value="">--Select Asset Stock Room--</option>
-                            {assetStockRooms &&
-                              assetStockRooms.map((StockRoom: any) => {
-                                return (
-                                  <>
-                                    {StockRoom.id === assetAisle.asset_stock_room_id && (
-                                      <option value={StockRoom.id} selected>
-                                        {StockRoom.name}
-                                      </option>
-                                    )}
-                                    <option value={StockRoom.id}>{StockRoom.name}</option>
-                                  </>
-                                );
-                              })}
-                          </select>
-                        </div>
-                      </div>
+                   
                       <div className="col-md-4"></div>
                       <div className="col-md-4">
                         <br />
@@ -199,4 +151,4 @@ const User = ({ params }: { params: { id: string } }) => {
   );
 };
 
-export default User;
+export default EditSiteType;

@@ -171,7 +171,9 @@ const AdminMenuList: MenuItem[] = [
         createMenuItem("Contact Type", "/admin/contact-type/create-contact-type"),
         createMenuItem("Incident State", "/admin/incident-state/create-incident-state"),
         createMenuItem("Impact", "/admin/impact/create-impact"),
-        createMenuItem("Urgency", "/admin/urgency/create-urgency")
+        createMenuItem("Urgency", "/admin/urgency/create-urgency"),
+         createMenuItem("Site", "/admin/sitey/create-site"),
+          createMenuItem("Site Type", "/admin/site-type/create-site-type")
       ]
     },
     {
@@ -185,8 +187,8 @@ const AdminMenuList: MenuItem[] = [
         createMenuItem("Department", "/admin/asset-department/create-asset-department"),
         createMenuItem("Company", "/admin/asset-company/create-asset-company"),
         createMenuItem("Stock Room", "/admin/asset-stock-room/create-asset-stock-room"),
-        createMenuItem("Aisle", "admin/asset-aisle/create-asset-aisle"),
-        createMenuItem("Add Asset", "admin/asset/create-asset")
+        createMenuItem("Aisle", "/admin/asset-aisle/create-asset-aisle"),
+        createMenuItem("Add Asset", "/admin/asset/create-asset")
       ]
     },
     {
