@@ -72,6 +72,7 @@ const IncidentHandlerRegistration = () => {
    const [departments, setDepartments] = useState<DepartmentType[]>([]);
    const [designations, setDesignations] = useState<DesignationType[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
+  const [incidentHandlers,setIncidentHandlers]=useState<UserType[]>([])
   const router = useRouter();
   // Load user data on mount
   useEffect(() => {
@@ -97,6 +98,8 @@ const IncidentHandlerRegistration = () => {
       );
 
       setUsers(response.data.data);
+      const filterHandler=response.data.data.filter((user:UserType)=>user.team_id===2)
+      setIncidentHandlers(filterHandler);
       console.log(response);
     } catch (error) {}
   };
@@ -427,6 +430,63 @@ return (
           </Card>
         </Col>
       </Row>
+      <Row>
+                <Col xs={12}>
+                  <Card>
+                    <CardHeader>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <h5>Incident Handlers</h5>
+                        <Badge color="danger" className="fs-6">
+                          {incidentHandlers.length} Incident Handlers
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardBody>
+                      {users.length > 0 ? (
+                        <div className="table-responsive">
+                          <Table hover className="table-borderless">
+                            <thead className="table-light">
+                              <tr>
+                                <th>Id</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Mobile</th>
+                                <th>Group</th>
+                               
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {incidentHandlers.map((user: any) => (
+                                <tr key={user.id}>
+                                  <td>
+                                    <span className="fw-medium text-primary">
+                                      {user.id}
+                                    </span>
+                                  </td>
+                                  <td>{user.first_name} {user.last_name}</td>
+      
+                                  <td>{user.email}</td>
+                                    <td>{user?.mobile}</td>
+                                      <td>{user.serial_no}</td>
+                                        <td>{user.team_name}</td>
+                                
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-5">
+                          <p className="text-muted mb-0">No Sub Categories</p>
+                          <small className="text-muted">
+                            All requests have been processed
+                          </small>
+                        </div>
+                      )}
+                    </CardBody>
+                  </Card>
+                </Col>
+              </Row>
     </Container>
   );
 };

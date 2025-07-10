@@ -172,7 +172,7 @@ const AdminMenuList: MenuItem[] = [
         createMenuItem("Incident State", "/admin/incident-state/create-incident-state"),
         createMenuItem("Impact", "/admin/impact/create-impact"),
         createMenuItem("Urgency", "/admin/urgency/create-urgency"),
-         createMenuItem("Site", "/admin/sitey/create-site"),
+         createMenuItem("Site", "/admin/site/create-site"),
           createMenuItem("Site Type", "/admin/site-type/create-site-type")
       ]
     },
@@ -195,8 +195,8 @@ const AdminMenuList: MenuItem[] = [
       title: "Site Management",
       type: "submenu",
       children: [
-        createMenuItem("Site Type", "/dashboard/admin?tab=site-type"),
-        createMenuItem("Sites", "/dashboard/admin?tab=sites")
+        createMenuItem("Site Type", "/admin/site-type/create-site-type"),
+        createMenuItem("Sites", "/admin/site/create-site")
       ]
     },
     {
