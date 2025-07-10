@@ -1,715 +1,615 @@
 'use client'
-import React, { useState, useEffect } from 'react'
-import { Container, Row, Col, Card, CardBody, Button } from 'reactstrap'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Container, Row, Col, Card, CardBody, Button, Spinner } from 'reactstrap'
 import { useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
+
+// Components
+import RequestForm from '../../../../Components/RequestForm'
+import MyRequests from '../../../../Components/MyRequests'
+import AllIncidents from '../../../../Components/AllIncidents'
+import AssignIncidents from '../../../../Components/AssignIncidents'
+
+// Services
 import {
   getCurrentUser,
   isAuthenticated,
-  clearUserData
-} from '../../services/userService';
+  clearUserData,
+  type User
+} from '../../services/userService'
+
+// Dynamic imports
+const Chart = dynamic(() => import('react-apexcharts'), {
+  ssr: false,
+  loading: () => <Spinner color="primary" />
+})
 
 import {
-  // fetchExpertTeamIncidents, // TODO: Implement this endpoint
-  getIncidentStats,
+  fetchExpertTeamIncidents,
   getStatusColor,
   getPriorityColor,
   type Incident
-} from '../../services/incidentService';
+} from '../../services/incidentService'
 
-// Import the unified AllIncidents component
-import AllIncidents from '../../../../Components/AllIncidents';
-import AssignIncidents from '../../../../Components/AssignIncidents';
+interface DashboardState {
+  myIncidents: Incident[]
+  loading: boolean
+  error: string | null
+}
 
-// Dynamically import ApexCharts to avoid SSR issues
-const Chart = dynamic(() => import('react-apexcharts'), { ssr: false })
+interface UserState {
+  name: string
+  team: string
+  email: string
+  userId: string
+}
 
-// FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
-// This fake data is temporarily used to show dashboard functionality
-// Remove this entire section once fetchExpertTeamIncidents() API endpoint is implemented
-export const EXPERT_TEAM_FAKE_DATA: Incident[] = [
-  {
-    id: 'demo-expert-1',
-    incident_no: 'EXP-2024-001',
-    status: 'in_progress',
-    category: { name: 'Complex Analysis' },
-    priority: 'Critical',
-    user: { name: 'Michael', last_name: 'Brown' },
-    created_at: '2024-01-14T09:15:00Z',
-    assigned_to: { name: 'Expert', last_name: 'Analyst' },
-    incidentstate: { name: 'inprogress' },
-    urgency: { name: 'Critical' },
-    short_description: 'Complex water quality analysis required for industrial discharge'
-  },
-  {
-    id: 'demo-expert-2',
-    incident_no: 'EXP-2024-002',
-    status: 'resolved',
-    category: { name: 'Technical Review' },
-    priority: 'High',
-    user: { name: 'Lisa', last_name: 'Davis' },
-    created_at: '2024-01-13T16:45:00Z',
-    assigned_to: { name: 'Expert', last_name: 'Analyst' },
-    incidentstate: { name: 'resolved' },
-    urgency: { name: 'High' },
-    short_description: 'Technical review of pollution control measures'
-  },
-  {
-    id: 'demo-expert-3',
-    incident_no: 'EXP-2024-003',
-    status: 'pending',
-    category: { name: 'Root Cause Analysis' },
-    priority: 'High',
-    user: { name: 'Robert', last_name: 'Wilson' },
-    created_at: '2024-01-16T11:30:00Z',
-    assigned_to: { name: 'Expert', last_name: 'Analyst' },
-    incidentstate: { name: 'new' },
-    urgency: { name: 'High' },
-    short_description: 'Root cause analysis for recurring chemical discharge violations'
-  }
-];
+type ViewType = 'dashboard' | 'request-form' | 'my-requests' | 'all-incidents' | 'assign-incidents'
 
-const ExpertTeamDashboard = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+const VIEWS = {
+  DASHBOARD: 'dashboard' as const,
+  REQUEST_FORM: 'request-form' as const,
+  MY_REQUESTS: 'my-requests' as const,
+  ALL_INCIDENTS: 'all-incidents' as const,
+  ASSIGN_INCIDENTS: 'assign-incidents' as const,
+}
 
-  const viewParam = searchParams.get('view');
-  const statusParam = searchParams.get('status');
-  const [currentView, setCurrentView] = useState(viewParam || 'dashboard');
-  const [filterByStatus, setFilterByStatus] = useState<string | null>(statusParam);
+const ExpertTeamDashboard: React.FC = () => {
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const [dashboardData, setDashboardData] = useState({
-    myIncidents: [] as Incident[],
+  const [currentView, setCurrentView] = useState<ViewType>(
+    (searchParams.get('view') as ViewType) || VIEWS.DASHBOARD
+  )
+  const [filterByStatus, setFilterByStatus] = useState<string | null>(
+    searchParams.get('status')
+  )
+  const [dashboardData, setDashboardData] = useState<DashboardState>({
+    myIncidents: [],
     loading: true,
-    error: null as string | null
-  });
-
-  const [user, setUser] = useState({
+    error: null
+  })
+  const [user, setUser] = useState<UserState>({
     name: '',
     team: '',
     email: '',
     userId: ''
-  });
+  })
 
-  // Helper function to safely get status - uses the transform function logic
-  const getStatus = (incident: Incident): 'pending' | 'in_progress' | 'resolved' | 'closed' => {
-    if (incident.status) return incident.status;
-    const state = incident.incidentstate?.name?.toLowerCase() || '';
-    if (state === 'new') return 'pending';
-    if (state === 'inprogress') return 'in_progress';
-    if (state === 'resolved') return 'resolved';
-    if (state === 'closed') return 'closed';
-    return 'pending';
-  };
-
-  // Helper function to safely get category name
-  const getCategoryName = (incident: Incident) => {
-    if (incident.category?.name) return incident.category.name;
-    return 'Uncategorized';
-  };
-
-  // Helper function to safely get priority name
-  const getPriorityName = (incident: Incident) => {
-    if (incident.priority?.name) return incident.priority.name;
-    return incident.urgency?.name || 'Medium';
-  };
-
-  // Helper function to safely get caller name
-  const getCallerName = (incident: Incident) => {
-    const fullName = incident.user.last_name
-      ? `${incident.user.name} ${incident.user.last_name}`
-      : incident.user.name;
-    return fullName;
-  };
-
-  // Helper function to safely get incident number
-  const getIncidentNumber = (incident: Incident) => {
-    return incident.incident_no;
-  };
-
-  // Helper function to safely get created date
-  const getCreatedAt = (incident: Incident) => {
-    return incident.created_at;
-  };
-
-  // Helper function to get assigned user name
-  const getAssignedTo = (incident: Incident) => {
-    const fullName = incident.assigned_to.last_name
-      ? `${incident.assigned_to.name} ${incident.assigned_to.last_name}`
-      : incident.assigned_to.name;
-    return fullName;
-  };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setDashboardData(prev => ({ ...prev, loading: true, error: null }));
-
-        // Check authentication
-        if (!isAuthenticated()) {
-          router.replace('/auth/login');
-          return;
-        }
-
-        // Get current user
-        const currentUser = getCurrentUser();
-
-        if (!currentUser?.id) {
-          throw new Error('User ID not found. Please log in again.');
-        }
-
-        setUser({
-          name: currentUser?.name || 'Expert Team Member',
-          team: currentUser?.team || 'Expert Team',
-          email: currentUser?.email || '',
-          userId: currentUser?.id || ''
-        });
-
-        // TODO: Implement fetchExpertTeamIncidents() endpoint
-        // const expertIncidents = await fetchExpertTeamIncidents();
-
-        // FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
-        // Using exported fake data for consistency across all views
-        const expertIncidents: Incident[] = EXPERT_TEAM_FAKE_DATA;
-
-        // Log status breakdown for debugging
-        const statusCounts = expertIncidents.reduce((acc, incident) => {
-          const status = getStatus(incident);
-          acc[status] = (acc[status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-
-        // Log assignment breakdown
-        const assignmentCounts = expertIncidents.reduce((acc, incident) => {
-          const key = getAssignedTo(incident);
-          acc[key] = (acc[key] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>);
-
-        setDashboardData({
-          myIncidents: expertIncidents,
-          loading: false,
-          error: null
-        });
-
-      } catch (error: any) {
-        setDashboardData(prev => ({
-          ...prev,
-          loading: false,
-          error: error.message || 'Failed to load dashboard data'
-        }));
+  const getStatus = useCallback((incident: Incident): string => {
+    if (incident.incidentstate?.name) {
+      const state = incident.incidentstate.name.toLowerCase()
+      switch(state) {
+        case 'new': return 'pending'
+        case 'in progress': return 'in_progress'
+        case 'inprogress': return 'in_progress'
+        case 'resolved': return 'resolved'
+        case 'closed': return 'closed'
+        default: return state.replace(' ', '_')
       }
-    };
+    }
+    return 'pending'
+  }, [])
 
-    fetchData();
-  }, [router]);
+  const getCategoryName = useCallback((incident: Incident): string => {
+    return incident.category?.name || incident.category_name || 'Uncategorized'
+  }, [])
 
-  useEffect(() => {
-    const currentViewParam = searchParams.get('view');
-    const currentStatusParam = searchParams.get('status');
+  const getPriorityName = useCallback((incident: Incident): string => {
+    return incident.priority?.name || incident.urgency?.name || 'Medium'
+  }, [])
 
-    // Check for sidebar navigation
-    if (currentViewParam === 'my-incidents') {
-      setCurrentView('all-incidents');
-    } else if (currentViewParam === 'assign-incidents') {
-      setCurrentView('assign-incidents');
-    } else {
-      setCurrentView(currentViewParam || 'dashboard');
+  const getCallerName = useCallback((incident: Incident): string => {
+    if (incident.user?.name) {
+      const fullName = incident.user.last_name
+        ? `${incident.user.name} ${incident.user.last_name}`
+        : incident.user.name
+      return fullName
+    }
+    return incident.reported_by || 'Unknown User'
+  }, [])
+
+  const getIncidentNumber = useCallback((incident: Incident): string => {
+    return incident.incident_no || incident.id?.toString() || 'Unknown'
+  }, [])
+
+  const getCreatedAt = useCallback((incident: Incident): string => {
+    return incident.created_at || new Date().toISOString()
+  }, [])
+
+  const formatDateLocal = useCallback((dateString: string): string => {
+    try {
+      return new Date(dateString).toLocaleDateString()
+    } catch {
+      return 'Unknown'
+    }
+  }, [])
+
+  const getIncidentStatsLocal = useCallback((incidents: Incident[]) => {
+    const stats = {
+      total: incidents.length,
+      pending: 0,
+      inProgress: 0,
+      resolved: 0,
+      closed: 0
     }
 
-    setFilterByStatus(currentStatusParam);
-  }, [searchParams]);
+    incidents.forEach(incident => {
+      const status = getStatus(incident)
+      switch(status) {
+        case 'pending':
+          stats.pending++
+          break
+        case 'in_progress':
+          stats.inProgress++
+          break
+        case 'resolved':
+          stats.resolved++
+          break
+        case 'closed':
+          stats.closed++
+          break
+      }
+    })
 
-  // Get statistics
-  const stats = getIncidentStats(dashboardData.myIncidents);
+    return stats
+  }, [getStatus])
 
-  // Navigation handlers
-  const handleViewAllIncidents = () => {
-    setCurrentView('all-incidents');
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.set('view', 'all-incidents');
-    window.history.pushState({}, '', newUrl.toString());
-  };
-
-  const handleViewAssignIncidents = () => {
-    setCurrentView('assign-incidents');
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.set('view', 'assign-incidents');
-    window.history.pushState({}, '', newUrl.toString());
-  };
-
-  const handleBackToDashboard = () => {
-    setCurrentView('dashboard');
-    setFilterByStatus(null);
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete('view');
-    newUrl.searchParams.delete('status');
-    window.history.pushState({}, '', newUrl.toString());
-  };
-
-  const formatDateLocal = (dateString: string) => {
+  const fetchData = useCallback(async (): Promise<void> => {
     try {
-      return new Date(dateString).toLocaleDateString();
-    } catch (error) {
-      return 'Unknown';
-    }
-  };
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }))
 
-  const handleRefreshData = async () => {
-    try {
-      setDashboardData(prev => ({ ...prev, loading: true, error: null }));
+      if (!isAuthenticated()) {
+        router.replace('/auth/login')
+        return
+      }
 
-      // TODO: Implement fetchExpertTeamIncidents() endpoint
-      // const expertIncidents = await fetchExpertTeamIncidents();
+      const currentUser = getCurrentUser()
 
-      // FAKE DATA FOR DEMO - DELETE THIS WHEN REAL API IS READY
-      // Using exported fake data for consistency across all views
-      const expertIncidents: Incident[] = EXPERT_TEAM_FAKE_DATA;
+      if (!currentUser.id) {
+        throw new Error('User ID not found. Please log in again.')
+      }
+
+      setUser({
+        name: currentUser.first_name || 'Expert Team Member',
+        team: currentUser.team_name || 'Expert Team',
+        email: currentUser.email || '',
+        userId: currentUser.id.toString()
+      })
+
+      const expertIncidents = await fetchExpertTeamIncidents()
 
       setDashboardData({
         myIncidents: expertIncidents,
         loading: false,
         error: null
-      });
+      })
+
+    } catch (error: any) {
+      setDashboardData(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to load dashboard data'
+      }))
+
+      if (error.message?.includes('Authentication') || error.message?.includes('token')) {
+        clearUserData()
+        router.replace('/auth/login')
+      }
+    }
+  }, [router])
+
+  const handleRefreshData = useCallback(async (): Promise<void> => {
+    try {
+      setDashboardData(prev => ({ ...prev, loading: true, error: null }))
+      const expertIncidents = await fetchExpertTeamIncidents()
+      setDashboardData({
+        myIncidents: expertIncidents,
+        loading: false,
+        error: null
+      })
     } catch (error: any) {
       setDashboardData(prev => ({
         ...prev,
         loading: false,
         error: error.message || 'Failed to refresh data'
-      }));
+      }))
     }
-  };
+  }, [])
 
-  const handleLogout = () => {
-    clearUserData();
-    router.replace('/auth/login');
-  };
+  const handleViewAllIncidents = useCallback((): void => {
+    setCurrentView(VIEWS.ALL_INCIDENTS)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('view', VIEWS.ALL_INCIDENTS)
+    window.history.pushState({}, '', newUrl.toString())
+  }, [])
 
-  // Render different views based on current view
-  if (currentView === 'all-incidents') {
-    return <AllIncidents userType="expert_team" onBack={handleBackToDashboard} initialStatusFilter={filterByStatus} />;
-  }
+  const handleViewAssignIncidents = useCallback((): void => {
+    setCurrentView(VIEWS.ASSIGN_INCIDENTS)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('view', VIEWS.ASSIGN_INCIDENTS)
+    window.history.pushState({}, '', newUrl.toString())
+  }, [])
 
-  if (currentView === 'assign-incidents') {
-    return <AssignIncidents userType="expert_team" onBack={handleBackToDashboard} />;
-  }
+  const handleBackToDashboard = useCallback((): void => {
+    setCurrentView(VIEWS.DASHBOARD)
+    setFilterByStatus(null)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('view')
+    newUrl.searchParams.delete('status')
+    window.history.pushState({}, '', newUrl.toString())
+  }, [])
 
-  if (dashboardData.loading) {
-    return (
-      <Container fluid>
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading your dashboard...</span>
-          </div>
-          <p className="mt-3 text-muted">Loading incidents assigned to you...</p>
-        </div>
-      </Container>
-    );
-  }
+  const handleLogout = useCallback((): void => {
+    clearUserData()
+    router.replace('/auth/login')
+  }, [router])
 
-  if (dashboardData.error) {
-    return (
-      <Container fluid>
-        <div className="alert alert-danger mt-3">
-          <strong>Error:</strong> {dashboardData.error}
-          <div className="mt-2">
-            <Button color="primary" onClick={handleRefreshData} className="me-2">
-              Try again
-            </Button>
-          </div>
-        </div>
-      </Container>
-    );
-  }
-
-  // Pie chart configuration
-  const pieChartSeries = [
-    stats.resolved,
-    stats.inProgress,
-    stats.pending,
-    stats.closed
-  ];
-
-  // Only show non-zero values
-  const nonZeroData: number[] = [];
-  const nonZeroLabels: string[] = [];
-  const allLabels = ['Completed', 'In Progress', 'Pending', 'Closed'];
-  const allColors = ['#10b981', '#3b82f6', '#f59e0b', '#6b7280'];
-  const nonZeroColors: string[] = [];
-
-  pieChartSeries.forEach((value, index) => {
-    if (value > 0) {
-      nonZeroData.push(value);
-      nonZeroLabels.push(allLabels[index]);
-      nonZeroColors.push(allColors[index]);
-    }
-  });
-
-  const pieChartOptions: any = {
-    chart: {
-      type: 'pie',
-      height: 350,
-      events: {
-        dataPointSelection: function(event: any, chartContext: any, config: any) {
-          try {
-            const selectedLabel = nonZeroLabels[config.dataPointIndex];
-            let statusToFilter = '';
-
-            switch(selectedLabel) {
-              case 'Completed':
-                statusToFilter = 'resolved';
-                break;
-              case 'In Progress':
-                statusToFilter = 'in_progress';
-                break;
-              case 'Pending':
-                statusToFilter = 'pending';
-                break;
-              case 'Closed':
-                statusToFilter = 'closed';
-                break;
-            }
-
-            if (statusToFilter) {
-              setCurrentView('all-incidents');
-              setFilterByStatus(statusToFilter);
-              const newUrl = new URL(window.location.href);
-              newUrl.searchParams.set('view', 'all-incidents');
-              newUrl.searchParams.set('status', statusToFilter);
-              window.history.pushState({}, '', newUrl.toString());
-            }
-          } catch (error) {
-            console.warn('Chart interaction error:', error);
-          }
-        }
-      }
-    },
-    labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
-    colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
-    legend: {
-      position: 'bottom'
-    },
-    responsive: [{
-      breakpoint: 480,
-      options: {
-        chart: {
-          width: 200
-        },
-        legend: {
-          position: 'bottom'
-        }
-      }
-    }],
-    tooltip: {
-      y: {
-        formatter: function(val: number) {
-          return val + ' incidents'
-        }
-      }
-    }
-  };
-
-  // Monthly trends calculation
-  const getMonthlyTrends = () => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+  const getMonthlyTrends = useCallback(() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     const monthlyData = months.map((month, index) => {
       const monthIncidents = dashboardData.myIncidents.filter(incident => {
         try {
-          const incidentMonth = new Date(getCreatedAt(incident)).getMonth();
-          return incidentMonth === index;
-        } catch (error) {
-          return false;
+          const incidentMonth = new Date(getCreatedAt(incident)).getMonth()
+          return incidentMonth === index
+        } catch {
+          return false
         }
-      });
+      })
 
       return {
         assigned: monthIncidents.length,
         completed: monthIncidents.filter(i => getStatus(i) === 'resolved').length,
         inProgress: monthIncidents.filter(i => getStatus(i) === 'in_progress').length
-      };
-    });
+      }
+    })
 
     return {
       months,
       assigned: monthlyData.map(d => d.assigned),
       completed: monthlyData.map(d => d.completed),
       inProgress: monthlyData.map(d => d.inProgress)
-    };
-  };
+    }
+  }, [dashboardData.myIncidents, getCreatedAt, getStatus])
 
-  const { months, assigned, completed, inProgress } = getMonthlyTrends();
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
-  const barChartOptions: any = {
+  useEffect(() => {
+    const currentViewParam = searchParams.get('view') as ViewType
+    const currentStatusParam = searchParams.get('status')
+    setCurrentView(currentViewParam || VIEWS.DASHBOARD)
+    setFilterByStatus(currentStatusParam)
+  }, [searchParams])
+
+  if (currentView === VIEWS.REQUEST_FORM) {
+    return <RequestForm userType="expert_team" onBack={handleBackToDashboard} initialView="form" />
+  }
+
+  if (currentView === VIEWS.MY_REQUESTS) {
+    return <MyRequests userType="expert_team" onBack={handleBackToDashboard} />
+  }
+
+  if (currentView === VIEWS.ALL_INCIDENTS) {
+    return (
+      <AllIncidents
+        userType="expert_team"
+        onBack={handleBackToDashboard}
+        initialStatusFilter={filterByStatus}
+      />
+    )
+  }
+
+  if (currentView === VIEWS.ASSIGN_INCIDENTS) {
+    return <AssignIncidents userType="expert_team" onBack={handleBackToDashboard} />
+  }
+
+  if (dashboardData.loading) {
+    return (
+      <Container fluid>
+        <div className="text-center py-5">
+          <Spinner color="primary" style={{ width: '3rem', height: '3rem' }} />
+          <p className="mt-3 text-muted">Loading expert team assignments...</p>
+        </div>
+      </Container>
+    )
+  }
+
+  const stats = getIncidentStatsLocal(dashboardData.myIncidents)
+  const { months, assigned, completed, inProgress } = getMonthlyTrends()
+
+  const pieChartSeries = [stats.resolved, stats.inProgress, stats.pending, stats.closed]
+
+  const nonZeroData: number[] = []
+  const nonZeroLabels: string[] = []
+  const allLabels = ['Completed', 'In Progress', 'Pending', 'Closed']
+  const allColors = ['#10b981', '#3b82f6', '#f59e0b', '#6b7280']
+  const nonZeroColors: string[] = []
+
+  pieChartSeries.forEach((value, index) => {
+    if (value > 0) {
+      nonZeroData.push(value)
+      nonZeroLabels.push(allLabels[index])
+      nonZeroColors.push(allColors[index])
+    }
+  })
+
+  const pieChartOptions = {
     chart: {
-      type: 'bar',
-      height: 350
+      type: 'pie' as const,
+      height: 350,
+      events: {
+        dataPointSelection: function(event: any, chartContext: any, config: any) {
+          try {
+            const selectedLabel = nonZeroLabels[config.dataPointIndex]
+            let statusToFilter = ''
+
+            switch(selectedLabel) {
+              case 'Completed':
+                statusToFilter = 'resolved'
+                break
+              case 'In Progress':
+                statusToFilter = 'in_progress'
+                break
+              case 'Pending':
+                statusToFilter = 'pending'
+                break
+              case 'Closed':
+                statusToFilter = 'closed'
+                break
+            }
+
+            if (statusToFilter) {
+              setCurrentView(VIEWS.ALL_INCIDENTS)
+              setFilterByStatus(statusToFilter)
+              const newUrl = new URL(window.location.href)
+              newUrl.searchParams.set('view', VIEWS.ALL_INCIDENTS)
+              newUrl.searchParams.set('status', statusToFilter)
+              window.history.pushState({}, '', newUrl.toString())
+            }
+          } catch (error) {
+            // Silently handle chart interaction errors
+          }
+        }
+      }
     },
+    labels: nonZeroLabels.length > 0 ? nonZeroLabels : ['No Data'],
+    colors: nonZeroColors.length > 0 ? nonZeroColors : ['#6b7280'],
+    legend: { position: 'bottom' as const },
+    responsive: [{
+      breakpoint: 480,
+      options: {
+        chart: { width: 200 },
+        legend: { position: 'bottom' as const }
+      }
+    }],
+    tooltip: {
+      y: {
+        formatter: (val: number) => `${val} cases`
+      }
+    }
+  }
+
+  const barChartOptions = {
+    chart: { type: 'bar' as const, height: 350 },
     plotOptions: {
       bar: {
         horizontal: false,
-        columnWidth: '55%',
-      },
-    },
-    dataLabels: {
-      enabled: false
-    },
-    stroke: {
-      show: true,
-      width: 2,
-      colors: ['transparent']
-    },
-    xaxis: {
-      categories: months,
-    },
-    yaxis: {
-      title: {
-        text: 'Number of Incidents'
+        columnWidth: '55%'
       }
     },
-    fill: {
-      opacity: 1
-    },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: { categories: months },
+    yaxis: { title: { text: 'Number of Expert Cases' } },
+    fill: { opacity: 1 },
     colors: ['#3b82f6', '#10b981', '#f59e0b']
-  };
+  }
 
-  const barChartSeries = [{
-    name: 'Assigned',
-    data: assigned
-  }, {
-    name: 'Completed',
-    data: completed
-  }, {
-    name: 'In Progress',
-    data: inProgress
-  }];
+  const barChartSeries = [
+    { name: 'Assigned', data: assigned },
+    { name: 'Completed', data: completed },
+    { name: 'In Progress', data: inProgress }
+  ]
 
   return (
-    <>
-      <Container fluid>
-        {/* Welcome Header */}
-        <Row>
-          <Col xs={12}>
-            <Card className="mb-4 mt-4">
-              <CardBody>
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h4 className="mb-1">Welcome back, {user.name}!</h4>
-                    <small className="text-muted">Expert Team Dashboard - Advanced Analysis & Resolution</small>
+    <Container fluid>
+      <Row>
+        <Col xs={12}>
+          <Card className="mb-4 mt-4">
+            <CardBody>
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h4 className="mb-1">Welcome back, {user.name}!</h4>
+                </div>
+              </div>
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row>
+        {[
+          { value: stats.total, label: 'Expert Cases', color: 'primary'},
+          { value: stats.resolved, label: 'Completed', color: 'success'},
+          { value: stats.inProgress, label: 'In Progress', color: 'info' },
+          { value: stats.pending, label: 'Pending Review', color: 'warning' }
+        ].map((stat, index) => (
+          <Col xl={3} md={6} className="box-col-6 mt-3" key={index}>
+            <Card className="o-hidden">
+              <CardBody className="b-r-4 card-body">
+                <div className="media static-top-widget">
+                  <div className="align-self-center text-center">
+                    <div className="d-inline-block">
+                      <h5 className="mb-0 counter">{stat.value}</h5>
+                      <span className="f-light">{stat.label}</span>
+                    </div>
                   </div>
-                  <div>
-                    <Button color="outline-primary" size="sm" onClick={handleRefreshData}>
-                      🔄 Refresh
+                </div>
+              </CardBody>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <Row>
+        <Col lg={8}>
+          <Card>
+            <CardBody>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5>Recent Expert Assignments</h5>
+                <div className="d-flex gap-2">
+                  {stats.total > 0 && (
+                    <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
+                      View All Cases
                     </Button>
-                  </div>
+                  )}
                 </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
+              </div>
 
-        {/* Statistics Cards */}
-        <Row>
-          <Col xl={3} md={6} className="box-col-6 mt-3">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.total}</h5>
-                      <span className="f-light">My Total Assignments</span>
-                    </div>
+              {dashboardData.myIncidents.length === 0 ? (
+                <div className="text-center py-5">
+                  <div className="mb-3">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
                   </div>
+                  <h6 className="text-muted">No expert cases assigned yet</h6>
+                  <p className="text-muted small">Expert cases will appear here when assigned to you</p>
                 </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6 mt-3">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.resolved}</h5>
-                      <span className="f-light">Completed</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6 mt-3">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.inProgress}</h5>
-                      <span className="f-light">In Progress</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-          <Col xl={3} md={6} className="box-col-6 mt-3">
-            <Card className="o-hidden">
-              <CardBody className="b-r-4 card-body">
-                <div className="media static-top-widget">
-                  <div className="align-self-center text-center">
-                    <div className="d-inline-block">
-                      <h5 className="mb-0 counter">{stats.pending}</h5>
-                      <span className="f-light">Pending</span>
-                    </div>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Main Content */}
-        <Row>
-          <Col lg={8}>
-            <Card>
-              <CardBody>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h5>My Recent Expert Assignments</h5>
-                  <div>
-                    {stats.total > 0 && (
-                      <Button color="outline-primary" size="sm" onClick={handleViewAllIncidents}>
-                        View All
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {dashboardData.myIncidents.length === 0 ? (
-                  <div className="text-center py-5">
-                    <div className="mb-3">
-                      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10,9 9,9 8,9"/>
-                      </svg>
-                    </div>
-                    <h6 className="text-muted">No incidents assigned yet</h6>
-                    <p className="text-muted">
-                      You don't have any expert assignments at the moment. Check back later for complex cases requiring expert analysis.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table table-bordernone">
-                      <thead>
-                        <tr>
-                          <th scope="col">Incident</th>
-                          <th scope="col">Category</th>
-                          <th scope="col">Priority</th>
-                          <th scope="col">Status</th>
-                          <th scope="col">Date</th>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-bordernone">
+                    <thead>
+                      <tr>
+                        <th scope="col">Incident ID</th>
+                        <th scope="col">Category</th>
+                        <th scope="col">Priority</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Assigned</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboardData.myIncidents
+                        .sort((a, b) => new Date(getCreatedAt(b)).getTime() - new Date(getCreatedAt(a)).getTime())
+                        .slice(0, 3)
+                        .map((incident) => (
+                        <tr key={incident.id}>
+                          <td>
+                            <span className="fw-medium text-primary">{getIncidentNumber(incident)}</span>
+                          </td>
+                          <td>
+                            <div>
+                              <div className="fw-medium">{getCategoryName(incident)}</div>
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className="badge"
+                              style={{
+                                backgroundColor: getPriorityColor(getPriorityName(incident)),
+                                color: 'white'
+                              }}
+                            >
+                              {getPriorityName(incident)}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className="badge"
+                              style={{
+                                backgroundColor: getStatusColor(getStatus(incident)),
+                                color: 'white'
+                              }}
+                            >
+                              {(getStatus(incident) || 'pending').toString().replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td>
+                            <small>{formatDateLocal(getCreatedAt(incident))}</small>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {dashboardData.myIncidents
-                          .sort((a, b) => new Date(getCreatedAt(b)).getTime() - new Date(getCreatedAt(a)).getTime())
-                          .slice(0, 4)
-                          .map((incident) => (
-                          <tr key={incident.id}>
-                            <td>
-                              <span className="fw-medium text-primary">{getIncidentNumber(incident)}</span>
-                            </td>
-                            <td>
-                              <div>
-                                <div className="fw-medium">{getCategoryName(incident)}</div>
-                              </div>
-                            </td>
-                            <td>
-                              <span
-                                className="badge"
-                                style={{ backgroundColor: getPriorityColor(getPriorityName(incident)), color: 'white' }}
-                              >
-                                {getPriorityName(incident)}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className="badge"
-                                style={{ backgroundColor: getStatusColor(getStatus(incident)), color: 'white' }}
-                              >
-                                {getStatus(incident).replace('_', ' ')}
-                              </span>
-                            </td>
-                            <td>{formatDateLocal(getCreatedAt(incident))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-          </Col>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </Col>
 
-          <Col lg={4}>
-            <Card>
-              <CardBody>
-                <h5 className="mb-3">Task Overview</h5>
-                {stats.total > 0 ? (
-                  <div style={{ minHeight: '300px' }}>
-                    {typeof window !== 'undefined' && typeof document !== 'undefined' && (
-                      <Chart
-                        options={pieChartOptions}
-                        series={nonZeroData.length > 0 ? nonZeroData : [1]}
-                        type="pie"
-                        height={300}
-                        key={`pie-chart-${stats.total}-${nonZeroData.join('-')}`}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-4" style={{ minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                    <p className="text-muted">No data to display</p>
-                    <small className="text-muted">No incidents assigned yet</small>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
+        <Col lg={4}>
+          <Card>
+            <CardBody>
+              <h5 className="mb-3">Expert Workload</h5>
+              {stats.total > 0 ? (
+                <div style={{ minHeight: '300px' }}>
+                  <Chart
+                    options={pieChartOptions}
+                    series={nonZeroData.length > 0 ? nonZeroData : [1]}
+                    type="pie"
+                    height={300}
+                    key={`expert-pie-chart-${stats.total}-${nonZeroData.join('-')}`}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="text-center py-4"
+                  style={{
+                    minHeight: '300px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column'
+                  }}
+                >
+                  <p className="text-muted">No expert cases to display</p>
+                  <small className="text-muted">Workload distribution will appear here</small>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
 
-        {/* Monthly Trends */}
-        <Row>
-          <Col lg={12}>
-            <Card>
-              <CardBody>
-                <h5 className="mb-3">My Monthly Performance Trends</h5>
-                {stats.total > 0 ? (
-                  <div style={{ minHeight: '350px' }}>
-                    {typeof window !== 'undefined' && typeof document !== 'undefined' && (
-                      <Chart
-                        options={barChartOptions}
-                        series={barChartSeries}
-                        type="bar"
-                        height={350}
-                        key={`bar-chart-${stats.total}-${assigned.join('-')}`}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-5" style={{ minHeight: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                    <p className="text-muted">No trend data available yet</p>
-                    <small className="text-muted">No assignments to show trends</small>
-                  </div>
-                )}
-              </CardBody>
-            </Card>
-          </Col>
-        </Row>
-      </Container>
-    </>
+      <Row>
+        <Col lg={12}>
+          <Card>
+            <CardBody>
+              <h5 className="mb-3">Monthly Expert Performance</h5>
+              {stats.total > 0 ? (
+                <div style={{ minHeight: '350px' }}>
+                  <Chart
+                    options={barChartOptions}
+                    series={barChartSeries}
+                    type="bar"
+                    height={350}
+                    key={`expert-bar-chart-${stats.total}-${assigned.join('-')}`}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="text-center py-5"
+                  style={{
+                    minHeight: '350px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column'
+                  }}
+                >
+                  <p className="text-muted">No performance data available yet</p>
+                  <small className="text-muted">Monthly trends will appear here when you have assigned cases</small>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </Col>
+      </Row>
+    </Container>
   )
 }
 

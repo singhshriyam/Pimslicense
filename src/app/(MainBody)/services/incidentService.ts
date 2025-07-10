@@ -2,91 +2,38 @@ import { getStoredToken, getStoredUserId, getCurrentUser } from './userService';
 
 const API_BASE_URL = 'https://apexwpc.apextechno.co.uk/api';
 
-// Interfaces
-
-export interface User {
-  id: number;
-  team_id: number;
-  name: string;
-  last_name: string | null;
-  email: string;
-  email_verified_at: string | null;
-  mobile: string | null;
-  address: string | null;
-  postcode: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-}
-
-export interface ContactType {
-  id: number;
-  name: string;
-  created_at: string | null;
-  updated_at: string | null;
-  deleted_at: string | null;
-}
-
-export interface Urgency {
-  id: number;
-  name: string;
-  created_at: string | null;
-  updated_at: string | null;
-  deleted_at: string | null;
-}
-
-export interface AssignedTo {
-  id: number;
-  team_id: number;
-  name: string;
-  last_name: string | null;
-  email: string;
-  email_verified_at: string | null;
-  mobile: string | null;
-  address: string | null;
-  postcode: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-}
-
-export interface IncidentState {
-  id: number;
-  name: string;
-  created_at: string | null;
-  updated_at: string | null;
-  deleted_at: string | null;
-}
-
+// Use backend data structure as-is
 export interface Incident {
   id: number;
   user_id: number;
-  user: User;
+  user: any;
   site_id: number | null;
   site: any | null;
   asset_id: number | null;
   asset: any | null;
   category_id: number | null;
+  category_name: string;
   category: any | null;
   subcategory_id: number | null;
   subcategory: any | null;
   contact_type_id: number;
-  contact_type: ContactType;
+  contact_type: any;
   impact_id: number | null;
   impact: any | null;
   priority_id: number | null;
   priority: any | null;
   urgency_id: number;
-  urgency: Urgency;
+  urgency: any;
   assigned_to_id: number;
-  assigned_to: AssignedTo;
+  assigned_to: any;
   incidentstate_id: number;
-  incidentstate: IncidentState;
+  incidentstate: any;
   incident_no: string;
   opened_at: string;
   closed_at: string | null;
   short_description: string;
   description: string;
+  reported_by: string;
   address: string | null;
   lat: number | null;
   lng: number | null;
@@ -98,293 +45,286 @@ export interface Incident {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-  status: 'pending' | 'in_progress' | 'resolved' | 'closed';
-  reported_by?: string;
 }
 
-// Transform function
+// Get user ID directly from localStorage
+const getUserId = (): string => {
+  const userId = getStoredUserId();
+  if (userId && userId !== '0') {
+    console.log('Using user ID from localStorage:', userId);
+    return userId;
+  }
 
-export const transformIncident = (item: any): Incident => {
-  const getStatus = (item: any): Incident['status'] => {
-    const state = item.incidentstate?.name?.toLowerCase() || '';
-    if (state === 'new') return 'pending';
-    if (state === 'inprogress') return 'in_progress';
-    if (state === 'resolved') return 'resolved';
-    if (state === 'closed') return 'closed';
-    return 'pending';
-  };
-
-  return {
-    ...item, // keep all backend fields intact
-    status: getStatus(item),
-    reported_by: item.user?.email || 'Unknown',
-  };
+  // This should not happen in production if authentication is working
+  console.error('No user ID found in localStorage - authentication may be incomplete');
+  throw new Error('User ID not found - please log in again');
 };
 
+// API call helper
+const makeApiCall = async (endpoint: string, method: string = 'GET', body?: any): Promise<any> => {
+  const token = getStoredToken();
 
+  if (!token) {
+    throw new Error('Authentication token not found');
+  }
 
-// For Handlers - CORRECT FIX
+  const config: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json'
+    }
+  };
+
+  if (body) {
+    config.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`API Error ${response.status}:`, errorText);
+    throw new Error(`API Error ${response.status}: ${errorText}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.message || 'API call failed');
+  }
+
+  return result.data;
+};
+
+// Incident fetching functions
 export const fetchHandlerIncidents = async (): Promise<Incident[]> => {
-  const token = getStoredToken();
-  const userId = getStoredUserId();
-
-  // Send assigned_to_id in request body like in Postman
-  const response = await fetch(`${API_BASE_URL}/incident-handeler/incident-list`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ assigned_to_id: userId }) // This is what Postman sends!
-  });
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error('API failed');
-  }
-
-  // API already filtered by assigned_to_id - just transform
-  return result.data.map(transformIncident);
+  const userId = getUserId();
+  return makeApiCall('/incident-handler/incident-list', 'POST', { assigned_to_id: parseInt(userId) });
 };
 
-// For Managers
 export const fetchManagerIncidents = async (): Promise<Incident[]> => {
-  const token = getStoredToken();
-  const userId = getStoredUserId();
-
-  const response = await fetch(`${API_BASE_URL}/incident-manager/incident-list`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ manager_id: userId })
-  });
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error('Manager API failed');
-  }
-
-  return result.data.map(transformIncident);
+  const userId = getUserId();
+  return makeApiCall('/incident-manager/incident-list', 'POST', { manager_id: parseInt(userId) });
 };
 
-// For End Users
 export const fetchEndUserIncidents = async (): Promise<Incident[]> => {
+  const userId = getUserId();
   const token = getStoredToken();
-  const userId = getStoredUserId();
 
-  const response = await fetch(`${API_BASE_URL}/end-user/incident-list`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify({ user_id: userId })
-  });
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error('End User API failed');
+  if (!token) {
+    throw new Error('Authentication token not found');
   }
 
-  return result.data.map(transformIncident);
+  if (!userId || userId === '0') {
+    throw new Error('User ID not found - please log in again');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/end-user/incident-list`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ user_id: parseInt(userId) })
+    });
+
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('fetchEndUserIncidents - Error response:', errorText);
+      throw new Error(`API Error ${response.status}: ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || 'Failed to fetch end user incidents');
+    }
+
+    return result.data || [];
+  } catch (error) {
+    throw error;
+  }
 };
 
-// For Field Engineers
 export const fetchFieldEngineerIncidents = async (): Promise<Incident[]> => {
+  const userId = getUserId();
   const token = getStoredToken();
-  const userId = getStoredUserId();
 
-  const response = await fetch(`${API_BASE_URL}/field-engineer/incident-list`, {
-    method: 'POST',
+
+  const response = await fetch(`${API_BASE_URL}/all-incidents`, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/json'
-    },
-    body: JSON.stringify({ engineer_id: userId })
+    }
   });
 
   const result = await response.json();
-
   if (!result.success) {
     throw new Error('Field Engineer API failed');
   }
 
-  return result.data.map(transformIncident);
+  if (!userId) {
+    return [];
+  }
+
+  const currentUserId = parseInt(userId);
+  return result.data.filter((incident: any) => incident.assigned_to_id === currentUserId);
 };
 
-// For Expert Team
-export const fetchExpertTeamIncidents = async (): Promise<Incident[]> => {
-  const token = getStoredToken();
-  const userId = getStoredUserId();
+// Update this function in your incidentService.ts file
 
-  const response = await fetch(`${API_BASE_URL}/expert-team/incident-list`, {
-    method: 'POST',
+// Replace the fetchExpertTeamIncidents function in your incidentService.ts with this:
+
+export const fetchExpertTeamIncidents = async (): Promise<Incident[]> => {
+  const userId = getUserId();
+  const token = getStoredToken();
+
+  console.log('fetchExpertTeamIncidents - Using userId:', userId);
+
+  const response = await fetch(`${API_BASE_URL}/all-incidents`, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/json'
-    },
-    body: JSON.stringify({ expert_id: userId })
+    }
   });
 
   const result = await response.json();
-
   if (!result.success) {
     throw new Error('Expert Team API failed');
   }
 
-  return result.data.map(transformIncident);
+  if (!userId) {
+    return [];
+  }
+
+  const currentUserId = parseInt(userId);
+
+  const mappedAndFilteredIncidents: Incident[] = result.data
+    .filter((apiIncident: any) => apiIncident.assigned_to_id === currentUserId)
+    .map((apiIncident: any): Incident => ({
+      id: apiIncident.id,
+      user_id: apiIncident.user_id,
+      user: {
+        name: apiIncident.name_name || 'Unknown',
+        last_name: null, // API doesn't provide this separately
+      },
+      site_id: apiIncident.site_id,
+      site: apiIncident.site_name ? { name: apiIncident.site_name } : null,
+      asset_id: apiIncident.asset_id,
+      asset: apiIncident.asset_name ? { name: apiIncident.asset_name } : null,
+      category_id: apiIncident.category_id,
+      category_name: apiIncident.category_name,
+      category: apiIncident.category_name ? { name: apiIncident.category_name } : null,
+      subcategory_id: apiIncident.subcategory_id,
+      subcategory: apiIncident.subcategory_name ? { name: apiIncident.subcategory_name } : null,
+      contact_type_id: apiIncident.contact_type_id,
+      contact_type: apiIncident.contact_type_name ? { name: apiIncident.contact_type_name } : null,
+      impact_id: apiIncident.impact_id,
+      impact: apiIncident.impact_name ? { name: apiIncident.impact_name } : null,
+      priority_id: apiIncident.priority_id,
+      priority: apiIncident.priority_name ? { name: apiIncident.priority_name } : null,
+      urgency_id: apiIncident.urgency_id,
+      urgency: apiIncident.urgency_name ? { name: apiIncident.urgency_name } : null,
+      assigned_to_id: apiIncident.assigned_to_id,
+      assigned_to: apiIncident.assigned_to_name ? {
+        name: apiIncident.assigned_to_name,
+        last_name: null
+      } : null,
+      incidentstate_id: apiIncident.incidentstate_id,
+      incidentstate: apiIncident.incidentstate_name ? { name: apiIncident.incidentstate_name } : null,
+      incident_no: apiIncident.incident_no,
+      opened_at: apiIncident.opened_at,
+      closed_at: apiIncident.closed_at,
+      short_description: apiIncident.short_description,
+      description: apiIncident.description,
+      reported_by: apiIncident.name_name,
+      address: apiIncident.address,
+      lat: apiIncident.lat ? parseFloat(apiIncident.lat) : null,
+      lng: apiIncident.lng ? parseFloat(apiIncident.lng) : null,
+      narration: apiIncident.narration,
+      root_cause_analysis: apiIncident.root_cause_analysis,
+      conclusion: apiIncident.conclusion,
+      created_by_id: apiIncident.created_by_id,
+      updated_by_id: apiIncident.updated_by_id,
+      created_at: apiIncident.created_at,
+      updated_at: apiIncident.updated_at,
+      deleted_at: apiIncident.deleted_at
+    }));
+
+  return mappedAndFilteredIncidents;
 };
 
-// For Admin
 export const fetchAdminIncidents = async (): Promise<Incident[]> => {
   const token = getStoredToken();
-  const userId = getStoredUserId();
 
-  const response = await fetch(`${API_BASE_URL}/admin/incident-list`, {
-    method: 'POST',
+  const response = await fetch(`${API_BASE_URL}/all-incidents`, {
+    method: 'GET',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/json'
-    },
-    body: JSON.stringify({ admin_id: userId })
+    }
   });
 
   const result = await response.json();
-
   if (!result.success) {
     throw new Error('Admin API failed');
   }
 
-  return result.data.map(transformIncident);
+  return result.data;
 };
 
-// Smart fetching - UPDATED
+// Smart fetching based on user role
 export const fetchIncidentsByUserRole = async (userRole?: string): Promise<Incident[]> => {
   const currentUser = getCurrentUser();
-  const role = (userRole || currentUser?.team || '').toLowerCase();
+  const role = (userRole || currentUser?.team_name || '').toLowerCase();
 
-  console.log('🎯 Fetching incidents for role:', role);
+  console.log('fetchIncidentsByUserRole - User role:', role);
 
-  if (role.includes('admin')) {
-    return await fetchAdminIncidents();
-  }
-  if (role.includes('manager')) {
-    return await fetchManagerIncidents();
-  }
-  if (role.includes('handler')) {
-    return await fetchHandlerIncidents();
-  }
-  if (role.includes('field') && role.includes('engineer')) {
-    return await fetchFieldEngineerIncidents();
-  }
-  if (role.includes('expert') || role.includes('water') || role.includes('pollution')) {
-    return await fetchExpertTeamIncidents();
-  }
+  if (role.includes('admin')) return await fetchAdminIncidents();
+  if (role.includes('manager')) return await fetchManagerIncidents();
+  if (role.includes('handler')) return await fetchHandlerIncidents();
+  if (role.includes('field') && role.includes('engineer')) return await fetchFieldEngineerIncidents();
+  if (role.includes('expert') || role.includes('water') || role.includes('pollution')) return await fetchExpertTeamIncidents();
 
-  // Default to end user
   return await fetchEndUserIncidents();
 };
 
-// For AssignIncidents - role-based incident fetching
+// For AssignIncidents component - moved to separate service file
 export const fetchAllIncidentsForAssignment = async (): Promise<Incident[]> => {
-  const token = getStoredToken();
-  const userId = getStoredUserId();
   const currentUser = getCurrentUser();
-  const userRole = currentUser?.team?.toLowerCase() || '';
+  const userRole = currentUser?.team_name?.toLowerCase() || '';
 
-  console.log('🎯 Fetching incidents for assignment...');
-  console.log('👤 User role:', userRole);
-
-  try {
-    // MANAGER/ADMIN: Get ALL incidents
-    if (userRole.includes('manager') || userRole.includes('admin')) {
-      console.log('📋 Manager/Admin: Fetching ALL incidents');
-
-      const response = await fetch(`${API_BASE_URL}/incident-manager/incident-list`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ manager_id: userId })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          console.log(`✅ Manager: Found ${result.data.length} total incidents`);
-          return result.data.map(transformIncident);
-        }
-      }
-    }
-
-    // HANDLER: Get only their assigned incidents
-    else if (userRole.includes('handler')) {
-      console.log('📋 Handler: Fetching assigned incidents only');
-
-      const response = await fetch(`${API_BASE_URL}/incident-handeler/incident-list`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ assigned_to_id: userId })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          console.log(`✅ Handler: Found ${result.data.length} assigned incidents`);
-          return result.data.map(transformIncident);
-        }
-      }
-    }
-
-    // If no role-specific endpoint worked, return empty
-    console.log('⚠️ No incidents found for role:', userRole);
-    return [];
-
-  } catch (error: any) {
-    console.error('❌ Error fetching incidents for assignment:', error);
-    throw new Error(`Failed to fetch incidents: ${error.message}`);
+  if (userRole.includes('manager') || userRole.includes('admin')) {
+    return await fetchManagerIncidents();
+  } else if (userRole.includes('handler')) {
+    return await fetchHandlerIncidents();
   }
+
+  return [];
 };
 
-export const fetchAllIncidents = async (): Promise<Incident[]> => {
-  return await fetchManagerIncidents();
+// Utility functions - only essential ones
+export const getStatusColor = (status: string): string => {
+  // Ensure status is a string and handle null/undefined values
+  const statusLower = (status || '').toString().toLowerCase();
+  if (statusLower.includes('progress')) return '#3b82f6';
+  if (statusLower.includes('resolved')) return '#10b981';
+  if (statusLower.includes('closed')) return '#6b7280';
+  return '#f59e0b'; // pending/new
 };
-
-// Utility functions
-type IncidentStatus = 'pending' | 'in_progress' | 'resolved' | 'closed';
-
-const colors: Record<IncidentStatus, string> = {
-  pending: '#f59e0b',
-  in_progress: '#3b82f6',
-  resolved: '#10b981',
-  closed: '#6b7280'
-};
-
-export const getStatusColor = (status: IncidentStatus): string => {
-  return colors[status];
-};
-
 
 export const getPriorityColor = (priority: string): string => {
-  const p = priority?.toLowerCase() || '';
-  if (p.includes('high')) return '#ef4444';
+  // Ensure priority is a string and handle null/undefined values
+  const p = (priority || '').toString().toLowerCase();
+  if (p.includes('high') || p.includes('critical')) return '#ef4444';
   if (p.includes('medium')) return '#f59e0b';
   return '#10b981';
 };
@@ -395,18 +335,33 @@ export const formatDate = (dateString: string): string => {
 
 export const getIncidentStats = (incidents: Incident[]) => {
   const total = incidents.length;
-  const inProgress = incidents.filter(i => i.status === 'in_progress').length;
-  const resolved = incidents.filter(i => i.status === 'resolved').length;
-  const pending = incidents.filter(i => i.status === 'pending').length;
-  const closed = incidents.filter(i => i.status === 'closed').length;
-  const critical = incidents.filter(i => i.priority?.toLowerCase().includes('high')).length;
+
+  // Use backend status directly
+  const getStatusFromIncident = (incident: Incident) => {
+    const state = incident.incidentstate?.name?.toLowerCase() || '';
+    if (state === 'new') return 'pending';
+    if (state === 'inprogress') return 'in_progress';
+    if (state === 'resolved') return 'resolved';
+    if (state === 'closed') return 'closed';
+    return 'pending';
+  };
+
+  const inProgress = incidents.filter(i => getStatusFromIncident(i) === 'in_progress').length;
+  const resolved = incidents.filter(i => getStatusFromIncident(i) === 'resolved').length;
+  const pending = incidents.filter(i => getStatusFromIncident(i) === 'pending').length;
+  const closed = incidents.filter(i => getStatusFromIncident(i) === 'closed').length;
+
+  const critical = incidents.filter(i => {
+    const priority = i.priority?.name || i.urgency?.name || '';
+    return priority.toLowerCase().includes('high') || priority.toLowerCase().includes('critical');
+  }).length;
 
   return { total, critical, inProgress, resolved, pending, closed };
 };
 
 export const createIncident = async (incidentData: any): Promise<Incident> => {
   const token = getStoredToken();
-  const response = await fetch(`${API_BASE_URL}/incidents`, {
+  const response = await fetch(`${API_BASE_URL}/end-user/create-incident`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -415,5 +370,5 @@ export const createIncident = async (incidentData: any): Promise<Incident> => {
     body: JSON.stringify(incidentData)
   });
   const result = await response.json();
-  return transformIncident(result.data || result);
+  return result.data || result;
 };
