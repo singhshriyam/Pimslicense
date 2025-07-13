@@ -1,9 +1,19 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Row, Col, Button, Form, FormGroup, Label, Input, Alert
+  Row, Col, Button, Form, FormGroup, Label, Input, Alert, Badge
 } from 'reactstrap'
 import { fetchSubcategories } from '../../app/(MainBody)/services/masterService'
+import { getStoredToken } from '../../app/(MainBody)/services/userService'
+
+interface SLADetail {
+  incident_id: number
+  sla_defination_id: number
+  sla_target: string
+  is_breached: number
+  started_at: string
+  breach_at: string | null
+}
 
 interface DetailsTabProps {
   incident: any
@@ -19,6 +29,277 @@ interface DetailsTabProps {
   onSave: (updateData: any) => Promise<boolean>
   loading: boolean
   readOnly?: boolean
+}
+
+// SLA Timer Hook - moved outside component
+const useSLATimer = (startTime: string, targetHours: number = 4, isBreached: boolean = false) => {
+  const [timer, setTimer] = useState({
+    businessTimeLeft: '0h 0m',
+    businessTimeElapsed: '0h 0m',
+    percentage: 0,
+    isOverdue: false,
+    status: 'active' as 'active' | 'paused' | 'completed' | 'breached'
+  })
+
+  const calculateBusinessTime = useCallback(() => {
+    if (!startTime) return
+
+    try {
+      const start = new Date(startTime)
+      const now = new Date()
+      const targetTime = new Date(start.getTime() + (targetHours * 60 * 60 * 1000))
+
+      const elapsedMs = now.getTime() - start.getTime()
+      const targetMs = targetHours * 60 * 60 * 1000
+
+      const elapsedHours = Math.floor(elapsedMs / (1000 * 60 * 60))
+      const elapsedMinutes = Math.floor((elapsedMs % (1000 * 60 * 60)) / (1000 * 60))
+
+      let timeLeft = ''
+      let percentage = 0
+      let isOverdue = false
+      let status: 'active' | 'paused' | 'completed' | 'breached' = 'active'
+
+      if (isBreached) {
+        status = 'breached'
+        const overdueMs = elapsedMs - targetMs
+        const overdueHours = Math.floor(overdueMs / (1000 * 60 * 60))
+        const overdueMinutes = Math.floor((overdueMs % (1000 * 60 * 60)) / (1000 * 60))
+        timeLeft = `Overdue by ${overdueHours}h ${overdueMinutes}m`
+        percentage = 100
+        isOverdue = true
+      } else if (now > targetTime) {
+        status = 'breached'
+        const overdueMs = now.getTime() - targetTime.getTime()
+        const overdueHours = Math.floor(overdueMs / (1000 * 60 * 60))
+        const overdueMinutes = Math.floor((overdueMs % (1000 * 60 * 60)) / (1000 * 60))
+        timeLeft = `Overdue by ${overdueHours}h ${overdueMinutes}m`
+        percentage = 100
+        isOverdue = true
+      } else {
+        const remainingMs = targetTime.getTime() - now.getTime()
+        const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60))
+        const remainingMinutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60))
+        timeLeft = `${remainingHours}h ${remainingMinutes}m`
+        percentage = Math.min(100, (elapsedMs / targetMs) * 100)
+      }
+
+      setTimer({
+        businessTimeLeft: timeLeft,
+        businessTimeElapsed: `${elapsedHours}h ${elapsedMinutes}m`,
+        percentage: Math.round(percentage),
+        isOverdue,
+        status
+      })
+    } catch (error) {
+      console.error('Error calculating business time:', error)
+    }
+  }, [startTime, targetHours, isBreached])
+
+  useEffect(() => {
+    calculateBusinessTime()
+    const interval = setInterval(calculateBusinessTime, 60000) // Update every minute
+    return () => clearInterval(interval)
+  }, [calculateBusinessTime])
+
+  return timer
+}
+
+// SLA Information Component
+const SLAInformationDisplay: React.FC<{
+  slaDetails: SLADetail[]
+  slaDefinitions: any[]
+  loading: boolean
+}> = ({ slaDetails, slaDefinitions, loading }) => {
+
+  const getSLADefinition = (slaId: number) => {
+    return slaDefinitions.find(def => def.id === slaId)
+  }
+
+  const getSLAType = (typeId: number) => {
+    switch (typeId) {
+      case 1: return 'SLA'
+      case 2: return 'OLA'
+      case 3: return 'UC'
+      default: return 'SLA'
+    }
+  }
+
+  const getTargetDuration = (definition: any) => {
+    if (!definition) return 4
+    const totalHours = (definition.days * 24) + definition.hours + (definition.minutes / 60)
+    return totalHours || 4
+  }
+
+  const getProgressBarColor = (percentage: number, isBreached: boolean) => {
+    if (isBreached) return 'bg-danger'
+    if (percentage >= 90) return 'bg-warning'
+    if (percentage >= 70) return 'bg-warning'
+    return 'bg-success'
+  }
+
+  const getStage = (isBreached: boolean, percentage: number) => {
+    if (isBreached) return 'Breached'
+    if (percentage >= 90) return 'Critical'
+    if (percentage >= 70) return 'Warning'
+    return 'Active'
+  }
+
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'Breached': return 'danger'
+      case 'Critical': return 'danger'
+      case 'Warning': return 'warning'
+      case 'Active': return 'success'
+      default: return 'secondary'
+    }
+  }
+
+  const formatSLATime = (dateStr: string) => {
+    if (!dateStr) return 'N/A'
+    try {
+      return new Date(dateStr).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="mt-5 p-3 border rounded bg-light text-dark">
+        <h6 className="mb-3 text-primary">
+          <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+          <i className="fas fa-stopwatch me-2"></i>
+          Loading SLA Information...
+        </h6>
+      </div>
+    )
+  }
+
+  if (!slaDetails || slaDetails.length === 0) {
+    return (
+      <div className="mt-5 p-3 border rounded bg-light text-dark">
+        <h6 className="mb-3 text-muted">
+          <i className="fas fa-stopwatch me-2"></i>
+          SLA Information
+        </h6>
+        <p className="text-muted mb-0">No SLA information available for this incident.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5 p-3 border rounded bg-light text-dark">
+      <h6 className="mb-3 text-success">
+        <i className="fas fa-stopwatch me-2"></i>
+        SLA Information
+      </h6>
+      {slaDetails.map((sla, index) => {
+        const definition = getSLADefinition(sla.sla_defination_id)
+        const targetHours = getTargetDuration(definition)
+        const timer = useSLATimer(sla.started_at, targetHours, sla.is_breached === 1)
+        const stage = getStage(sla.is_breached === 1, timer.percentage)
+
+        return (
+          <div key={index} className="mb-4">
+            <div className="card border-0 bg-white shadow-sm">
+              <div className="card-body p-3">
+                <div className="row mb-3">
+                  <div className="col-md-3">
+                    <strong>SLA Name:</strong> {definition?.name || 'Basic Response SLA'}
+                  </div>
+                  <div className="col-md-2">
+                    <strong>Type:</strong> {definition ? getSLAType(definition.sla_type_id) : 'SLA'}
+                  </div>
+                  <div className="col-md-2">
+                    <strong>Target:</strong> {sla.sla_target}
+                  </div>
+                  <div className="col-md-2">
+                    <strong>Stage:</strong>{' '}
+                    <Badge color={getStageColor(stage)}>{stage}</Badge>
+                  </div>
+                  <div className="col-md-3">
+                    <strong>Duration:</strong>{' '}
+                    {definition ? (
+                      <>
+                        {definition.days > 0 && `${definition.days}d `}
+                        {definition.hours > 0 && `${definition.hours}h `}
+                        {definition.minutes > 0 && `${definition.minutes}m`}
+                      </>
+                    ) : '4 hours'}
+                  </div>
+                </div>
+
+                <div className="row mb-3">
+                  <div className="col-md-3">
+                    <strong>Business Time Left:</strong>
+                    <div className="d-flex align-items-center">
+                      <i className={`fas fa-clock me-2 ${timer.isOverdue ? 'text-danger' : 'text-primary'}`}></i>
+                      <span className={timer.isOverdue ? 'text-danger fw-bold' : 'text-primary fw-bold'}>
+                        {timer.businessTimeLeft}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <strong>Business Time Elapsed:</strong>
+                    <div className="d-flex align-items-center">
+                      <i className="fas fa-hourglass-half me-2 text-info"></i>
+                      <span className="text-info fw-bold">{timer.businessTimeElapsed}</span>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <strong>Start Time:</strong>
+                    <div className="d-flex align-items-center">
+                      <i className="fas fa-play me-2 text-success"></i>
+                      <span>{formatSLATime(sla.started_at)}</span>
+                    </div>
+                  </div>
+                  <div className="col-md-3">
+                    <strong>Progress:</strong>
+                    <div className="progress mt-1" style={{ height: '12px' }}>
+                      <div
+                        className={`progress-bar ${getProgressBarColor(timer.percentage, timer.isOverdue)}`}
+                        role="progressbar"
+                        style={{ width: `${Math.min(100, timer.percentage)}%` }}
+                      >
+                        {timer.percentage}%
+                      </div>
+                    </div>
+                    <small className="text-muted">
+                      {timer.percentage}% elapsed
+                      {timer.status === 'breached' && (
+                        <span className="text-danger ms-1">
+                          <i className="fas fa-exclamation-triangle"></i> BREACHED
+                        </span>
+                      )}
+                    </small>
+                  </div>
+                </div>
+
+                {sla.breach_at && (
+                  <div className="row">
+                    <div className="col-12">
+                      <div className="alert alert-danger py-2 mb-0">
+                        <i className="fas fa-exclamation-triangle me-2"></i>
+                        <strong>SLA Breached At:</strong> {formatSLATime(sla.breach_at)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {index < slaDetails.length - 1 && <hr className="my-3" />}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 const DetailsTab: React.FC<DetailsTabProps> = ({
@@ -40,6 +321,9 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
   const [localSubCategories, setLocalSubCategories] = useState<Array<{id: number, name: string, category_id: number}>>([])
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [formInitialized, setFormInitialized] = useState(false)
+  const [slaDetails, setSlaDetails] = useState<SLADetail[]>([])
+  const [slaLoading, setSlaLoading] = useState(false)
+  const [slaDefinitions, setSlaDefinitions] = useState<any[]>([])
 
   const [form, setForm] = useState({
     shortDescription: '',
@@ -56,6 +340,67 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
   })
 
   const [initialForm, setInitialForm] = useState(form)
+
+  const fetchSLADefinitions = useCallback(async () => {
+    try {
+      const token = getStoredToken()
+      const response = await fetch("https://apexwpc.apextechno.co.uk/api/sla-definitions", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch SLA definitions: ${response.status}`)
+      }
+
+      const result = await response.json()
+      setSlaDefinitions(result.data || [])
+    } catch (error) {
+      console.error('Error fetching SLA definitions:', error)
+      setSlaDefinitions([])
+    }
+  }, [])
+
+  const fetchIncidentSLADetails = useCallback(async (incidentId: string) => {
+    if (!incidentId) return
+
+    setSlaLoading(true)
+    try {
+      const token = getStoredToken()
+      const myHeaders = new Headers()
+      myHeaders.append("Authorization", `Bearer ${token}`)
+
+      const formdata = new FormData()
+      formdata.append("incident_id", incidentId)
+
+      const requestOptions = {
+        method: "POST",
+        headers: myHeaders,
+        body: formdata,
+      }
+
+      const response = await fetch("https://apexwpc.apextechno.co.uk/api/incident-sla-details", requestOptions)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch SLA details: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.success && result.data) {
+        setSlaDetails(result.data)
+      } else {
+        setSlaDetails([])
+      }
+    } catch (error: any) {
+      console.error('Error fetching SLA details:', error)
+      setSlaDetails([])
+    } finally {
+      setSlaLoading(false)
+    }
+  }, [])
 
   const loadSubcategories = useCallback(async (categoryId: string) => {
     if (!categoryId) {
@@ -117,7 +462,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
   const validateForm = useCallback(() => {
     const errors: {[key: string]: string} = {}
 
-    // Very minimal validation for all users
     if (form.shortDescription.trim() && form.shortDescription.trim().length < 3) {
       errors.shortDescription = 'Too short'
     }
@@ -149,7 +493,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
       return
     }
 
-    // Prepare update data
     let updateData: any = {
       user_id: currentUser.id,
       incident_id: parseInt(safe(incident.id)),
@@ -157,7 +500,6 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
       description: form.description.trim() || incident?.description || ''
     }
 
-    // Add additional fields for advanced users
     if (hasFullAccess) {
       updateData = {
         ...updateData,
@@ -214,11 +556,15 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
     setHasUnsavedChanges(false)
     setFormInitialized(true)
 
-    // Load subcategories for advanced users
     if (incident?.category_id) {
       loadSubcategories(safe(incident.category_id))
     }
-  }, [masterData?.loaded, incident, formInitialized, safe, loadSubcategories])
+
+    if (incident?.id) {
+      fetchIncidentSLADetails(safe(incident.id))
+      fetchSLADefinitions()
+    }
+  }, [masterData?.loaded, incident, formInitialized, safe, loadSubcategories, fetchIncidentSLADetails, fetchSLADefinitions])
 
   useEffect(() => {
     initializeForm()
@@ -695,28 +1041,13 @@ const DetailsTab: React.FC<DetailsTabProps> = ({
               </div>
             </div>
           )}
-          {/* Hardcoded SLA Info */}
-          <div className="mt-5 p-3 border rounded bg-light text-dark">
-            <h6 className="mb-3 text-success">SLA Information</h6>
-            <Row className="mb-2">
-              <Col md={3}><strong>SLA Name:</strong> Basic Response SLA</Col>
-              <Col md={3}><strong>Type:</strong> Response</Col>
-              <Col md={3}><strong>Target:</strong> 4 hours</Col>
-              <Col md={3}><strong>Stage:</strong> Active</Col>
-            </Row>
-            <Row className="mb-2">
-              <Col md={3}><strong>Business Time Left:</strong> 2h 15m</Col>
-              <Col md={3}><strong>Business Time Elapsed:</strong> 1h 45m</Col>
-              <Col md={3}><strong>Start Time:</strong> 2025-07-08 10:30</Col>
-              <Col md={3}>
-                <strong>Progress:</strong>
-                <div className="progress mt-1" style={{ height: '8px' }}>
-                  <div className="progress-bar bg-success" role="progressbar" style={{ width: '44%' }}></div>
-                </div>
-                <small>44% elapsed</small>
-              </Col>
-            </Row>
-          </div>
+          
+          {/* Enhanced SLA Information from Backend */}
+          <SLAInformationDisplay
+            slaDetails={slaDetails}
+            slaDefinitions={slaDefinitions}
+            loading={slaLoading}
+          />
         </>
       )}
     </div>

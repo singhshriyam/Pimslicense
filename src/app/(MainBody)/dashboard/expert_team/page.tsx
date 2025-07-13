@@ -9,6 +9,7 @@ import RequestForm from '../../../../Components/RequestForm'
 import MyRequests from '../../../../Components/MyRequests'
 import AllIncidents from '../../../../Components/AllIncidents'
 import AssignIncidents from '../../../../Components/AssignIncidents'
+import PendingApproval from '../../../../Components/PendingApproval'
 
 // Services
 import {
@@ -44,7 +45,7 @@ interface UserState {
   userId: string
 }
 
-type ViewType = 'dashboard' | 'request-form' | 'my-requests' | 'all-incidents' | 'assign-incidents'
+type ViewType = 'dashboard' | 'request-form' | 'my-requests' | 'all-incidents' | 'assign-incidents' | 'pending-approval'
 
 const VIEWS = {
   DASHBOARD: 'dashboard' as const,
@@ -52,6 +53,7 @@ const VIEWS = {
   MY_REQUESTS: 'my-requests' as const,
   ALL_INCIDENTS: 'all-incidents' as const,
   ASSIGN_INCIDENTS: 'assign-incidents' as const,
+  PENDING_APPROVAL: 'pending-approval' as const,
 }
 
 const ExpertTeamDashboard: React.FC = () => {
@@ -92,11 +94,11 @@ const ExpertTeamDashboard: React.FC = () => {
   }, [])
 
   const getCategoryName = useCallback((incident: Incident): string => {
-    return incident.category?.name || incident.category_name || 'Uncategorized'
+    return incident.category?.name || incident.category_name
   }, [])
 
   const getPriorityName = useCallback((incident: Incident): string => {
-    return incident.priority?.name || incident.urgency?.name || 'Medium'
+    return incident.priority?.name || incident.urgency?.name
   }, [])
 
   const getCallerName = useCallback((incident: Incident): string => {
@@ -106,11 +108,11 @@ const ExpertTeamDashboard: React.FC = () => {
         : incident.user.name
       return fullName
     }
-    return incident.reported_by || 'Unknown User'
+    return incident.reported_by
   }, [])
 
   const getIncidentNumber = useCallback((incident: Incident): string => {
-    return incident.incident_no || incident.id?.toString() || 'Unknown'
+    return incident.incident_no || incident.id?.toString()
   }, [])
 
   const getCreatedAt = useCallback((incident: Incident): string => {
@@ -171,7 +173,7 @@ const ExpertTeamDashboard: React.FC = () => {
       }
 
       setUser({
-        name: currentUser.first_name || 'Expert Team Member',
+        name: currentUser.first_name,
         team: currentUser.team_name || 'Expert Team',
         email: currentUser.email || '',
         userId: currentUser.id.toString()
@@ -228,6 +230,14 @@ const ExpertTeamDashboard: React.FC = () => {
     setCurrentView(VIEWS.ASSIGN_INCIDENTS)
     const newUrl = new URL(window.location.href)
     newUrl.searchParams.set('view', VIEWS.ASSIGN_INCIDENTS)
+    window.history.pushState({}, '', newUrl.toString())
+  }, [])
+
+  // Add this new handler
+  const handleViewPendingApproval = useCallback((): void => {
+    setCurrentView(VIEWS.PENDING_APPROVAL)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('view', VIEWS.PENDING_APPROVAL)
     window.history.pushState({}, '', newUrl.toString())
   }, [])
 
@@ -304,6 +314,11 @@ const ExpertTeamDashboard: React.FC = () => {
 
   if (currentView === VIEWS.ASSIGN_INCIDENTS) {
     return <AssignIncidents userType="expert_team" onBack={handleBackToDashboard} />
+  }
+
+  // Add this new condition
+  if (currentView === VIEWS.PENDING_APPROVAL) {
+    return <PendingApproval userType="expert_team" onBack={handleBackToDashboard} />
   }
 
   if (dashboardData.loading) {

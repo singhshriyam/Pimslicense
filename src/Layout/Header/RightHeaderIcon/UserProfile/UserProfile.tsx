@@ -26,14 +26,14 @@ const UserProfile = () => {
           alt='Profile'
         />
         <div className='flex-grow-1'>
-          <span>{user.email || 'user@example.com'}</span>
+          <span>{user.email}</span>
           <p className='mb-0'>{user.first_name || 'User'}</p>
         </div>
       </div>
       <ul className='profile-dropdown onhover-show-div'>
         {userProfileData.map((item, index) => (
           <li key={index}>
-            <Link href={`/${item.link}`}>
+            <Link href={item.link}>
               {item.icon}
               <span>{item.title}</span>
             </Link>

@@ -141,13 +141,13 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
     // Admin and Manager can assign any incident
     if (userTeam.includes('admin') || userTeam.includes('manager')) return true
 
-    // Expert team can assign incidents assigned to them or unassigned incidents
-    if (userTeam.includes('expert')) {
-      return incident.assigned_to?.id === parseInt(user.id) || !incident.assigned_to_id
-    }
+    // // Expert team can assign incidents assigned to them or unassigned incidents
+    // if (userTeam.includes('expert')) {
+    //   return incident.assigned_to?.id === parseInt(user.id) || !incident.assigned_to_id
+    // }
 
     // Handlers and Field Engineers can assign incidents assigned to them
-    if (userTeam.includes('handler') || userTeam.includes('field')) {
+    if (userTeam.includes('handler') || userTeam.includes('field') || userTeam.includes('expert')) {
       return incident.assigned_to?.id === parseInt(user.id)
     }
 
@@ -244,7 +244,7 @@ const AssignIncidents: React.FC<AssignIncidentsProps> = ({ userType, onBack }) =
       } else if (userTeam.includes('handler')) {
         assignableRoles = ['handler', 'field', 'engineer', 'expert']
       } else if (userTeam.includes('field') || userTeam.includes('engineer')) {
-        assignableRoles = ['handler', 'expert']
+        assignableRoles = ['handler', 'expert', 'field']
       }
 
       const targets = users
