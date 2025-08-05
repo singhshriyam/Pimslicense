@@ -1,5 +1,5 @@
 "use client";
-import RegisterSimpleContainer from "@/Components/Others/Page/register/RegisterSimpleContainer";
+import RegisterSimpleContainer from "@/Components/register/RegisterSimpleContainer";
 import React from "react";
 
 const RegisterSimple = () => {

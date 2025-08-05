@@ -1,14 +1,5 @@
-import NoSsr from "@/utils/NoSsr";
-import MainProvider from "./MainProvider";
-import "../../src/index.scss";
 import { Lexend, Roboto } from "next/font/google";
-import { detectLanguage } from "./i18n/server";
-import { I18nProvider } from "./i18n/i18n-context";
-import NextTopLoader from "nextjs-toploader";
-import SessionWrapper from "@/CommonComponent/SessionWrapper";
-
-// import { authoption } from "./api/auth/[...nextauth]/authOption";
-import ErrorBoundary from "@/CommonComponent/ErrorBoundry";
+import "../../src/index.scss";
 
 const lexend = Lexend({
   weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
@@ -24,31 +15,20 @@ const roboto = Roboto({
   display: "swap",
 });
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const lng = await detectLanguage();
-  // const session = await getServerSession(authoption);
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <I18nProvider language={lng}>
-      <html>
-        <head>
-          <link rel="icon" href="/assets/images/logo/apex-logo.png" type="image/x-icon" />
-          <link rel="shortcut icon" href="/assets/images/logo/apex-logo.png" type="image/x-icon" />
-          <title>ApexTechno Water Pollution solution</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-          <script async src="https://maps.googleapis.com/maps/api/js?key=your_api_key"></script>
-        </head>
-        <body suppressHydrationWarning={true} className={lexend.className || roboto.className}>
-          <ErrorBoundary>
-            <NoSsr>
-              <SessionWrapper>
-                <MainProvider>{children}</MainProvider>
-              </SessionWrapper>
-            </NoSsr>
-          </ErrorBoundary>
-        </body>
-      </html>
-    </I18nProvider>
+    <html lang="en">
+      <head>
+        <link rel="icon" href="/assets/images/logo/apex-logo.png" type="image/x-icon" />
+        <link rel="shortcut icon" href="/assets/images/logo/apex-logo.png" type="image/x-icon" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+        <title>ApexTechno Water Pollution solution</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+      </head>
+      <body suppressHydrationWarning={true} className={lexend.className}>
+        {children}
+      </body>
+    </html>
   );
 }
