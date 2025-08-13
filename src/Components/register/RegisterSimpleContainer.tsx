@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import { Button, Form, FormGroup, Input, Label, Container, Row, Col, Card, CardBody } from "reactstrap";
+import { registerUser } from "@/services/apiService";
 
 interface RegisterFormData {
   company_name: string;
   company_address: string;
   company_postcode: string;
+  tax_id: string;
   contact_name: string;
   contact_last_name: string;
   contact_phone: string;
@@ -28,6 +30,7 @@ const RegisterSimpleContainer = () => {
     company_name: "",
     company_address: "",
     company_postcode: "",
+    tax_id: "",
     contact_name: "",
     contact_last_name: "",
     contact_phone: "",
@@ -60,6 +63,7 @@ const RegisterSimpleContainer = () => {
       company_name: "",
       company_address: "",
       company_postcode: "",
+      tax_id: "",
       contact_name: "",
       contact_last_name: "",
       contact_phone: "",
@@ -167,6 +171,10 @@ const RegisterSimpleContainer = () => {
       case 'company_postcode':
         if (!value.trim()) return "Postcode is required";
         if (!/^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$/.test(value.trim())) return "Invalid UK postcode";
+        return "";
+      case 'tax_id':
+        // Tax ID is optional but if provided, should be valid
+        if (value && value.trim().length < 3) return "Tax ID must be at least 3 characters";
         return "";
       case 'contact_name':
       case 'contact_last_name':
@@ -280,6 +288,11 @@ const RegisterSimpleContainer = () => {
           const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
           if (error) newErrors[field] = error;
         });
+        // Tax ID validation (optional field)
+        if (formData.tax_id) {
+          const taxError = validateField('tax_id', formData.tax_id);
+          if (taxError) newErrors.tax_id = taxError;
+        }
         break;
       case 2:
         ['contact_name', 'contact_last_name', 'contact_designation', 'contact_email', 'contact_phone'].forEach(field => {
@@ -345,14 +358,61 @@ const RegisterSimpleContainer = () => {
     event.preventDefault();
     if (!validateStep(3)) return;
     setLoading(true);
-    setTimeout(() => {
+
+    try {
+      console.log('🚀 Starting registration...');
+
+      // Map your form data to API format
+      const registrationData = {
+        customer_name: formData.company_name,
+        company_address: formData.company_address,
+        company_post_code: formData.company_postcode,
+        tax_id: formData.tax_id || "TBD", // Default value if not provided
+        first_name: formData.contact_name,
+        last_name: formData.contact_last_name,
+        phone: formData.contact_phone,
+        role: formData.contact_designation,
+        email: formData.contact_email.toLowerCase().trim(),
+        password: formData.password,
+        password_confirmation: formData.password_confirmation
+      };
+
+      console.log('📤 Sending registration data:', registrationData);
+
+      // Call the real API
+      const response = await registerUser(registrationData);
+
+      console.log('✅ Registration successful:', response);
+
+      // Clean up temporary data
       ['registration_otp', 'otp_timestamp', 'otp_email'].forEach(key =>
         sessionStorage.removeItem(key)
       );
+
       setRegistrationStatus('success');
+      toast.success("Account created successfully! You can now sign in.");
+
+    } catch (error: any) {
+      console.error('❌ Registration error:', error);
+
+      // Handle different types of errors
+      let errorMessage = "Registration failed. Please try again.";
+
+      if (error.message.includes('422')) {
+        errorMessage = "Please check your information and try again.";
+      } else if (error.message.includes('email') && error.message.includes('taken')) {
+        errorMessage = "This email address is already registered.";
+      } else if (error.message.includes('validation')) {
+        errorMessage = "Please check all required fields.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
+      setErrors({ general: errorMessage });
+    } finally {
       setLoading(false);
-      toast.success("Account created successfully!");
-    }, 2000);
+    }
   };
 
   useEffect(() => {
@@ -384,7 +444,7 @@ const RegisterSimpleContainer = () => {
                     <polyline points="22,4 12,14.01 9,11.01"/>
                   </svg>
                   <h3 className="text-success mb-3">Registration Successful!</h3>
-                  <p className="text-dark mb-4">Welcome aboard! Your company account has been created successfully.</p>
+                  <p className="text-dark mb-4">Welcome aboard! Your company account has been created successfully and saved to our database.</p>
                 </div>
                 <Card className="bg-light mb-4">
                   <CardBody>
@@ -402,6 +462,12 @@ const RegisterSimpleContainer = () => {
                         <div className="col-4"><strong className="text-dark">Postcode:</strong></div>
                         <div className="col-8 text-dark">{formData.company_postcode}</div>
                       </div>
+                      {formData.tax_id && (
+                        <div className="row mb-2">
+                          <div className="col-4"><strong className="text-dark">Tax ID:</strong></div>
+                          <div className="col-8 text-dark">{formData.tax_id}</div>
+                        </div>
+                      )}
                       <hr />
                       <h6 className="text-dark mb-2">Primary Contact:</h6>
                       <div className="row mb-2">
@@ -476,6 +542,14 @@ const RegisterSimpleContainer = () => {
                   ))}
                 </div>
               </div>
+
+              {/* General Error Message */}
+              {errors.general && (
+                <div className="alert alert-danger" role="alert">
+                  {errors.general}
+                </div>
+              )}
+
               <div className="login-main">
                 <Form className="theme-form" onSubmit={handleSubmit}>
                   {currentStep === 1 && (
@@ -493,6 +567,19 @@ const RegisterSimpleContainer = () => {
                           autoComplete="organization"
                         />
                         {errors.company_name && <div className="invalid-feedback d-block">{errors.company_name}</div>}
+                      </FormGroup>
+                      <FormGroup>
+                        <Label className="col-form-label text-dark">Tax ID (Optional)</Label>
+                        <Input
+                          type="text"
+                          value={formData.tax_id}
+                          onChange={(e) => handleInputChange('tax_id', e.target.value)}
+                          placeholder="Enter tax ID or leave blank"
+                          invalid={!!errors.tax_id}
+                          autoComplete="off"
+                        />
+                        {errors.tax_id && <div className="invalid-feedback d-block">{errors.tax_id}</div>}
+                        <small className="text-muted">Company tax identification number (optional)</small>
                       </FormGroup>
                       <FormGroup>
                         <Label className="col-form-label text-dark">Company Post Code *</Label>
@@ -716,6 +803,12 @@ const RegisterSimpleContainer = () => {
                             <div className="col-4 text-muted">Address:</div>
                             <div className="col-8 text-dark">{formData.company_address}</div>
                           </div>
+                          {formData.tax_id && (
+                            <div className="row mb-1">
+                              <div className="col-4 text-muted">Tax ID:</div>
+                              <div className="col-8 text-dark">{formData.tax_id}</div>
+                            </div>
+                          )}
                         </div>
                         <div>
                           <strong className="text-dark">Primary Contact:</strong>

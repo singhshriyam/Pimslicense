@@ -3,18 +3,18 @@ import LoginSimpleContainer from "@/Components/login/LoginSimpleContainer";
 import { useRouter } from "next/navigation";
 import { useEffect, memo } from "react";
 import { Col, Container, Row } from "reactstrap";
-// import { isAuthenticated, getStoredUserTeam, getUserDashboard } from "../../(MainBody)/services/userService";
+import { isAuthenticated } from "@/services/apiService";
 
 const UserLogin = memo(() => {
   const router = useRouter();
 
-    useEffect(() => {
-      const authToken = sessionStorage.getItem('authToken');
-      if (authToken) {
-        // User is already logged in, redirect to dashboard
-        router.replace('/dashboard');
-      }
-    }, [router]);
+  useEffect(() => {
+    // Check if user is already authenticated
+    if (isAuthenticated()) {
+      console.log('✅ User already authenticated, redirecting to dashboard');
+      router.replace('/dashboard');
+    }
+  }, [router]);
 
   return (
     <Container fluid className="p-0">
