@@ -44,11 +44,12 @@ const Checkout = ({ onNext, onBack, orderData }: CheckoutProps) => {
 
   const getConfigurationText = () => {
     if (orderData.licenseModel === 'bundled') {
-      const bundleOptions = {
-        'small': '3 Named + 5 Concurrent',
-        'medium': '5 Named + 10 Concurrent',
-        'large': '8 Named + 20 Concurrent'
+      const bundleOptions: Record<string, string> = {
+        small: '4 Named + 10 Concurrent',
+        medium: '6 Named + 15 Concurrent',
+        large: '8 Named + 20 Concurrent'
       };
+
       return bundleOptions[orderData.bundleType] || 'Bundle';
     }
 
