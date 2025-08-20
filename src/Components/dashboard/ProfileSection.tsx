@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { getUserData } from '@/services/apiService';
 
 interface UserProfile {
   contactPerson: string;
@@ -7,6 +8,8 @@ interface UserProfile {
   mobile: string;
   company: string;
   address: string;
+  role: string;
+  customerId: string;
 }
 
 const ProfileSection = () => {
@@ -15,25 +18,70 @@ const ProfileSection = () => {
     email: '',
     mobile: '',
     company: '',
-    address: ''
+    address: '',
+    role: '',
+    customerId: ''
   });
 
-  // Load data from localStorage
+  // Load data directly from backend response
   useEffect(() => {
-    const firstName = localStorage.getItem('userFirstName') || '';
-    const lastName = localStorage.getItem('userLastName') || '';
-    const email = localStorage.getItem('userEmail') || '';
-    const mobile = localStorage.getItem('userMobile') || 'Not provided';
-    const company = localStorage.getItem('userCompany') || '';
-    const address = localStorage.getItem('userAddress') || '';
+    const loadUserProfile = () => {
+      try {
+        // Get the exact backend data
+        const backendData = getUserData();
 
-    setUserProfile({
-      contactPerson: `${firstName} ${lastName}`.trim() || 'Not provided',
-      email: email || 'Not provided',
-      mobile: mobile,
-      company: company || 'Not provided',
-      address: address || 'Not provided'
-    });
+        console.log('📊 ProfileSection: Loading profile data');
+        console.log('📊 ProfileSection: Backend data:', backendData);
+
+        if (backendData) {
+          // Extract data exactly as it comes from backend
+          const contactPerson = backendData.contact_person;
+          const customer = backendData.customer;
+
+          console.log('📊 ProfileSection: Contact person:', contactPerson);
+          console.log('📊 ProfileSection: Customer:', customer);
+
+          setUserProfile({
+            contactPerson: contactPerson?.first_name ?
+              `${contactPerson.first_name} ${contactPerson.last_name || ''}`.trim() :
+              'Not provided',
+            email: backendData.email || contactPerson?.email || customer?.contact_person?.email || 'Not provided',
+            mobile: contactPerson?.phone || customer?.contact_person?.phone || 'Not provided',
+            company: backendData.name || customer?.customer_name || 'Not provided',
+            address: customer?.company_address || 'Not provided',
+            role: contactPerson?.role || customer?.contact_person?.role || 'Not provided',
+            customerId: customer?.customerid || customer?.customer_id || 'Not provided'
+          });
+        } else {
+          console.log('⚠️ ProfileSection: No backend data found in localStorage');
+          // Set default values when no data is available
+          setUserProfile({
+            contactPerson: 'Not provided',
+            email: 'Not provided',
+            mobile: 'Not provided',
+            company: 'Not provided',
+            address: 'Not provided',
+            role: 'Not provided',
+            customerId: 'Not provided'
+          });
+        }
+
+      } catch (error) {
+        console.error('❌ ProfileSection: Error loading user profile:', error);
+        // Set default values on error
+        setUserProfile({
+          contactPerson: 'Not provided',
+          email: 'Not provided',
+          mobile: 'Not provided',
+          company: 'Not provided',
+          address: 'Not provided',
+          role: 'Not provided',
+          customerId: 'Not provided'
+        });
+      }
+    };
+
+    loadUserProfile();
   }, []);
 
   return (
@@ -54,7 +102,13 @@ const ProfileSection = () => {
         {/* Email */}
         <div className="mb-3 d-flex justify-content-between">
           <label className="text-muted small">Email</label>
-          <p className="mb-0 fw-medium text-end">{userProfile.email}</p>
+          <p className="mb-0 fw-medium text-end text-break">{userProfile.email}</p>
+        </div>
+
+        {/* Role */}
+        <div className="mb-3 d-flex justify-content-between">
+          <label className="text-muted small">Role</label>
+          <p className="mb-0 fw-medium text-end">{userProfile.role}</p>
         </div>
 
         {/* Mobile */}
@@ -69,10 +123,16 @@ const ProfileSection = () => {
           <p className="mb-0 fw-medium text-end">{userProfile.company}</p>
         </div>
 
+        {/* Customer ID */}
+        <div className="mb-3 d-flex justify-content-between">
+          <label className="text-muted small">Customer ID</label>
+          <p className="mb-0 fw-medium text-end">{userProfile.customerId}</p>
+        </div>
+
         {/* Address */}
         <div className="mb-3 d-flex justify-content-between">
           <label className="text-muted small">Address</label>
-          <p className="mb-0 fw-medium text-end">{userProfile.address}</p>
+          <p className="mb-0 fw-medium text-end text-break">{userProfile.address}</p>
         </div>
 
         {/* Update Button */}

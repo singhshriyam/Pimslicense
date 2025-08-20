@@ -28,18 +28,18 @@ const OrderTypeSelection = ({ onNext, onUpdateData, selectedType }: OrderTypeSel
       color: '#34a853'
     },
     {
-      id: 'break-fix-support',
-      title: 'Break-Fix Support',
-      description: 'On-demand technical support',
-      icon: '🎧',
-      color: '#ff9800'
-    },
-    {
       id: 'demo-license',
       title: 'Demo License',
       description: 'Free trial license for evaluation',
       icon: '🧪',
       color: '#34a853'
+    },
+    {
+      id: 'break-fix-support',
+      title: 'Break-Fix Support',
+      description: 'On-demand technical support',
+      icon: '🎧',
+      color: '#ff9800'
     },
     {
       id: 'renewal-support',

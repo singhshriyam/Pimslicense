@@ -1,6 +1,7 @@
 "use client";
 import React from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { removeAuthToken } from '@/services/apiService';
 
 const Sidebar = () => {
   const router = useRouter();
@@ -18,12 +19,30 @@ const Sidebar = () => {
     router.push(path);
   };
 
+  const handleLogout = () => {
+    // Clear all auth data
+    removeAuthToken();
+    // Redirect to login
+    router.push('/auth/login');
+  };
+
   const isActive = (path: string) => {
     return pathname === path;
   };
 
   return (
-    <div className="bg-white min-vh-100 border-end">
+    <div
+      className="bg-white border-end d-flex flex-column shadow-sm"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        height: '100vh',
+        width: '220px',
+        zIndex: 1000,
+        overflowY: 'auto'
+      }}
+    >
       {/* Header Section - Logo + Title */}
       <div className="p-3 border-bottom">
         <div className="d-flex align-items-center">
@@ -44,7 +63,7 @@ const Sidebar = () => {
       </div>
 
       {/* Navigation Section */}
-      <div className="p-2">
+      <div className="p-2 flex-grow-1">
         <nav>
           <div className="nav flex-column">
             {navigationItems.map((item) => (
@@ -61,7 +80,18 @@ const Sidebar = () => {
                   border: 'none',
                   borderRadius: '6px',
                   padding: '8px 12px',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive(item.path)) {
+                    e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive(item.path)) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
                 }}
               >
                 <span className="me-2" style={{ fontSize: '16px' }}>{item.icon}</span>
@@ -70,6 +100,22 @@ const Sidebar = () => {
             ))}
           </div>
         </nav>
+      </div>
+
+      {/* Logout Section at Bottom */}
+      <div className="p-2 border-top">
+        <button
+          onClick={handleLogout}
+          className="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center"
+          style={{
+            fontSize: '14px',
+            padding: '8px 12px',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <span className="me-2">🚪</span>
+          Logout
+        </button>
       </div>
     </div>
   );

@@ -3,7 +3,6 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/Components/dashboard/DashboardLayout';
 import MyLicensesStatCards from '@/Components/my-licenses/MyLicensesStatCards';
-import FilterSearch from '@/Components/my-licenses/FilterSearch';
 import LicenseTable from '@/Components/my-licenses/LicenseTable';
 
 const MyLicenses = () => {
@@ -26,11 +25,6 @@ const MyLicenses = () => {
 
       {/* Stat Cards */}
       <MyLicensesStatCards />
-
-      {/* Filter & Search */}
-      <FilterSearch />
-
-      {/* License Table */}
       <LicenseTable />
     </DashboardLayout>
   );

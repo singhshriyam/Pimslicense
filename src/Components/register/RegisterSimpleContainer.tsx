@@ -6,18 +6,18 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import { Button, Form, FormGroup, Input, Label, Container, Row, Col, Card, CardBody } from "reactstrap";
-import { registerUser } from "@/services/apiService";
+import { registerUser, RegisterData, handleApiError } from "@/services/apiService";
 
 interface RegisterFormData {
-  company_name: string;
+  customer_name: string;
   company_address: string;
-  company_postcode: string;
+  company_post_code: string;
   tax_id: string;
-  contact_name: string;
-  contact_last_name: string;
-  contact_phone: string;
-  contact_designation: string;
-  contact_email: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  role: string;
+  email: string;
   otp: string;
   password: string;
   password_confirmation: string;
@@ -27,15 +27,15 @@ const RegisterSimpleContainer = () => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [registrationStatus, setRegistrationStatus] = useState<'form' | 'success'>('form');
   const [formData, setFormData] = useState<RegisterFormData>({
-    company_name: "",
+    customer_name: "",
     company_address: "",
-    company_postcode: "",
+    company_post_code: "",
     tax_id: "",
-    contact_name: "",
-    contact_last_name: "",
-    contact_phone: "",
-    contact_designation: "",
-    contact_email: "",
+    first_name: "",
+    last_name: "",
+    phone: "",
+    role: "",
+    email: "",
     otp: "",
     password: "",
     password_confirmation: ""
@@ -60,15 +60,15 @@ const RegisterSimpleContainer = () => {
     setRegistrationStatus('form');
     setCurrentStep(1);
     setFormData({
-      company_name: "",
+      customer_name: "",
       company_address: "",
-      company_postcode: "",
+      company_post_code: "",
       tax_id: "",
-      contact_name: "",
-      contact_last_name: "",
-      contact_phone: "",
-      contact_designation: "",
-      contact_email: "",
+      first_name: "",
+      last_name: "",
+      phone: "",
+      role: "",
+      email: "",
       otp: "",
       password: "",
       password_confirmation: ""
@@ -140,7 +140,7 @@ const RegisterSimpleContainer = () => {
   };
 
   const handlePostcodeChange = (value: string) => {
-    handleInputChange('company_postcode', value);
+    handleInputChange('company_post_code', value);
     if (typeof window !== 'undefined') {
       clearTimeout((window as any).postcodeTimeout);
       (window as any).postcodeTimeout = setTimeout(() => {
@@ -160,7 +160,7 @@ const RegisterSimpleContainer = () => {
 
   const validateField = (field: keyof RegisterFormData, value: string): string => {
     switch (field) {
-      case 'company_name':
+      case 'customer_name':
         if (!value.trim()) return "Company name is required";
         if (value.trim().length < 2) return "Company name must be at least 2 characters";
         return "";
@@ -168,29 +168,29 @@ const RegisterSimpleContainer = () => {
         if (!value.trim()) return "Company address is required";
         if (value.trim().length < 10) return "Please enter complete address";
         return "";
-      case 'company_postcode':
+      case 'company_post_code':
         if (!value.trim()) return "Postcode is required";
         if (!/^[A-Za-z]{1,2}\d[A-Za-z\d]?\s*\d[A-Za-z]{2}$/.test(value.trim())) return "Invalid UK postcode";
         return "";
       case 'tax_id':
-        // Tax ID is optional but if provided, should be valid
-        if (value && value.trim().length < 3) return "Tax ID must be at least 3 characters";
+        if (!value.trim()) return "Tax ID is required";
+        if (value.trim().length < 3) return "Tax ID must be at least 3 characters";
         return "";
-      case 'contact_name':
-      case 'contact_last_name':
-        if (!value.trim()) return `${field === 'contact_name' ? 'First' : 'Last'} name is required`;
+      case 'first_name':
+      case 'last_name':
+        if (!value.trim()) return `${field === 'first_name' ? 'First' : 'Last'} name is required`;
         if (value.trim().length < 2) return "Must be at least 2 characters";
         if (!/^[a-zA-Z\s]+$/.test(value.trim())) return "Only letters allowed";
         return "";
-      case 'contact_designation':
-        if (!value.trim()) return "Designation is required";
+      case 'role':
+        if (!value.trim()) return "Role is required";
         if (value.trim().length < 2) return "Must be at least 2 characters";
         return "";
-      case 'contact_email':
+      case 'email':
         if (!value.trim()) return "Email is required";
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Invalid email format";
         return "";
-      case 'contact_phone':
+      case 'phone':
         if (!value.trim()) return "Phone number is required";
         if (!/^[\+]?[\d\s\-\(\)]{10,}$/.test(value.trim())) return "Invalid phone number";
         return "";
@@ -233,8 +233,8 @@ const RegisterSimpleContainer = () => {
   };
 
   const sendOtp = async () => {
-    if (!formData.contact_email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact_email)) {
-      setErrors(prev => ({ ...prev, contact_email: "Please enter a valid email address" }));
+    if (!formData.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setErrors(prev => ({ ...prev, email: "Please enter a valid email address" }));
       return;
     }
 
@@ -244,9 +244,9 @@ const RegisterSimpleContainer = () => {
     try {
       // EmailJS configuration
       const templateParams = {
-        to_email: formData.contact_email,
+        to_email: formData.email,
         otp: otp,
-        company_name: formData.company_name || 'Your Company'
+        company_name: formData.customer_name || 'Your Company'
       };
 
       // Send email using EmailJS
@@ -260,16 +260,16 @@ const RegisterSimpleContainer = () => {
       // Store OTP in session storage
       sessionStorage.setItem('registration_otp', otp);
       sessionStorage.setItem('otp_timestamp', Date.now().toString());
-      sessionStorage.setItem('otp_email', formData.contact_email.toLowerCase().trim());
+      sessionStorage.setItem('otp_email', formData.email.toLowerCase().trim());
 
       setOtpSent(true);
       setLoading(false);
 
       // Show OTP in notification for development/testing
-      toast.success(`OTP sent to ${formData.contact_email} (Code: ${otp})`);
+      toast.success(`OTP sent to ${formData.email} (Code: ${otp})`);
 
       setErrors(prev => {
-        const { contact_email, ...rest } = prev;
+        const { email, ...rest } = prev;
         return rest;
       });
 
@@ -284,18 +284,13 @@ const RegisterSimpleContainer = () => {
     const newErrors: { [key: string]: string } = {};
     switch (step) {
       case 1:
-        ['company_name', 'company_postcode', 'company_address'].forEach(field => {
+        ['customer_name', 'company_post_code', 'company_address', 'tax_id'].forEach(field => {
           const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
           if (error) newErrors[field] = error;
         });
-        // Tax ID validation (optional field)
-        if (formData.tax_id) {
-          const taxError = validateField('tax_id', formData.tax_id);
-          if (taxError) newErrors.tax_id = taxError;
-        }
         break;
       case 2:
-        ['contact_name', 'contact_last_name', 'contact_designation', 'contact_email', 'contact_phone'].forEach(field => {
+        ['first_name', 'last_name', 'role', 'email', 'phone'].forEach(field => {
           const error = validateField(field as keyof RegisterFormData, formData[field as keyof RegisterFormData]);
           if (error) newErrors[field] = error;
         });
@@ -311,7 +306,7 @@ const RegisterSimpleContainer = () => {
             const otpEmail = sessionStorage.getItem('otp_email');
             if (!storedOtp || formData.otp !== storedOtp) {
               newErrors.otp = "Invalid OTP";
-            } else if (otpEmail !== formData.contact_email.toLowerCase().trim()) {
+            } else if (otpEmail !== formData.email.toLowerCase().trim()) {
               newErrors.otp = "OTP sent to different email";
             } else if (otpTimestamp && Date.now() - parseInt(otpTimestamp) > 10 * 60 * 1000) {
               newErrors.otp = "OTP expired. Request new one.";
@@ -362,51 +357,32 @@ const RegisterSimpleContainer = () => {
     try {
       console.log('🚀 Starting registration...');
 
-      // Map your form data to API format
-      const registrationData = {
-        customer_name: formData.company_name,
-        company_address: formData.company_address,
-        company_post_code: formData.company_postcode,
-        tax_id: formData.tax_id || "TBD", // Default value if not provided
-        first_name: formData.contact_name,
-        last_name: formData.contact_last_name,
-        phone: formData.contact_phone,
-        role: formData.contact_designation,
-        email: formData.contact_email.toLowerCase().trim(),
-        password: formData.password,
-        password_confirmation: formData.password_confirmation
-      };
+      // Call the API using your existing service - no mapping needed!
+      const response = await registerUser(formData);
 
-      console.log('📤 Sending registration data:', registrationData);
+      console.log('✅ Registration response:', response);
 
-      // Call the real API
-      const response = await registerUser(registrationData);
+      // Check if registration was successful
+      if (response.success !== false) {
+        // Clean up temporary data
+        ['registration_otp', 'otp_timestamp', 'otp_email'].forEach(key =>
+          sessionStorage.removeItem(key)
+        );
 
-      console.log('✅ Registration successful:', response);
-
-      // Clean up temporary data
-      ['registration_otp', 'otp_timestamp', 'otp_email'].forEach(key =>
-        sessionStorage.removeItem(key)
-      );
-
-      setRegistrationStatus('success');
-      toast.success("Account created successfully! You can now sign in.");
+        setRegistrationStatus('success');
+        toast.success("Account created successfully! You can now sign in.");
+      } else {
+        // Handle API error response
+        const errorMessage = response.message || "Registration failed. Please try again.";
+        toast.error(errorMessage);
+        setErrors({ general: errorMessage });
+      }
 
     } catch (error: any) {
       console.error('❌ Registration error:', error);
 
-      // Handle different types of errors
-      let errorMessage = "Registration failed. Please try again.";
-
-      if (error.message.includes('422')) {
-        errorMessage = "Please check your information and try again.";
-      } else if (error.message.includes('email') && error.message.includes('taken')) {
-        errorMessage = "This email address is already registered.";
-      } else if (error.message.includes('validation')) {
-        errorMessage = "Please check all required fields.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      // Use your existing error handler
+      const errorMessage = handleApiError(error);
 
       toast.error(errorMessage);
       setErrors({ general: errorMessage });
@@ -452,7 +428,7 @@ const RegisterSimpleContainer = () => {
                     <div className="text-start">
                       <div className="row mb-2">
                         <div className="col-4"><strong className="text-dark">Company:</strong></div>
-                        <div className="col-8 text-dark">{formData.company_name}</div>
+                        <div className="col-8 text-dark">{formData.customer_name}</div>
                       </div>
                       <div className="row mb-2">
                         <div className="col-4"><strong className="text-dark">Address:</strong></div>
@@ -460,31 +436,29 @@ const RegisterSimpleContainer = () => {
                       </div>
                       <div className="row mb-2">
                         <div className="col-4"><strong className="text-dark">Postcode:</strong></div>
-                        <div className="col-8 text-dark">{formData.company_postcode}</div>
+                        <div className="col-8 text-dark">{formData.company_post_code}</div>
                       </div>
-                      {formData.tax_id && (
-                        <div className="row mb-2">
-                          <div className="col-4"><strong className="text-dark">Tax ID:</strong></div>
-                          <div className="col-8 text-dark">{formData.tax_id}</div>
-                        </div>
-                      )}
+                      <div className="row mb-2">
+                        <div className="col-4"><strong className="text-dark">Tax ID:</strong></div>
+                        <div className="col-8 text-dark">{formData.tax_id}</div>
+                      </div>
                       <hr />
                       <h6 className="text-dark mb-2">Primary Contact:</h6>
                       <div className="row mb-2">
                         <div className="col-4"><strong className="text-dark">Name:</strong></div>
-                        <div className="col-8 text-dark">{formData.contact_name} {formData.contact_last_name}</div>
+                        <div className="col-8 text-dark">{formData.first_name} {formData.last_name}</div>
                       </div>
                       <div className="row mb-2">
-                        <div className="col-4"><strong className="text-dark">Designation:</strong></div>
-                        <div className="col-8 text-dark">{formData.contact_designation}</div>
+                        <div className="col-4"><strong className="text-dark">Role:</strong></div>
+                        <div className="col-8 text-dark">{formData.role}</div>
                       </div>
                       <div className="row mb-2">
                         <div className="col-4"><strong className="text-dark">Email:</strong></div>
-                        <div className="col-8 text-dark">{formData.contact_email}</div>
+                        <div className="col-8 text-dark">{formData.email}</div>
                       </div>
                       <div className="row">
                         <div className="col-4"><strong className="text-dark">Phone:</strong></div>
-                        <div className="col-8 text-dark">{formData.contact_phone}</div>
+                        <div className="col-8 text-dark">{formData.phone}</div>
                       </div>
                     </div>
                   </CardBody>
@@ -560,39 +534,39 @@ const RegisterSimpleContainer = () => {
                         <Label className="col-form-label text-dark">Company Name *</Label>
                         <Input
                           type="text"
-                          value={formData.company_name}
-                          onChange={(e) => handleInputChange('company_name', e.target.value)}
+                          value={formData.customer_name}
+                          onChange={(e) => handleInputChange('customer_name', e.target.value)}
                           placeholder="Enter your company name"
-                          invalid={!!errors.company_name}
+                          invalid={!!errors.customer_name}
                           autoComplete="organization"
                         />
-                        {errors.company_name && <div className="invalid-feedback d-block">{errors.company_name}</div>}
+                        {errors.customer_name && <div className="invalid-feedback d-block">{errors.customer_name}</div>}
                       </FormGroup>
                       <FormGroup>
-                        <Label className="col-form-label text-dark">Tax ID (Optional)</Label>
+                        <Label className="col-form-label text-dark">Tax ID *</Label>
                         <Input
                           type="text"
                           value={formData.tax_id}
                           onChange={(e) => handleInputChange('tax_id', e.target.value)}
-                          placeholder="Enter tax ID or leave blank"
+                          placeholder="Enter tax ID"
                           invalid={!!errors.tax_id}
                           autoComplete="off"
                         />
                         {errors.tax_id && <div className="invalid-feedback d-block">{errors.tax_id}</div>}
-                        <small className="text-muted">Company tax identification number (optional)</small>
+                        <small className="text-muted">Company tax identification number</small>
                       </FormGroup>
                       <FormGroup>
                         <Label className="col-form-label text-dark">Company Post Code *</Label>
                         <Input
                           type="text"
-                          value={formData.company_postcode}
+                          value={formData.company_post_code}
                           onChange={(e) => handlePostcodeChange(e.target.value)}
                           placeholder="Enter company post code (e.g., SW1A 1AA)"
-                          invalid={!!errors.company_postcode}
+                          invalid={!!errors.company_post_code}
                           maxLength={8}
                           autoComplete="postal-code"
                         />
-                        {errors.company_postcode && <div className="invalid-feedback d-block">{errors.company_postcode}</div>}
+                        {errors.company_post_code && <div className="invalid-feedback d-block">{errors.company_post_code}</div>}
                         {addressLoading && <small className="text-info">Looking up area information...</small>}
                       </FormGroup>
                       <FormGroup>
@@ -630,13 +604,13 @@ const RegisterSimpleContainer = () => {
                             <Label className="col-form-label text-dark">First Name *</Label>
                             <Input
                               type="text"
-                              value={formData.contact_name}
-                              onChange={(e) => handleInputChange('contact_name', e.target.value)}
+                              value={formData.first_name}
+                              onChange={(e) => handleInputChange('first_name', e.target.value)}
                               placeholder="Enter first name"
-                              invalid={!!errors.contact_name}
+                              invalid={!!errors.first_name}
                               autoComplete="given-name"
                             />
-                            {errors.contact_name && <div className="invalid-feedback d-block">{errors.contact_name}</div>}
+                            {errors.first_name && <div className="invalid-feedback d-block">{errors.first_name}</div>}
                           </FormGroup>
                         </Col>
                         <Col md={6}>
@@ -644,39 +618,39 @@ const RegisterSimpleContainer = () => {
                             <Label className="col-form-label text-dark">Last Name *</Label>
                             <Input
                               type="text"
-                              value={formData.contact_last_name}
-                              onChange={(e) => handleInputChange('contact_last_name', e.target.value)}
+                              value={formData.last_name}
+                              onChange={(e) => handleInputChange('last_name', e.target.value)}
                               placeholder="Enter last name"
-                              invalid={!!errors.contact_last_name}
+                              invalid={!!errors.last_name}
                               autoComplete="family-name"
                             />
-                            {errors.contact_last_name && <div className="invalid-feedback d-block">{errors.contact_last_name}</div>}
+                            {errors.last_name && <div className="invalid-feedback d-block">{errors.last_name}</div>}
                           </FormGroup>
                         </Col>
                       </Row>
                       <FormGroup>
-                        <Label className="col-form-label text-dark">Designation *</Label>
+                        <Label className="col-form-label text-dark">Role *</Label>
                         <Input
                           type="text"
-                          value={formData.contact_designation}
-                          onChange={(e) => handleInputChange('contact_designation', e.target.value)}
-                          placeholder="Enter job title/designation (e.g., Managing Director, CEO)"
-                          invalid={!!errors.contact_designation}
+                          value={formData.role}
+                          onChange={(e) => handleInputChange('role', e.target.value)}
+                          placeholder="Enter job title/role (e.g., Managing Director, CEO)"
+                          invalid={!!errors.role}
                           autoComplete="organization-title"
                         />
-                        {errors.contact_designation && <div className="invalid-feedback d-block">{errors.contact_designation}</div>}
+                        {errors.role && <div className="invalid-feedback d-block">{errors.role}</div>}
                       </FormGroup>
                       <FormGroup>
                         <Label className="col-form-label text-dark">Phone Number *</Label>
                         <Input
                           type="tel"
-                          value={formData.contact_phone}
-                          onChange={(e) => handleInputChange('contact_phone', e.target.value)}
+                          value={formData.phone}
+                          onChange={(e) => handleInputChange('phone', e.target.value)}
                           placeholder="Enter phone number"
-                          invalid={!!errors.contact_phone}
+                          invalid={!!errors.phone}
                           autoComplete="tel"
                         />
-                        {errors.contact_phone && <div className="invalid-feedback d-block">{errors.contact_phone}</div>}
+                        {errors.phone && <div className="invalid-feedback d-block">{errors.phone}</div>}
                       </FormGroup>
                       <FormGroup>
                         <Label className="col-form-label text-dark">{EmailAddress} *</Label>
@@ -684,10 +658,10 @@ const RegisterSimpleContainer = () => {
                           <div className="position-relative flex-grow-1 me-2">
                             <Input
                               type="email"
-                              value={formData.contact_email}
-                              onChange={(e) => handleInputChange('contact_email', e.target.value)}
+                              value={formData.email}
+                              onChange={(e) => handleInputChange('email', e.target.value)}
                               placeholder="Enter email address"
-                              invalid={!!errors.contact_email}
+                              invalid={!!errors.email}
                               autoComplete="email"
                             />
                           </div>
@@ -695,13 +669,13 @@ const RegisterSimpleContainer = () => {
                             type="button"
                             color="success"
                             onClick={sendOtp}
-                            disabled={!formData.contact_email.trim() || loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact_email) || !!errors.contact_email}
+                            disabled={!formData.email.trim() || loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) || !!errors.email}
                             style={{ minWidth: '100px' }}
                           >
                             {loading ? "Sending..." : otpSent ? "Resend" : "Send OTP"}
                           </Button>
                         </div>
-                        {errors.contact_email && <div className="invalid-feedback d-block">{errors.contact_email}</div>}
+                        {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
                       </FormGroup>
                       {otpSent && (
                         <FormGroup>
@@ -715,7 +689,7 @@ const RegisterSimpleContainer = () => {
                             invalid={!!errors.otp}
                           />
                           {errors.otp && <div className="invalid-feedback d-block">{errors.otp}</div>}
-                          <small className="text-muted">OTP sent to {formData.contact_email} (valid for 10 minutes)</small>
+                          <small className="text-muted">OTP sent to {formData.email} (valid for 10 minutes)</small>
                         </FormGroup>
                       )}
                       <div className="d-flex gap-2 mt-3">
@@ -793,40 +767,38 @@ const RegisterSimpleContainer = () => {
                           <strong className="text-dark">Company Details:</strong>
                           <div className="row mb-1 mt-2">
                             <div className="col-4 text-muted">Name:</div>
-                            <div className="col-8 text-dark">{formData.company_name}</div>
+                            <div className="col-8 text-dark">{formData.customer_name}</div>
                           </div>
                           <div className="row mb-1">
                             <div className="col-4 text-muted">Postcode:</div>
-                            <div className="col-8 text-dark">{formData.company_postcode}</div>
+                            <div className="col-8 text-dark">{formData.company_post_code}</div>
                           </div>
                           <div className="row mb-1">
                             <div className="col-4 text-muted">Address:</div>
                             <div className="col-8 text-dark">{formData.company_address}</div>
                           </div>
-                          {formData.tax_id && (
-                            <div className="row mb-1">
-                              <div className="col-4 text-muted">Tax ID:</div>
-                              <div className="col-8 text-dark">{formData.tax_id}</div>
-                            </div>
-                          )}
+                          <div className="row mb-1">
+                            <div className="col-4 text-muted">Tax ID:</div>
+                            <div className="col-8 text-dark">{formData.tax_id}</div>
+                          </div>
                         </div>
                         <div>
                           <strong className="text-dark">Primary Contact:</strong>
                           <div className="row mb-1 mt-2">
                             <div className="col-4 text-muted">Name:</div>
-                            <div className="col-8 text-dark">{formData.contact_name} {formData.contact_last_name}</div>
+                            <div className="col-8 text-dark">{formData.first_name} {formData.last_name}</div>
                           </div>
                           <div className="row mb-1">
-                            <div className="col-4 text-muted">Designation:</div>
-                            <div className="col-8 text-dark">{formData.contact_designation}</div>
+                            <div className="col-4 text-muted">Role:</div>
+                            <div className="col-8 text-dark">{formData.role}</div>
                           </div>
                           <div className="row mb-1">
                             <div className="col-4 text-muted">Email:</div>
-                            <div className="col-8 text-dark">{formData.contact_email} ✓</div>
+                            <div className="col-8 text-dark">{formData.email} ✓</div>
                           </div>
                           <div className="row">
                             <div className="col-4 text-muted">Phone:</div>
-                            <div className="col-8 text-dark">{formData.contact_phone}</div>
+                            <div className="col-8 text-dark">{formData.phone}</div>
                           </div>
                         </div>
                       </div>

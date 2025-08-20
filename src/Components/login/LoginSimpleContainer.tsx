@@ -5,7 +5,7 @@ import { Button, Form, FormGroup, Input, Label, Alert } from "reactstrap";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "react-toastify";
-import { loginUser, saveAuthToken } from "@/services/apiService";
+import { loginUser, saveAuthToken, saveUserData } from "@/services/apiService";
 
 const ApexLogo = "/assets/images/logo/apex-logo.png";
 
@@ -43,32 +43,32 @@ const LoginSimpleContainer = () => {
     try {
       console.log('🔐 Attempting login...');
 
-      // Call the real API
+      // Call the API
       const response = await loginUser({
         email: email.toLowerCase().trim(),
         password: password
       });
 
-      console.log('✅ Login successful:', response);
+      console.log('✅ Login API response:', response);
 
-      // Handle successful response
-      if (response.token) {
+      // Handle successful response - check for token in response.data
+      if (response.data?.token) {
+        console.log('🎉 Login successful!');
+        console.log('🔍 Login: Full response:', response);
+        console.log('🔍 Login: Response.data:', response.data);
+
         // Save the authentication token
-        saveAuthToken(response.token);
+        saveAuthToken(response.data.token);
+        console.log('🔑 Login: Token saved');
 
-        // Save user data to localStorage for easy access
-        if (response.user) {
-          localStorage.setItem('userData', JSON.stringify(response.user));
-          localStorage.setItem('userFirstName', response.user.first_name || '');
-          localStorage.setItem('userLastName', response.user.last_name || '');
-          localStorage.setItem('userEmail', response.user.email || '');
-          localStorage.setItem('userCompany', response.user.customer_name || '');
-          localStorage.setItem('userRole', response.user.role || '');
-          localStorage.setItem('userPhone', response.user.phone || '');
-        }
+        // Save the complete backend data exactly as received
+        console.log('💾 Login: About to save user data:', response.data);
+        saveUserData(response.data);
+        console.log('👤 Login: User data saved');
 
-        // Show success message
-        toast.success(`Welcome back, ${response.user?.first_name || 'User'}!`);
+        // Show success message using data from backend
+        const userName = response.data.contact_person?.first_name || 'User';
+        toast.success(`Welcome back, ${userName}!`);
 
         // Redirect to dashboard
         setTimeout(() => {
@@ -76,6 +76,7 @@ const LoginSimpleContainer = () => {
         }, 1000);
 
       } else {
+        console.log('❌ No token received:', response);
         setError("Login failed: No authentication token received");
       }
 
@@ -83,7 +84,7 @@ const LoginSimpleContainer = () => {
       console.error("❌ Login error:", error);
 
       // Handle different types of errors
-      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      if (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Unauthorised')) {
         setError("Invalid email or password");
       } else if (error.message.includes('422')) {
         setError("Please check your email format and try again");

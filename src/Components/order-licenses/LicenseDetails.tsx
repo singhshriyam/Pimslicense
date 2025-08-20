@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { getUserData } from '@/services/apiService';
 
 interface LicenseDetailsProps {
   onNext: () => void;
@@ -9,9 +10,54 @@ interface LicenseDetailsProps {
 }
 
 const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDetailsProps) => {
-  const [customerName, setCustomerName] = useState(orderData.customerName || 'Acme Corporation');
+  const [customerName, setCustomerName] = useState(orderData.customerName || '');
   const [expirationDate, setExpirationDate] = useState(orderData.expirationDate || '');
   const [notes, setNotes] = useState(orderData.notes || '');
+  const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+
+  // Load customer name from user data on component mount
+  useEffect(() => {
+    const loadCustomerName = () => {
+      try {
+        setIsLoadingUserData(true);
+        const backendData = getUserData();
+
+        console.log('🔍 Backend data from localStorage:', backendData); // Debug log
+
+        if (backendData) {
+          // Use the same logic as ProfileSection to get company name
+          let customerNameFromData = '';
+
+          const customer = backendData.customer;
+
+          // Follow the same pattern as ProfileSection
+          if (backendData.name) {
+            customerNameFromData = backendData.name;
+            console.log('✅ Found backendData.name:', customerNameFromData);
+          } else if (customer?.customer_name) {
+            customerNameFromData = customer.customer_name;
+            console.log('✅ Found customer.customer_name:', customerNameFromData);
+          } else {
+            console.log('❌ No company name found in backend data');
+          }
+
+          // Update customer name if we found one
+          if (customerNameFromData) {
+            console.log('📝 Setting customer name to:', customerNameFromData);
+            setCustomerName(customerNameFromData);
+          }
+        } else {
+          console.log('❌ No backend data found');
+        }
+      } catch (error) {
+        console.error('❌ Error loading customer name from backend data:', error);
+      } finally {
+        setIsLoadingUserData(false);
+      }
+    };
+
+    loadCustomerName();
+  }, []);
 
   // Set default expiration date (1 year from now)
   useEffect(() => {
@@ -43,7 +89,7 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
       {/* Header */}
       <div className="text-center mb-3">
         <h2 className="fw-bold mb-2" style={{ fontSize: '1.2rem', color: '#1a1a1a' }}>License Details</h2>
-        <p className="text-muted" style={{ fontSize: '0.6rem' }}>
+        <p className="text-muted" style={{ fontSize: '0.9rem' }}>
           Final configuration and metadata
         </p>
       </div>
@@ -57,20 +103,37 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
             <label className="form-label fw-bold mb-2" style={{ fontSize: '1rem', color: '#1a1a1a' }}>
               Customer Name *
             </label>
-            <input
-              type="text"
-              className="form-control"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Enter customer name"
-              style={{
-                borderRadius: '8px',
-                fontSize: '1rem',
-                padding: '6px 16px',
-                border: '1px solid #e0e0e0',
-                backgroundColor: '#f8f9fa'
-              }}
-            />
+            <div className="position-relative">
+              <input
+                type="text"
+                className="form-control"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder={isLoadingUserData ? "Loading customer name..." : "Enter customer name"}
+                disabled={isLoadingUserData}
+                style={{
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  padding: '6px 16px',
+                  border: '1px solid #e0e0e0',
+                  backgroundColor: isLoadingUserData ? '#f0f0f0' : '#f8f9fa',
+                  opacity: isLoadingUserData ? 0.7 : 1
+                }}
+              />
+              {isLoadingUserData && (
+                <div className="position-absolute top-50 end-0 translate-middle-y pe-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <small className="text-muted">
+              {customerName && !isLoadingUserData ?
+                "Customer name loaded from your profile" :
+                "This will be pre-filled from your account information"
+              }
+            </small>
           </div>
 
           {/* Expiration Date */}
@@ -93,6 +156,9 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
                 }}
               />
             </div>
+            <small className="text-muted">
+              License will expire on this date (default: 1 year from today)
+            </small>
           </div>
 
           {/* Notes (Optional) */}
@@ -102,7 +168,7 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
             </label>
             <textarea
               className="form-control"
-              rows={2}
+              rows={1}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add any additional notes or requirements..."
@@ -115,6 +181,9 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
                 resize: 'vertical'
               }}
             />
+            <small className="text-muted">
+              Optional: Add any special requirements or notes for this license
+            </small>
           </div>
         </div>
       </div>
@@ -137,7 +206,7 @@ const LicenseDetails = ({ onNext, onBack, onUpdateData, orderData }: LicenseDeta
         <button
           className="btn btn-primary px-5 py-1"
           onClick={handleContinue}
-          disabled={!customerName.trim() || !expirationDate}
+          disabled={!customerName.trim() || !expirationDate || isLoadingUserData}
           style={{
             fontSize: '1rem',
             fontWeight: '500',

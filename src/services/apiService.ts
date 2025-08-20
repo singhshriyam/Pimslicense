@@ -1,5 +1,3 @@
-// /src/services/apiService.ts
-
 // Get API base URL from environment
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://licence.apextechno.co.uk/api';
 
@@ -27,17 +25,31 @@ export interface ApiResponse {
   success?: boolean;
   message?: string;
   token?: string;
-  user?: {
-    id: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-    customer_name?: string;
-    role?: string;
-    phone?: string;
-  };
-  errors?: any;
   data?: any;
+  errors?: any;
+}
+
+export interface CreateLicenseData {
+  order_id: number;
+  edition_id: number;
+  license_type_id: number;
+  customer_id: number;
+  named_user_count: number;
+  concurrent_user_count: number;
+  expiration_date: string;
+  billing_cycle: string;
+  notes?: string;
+}
+
+// Add this function to your existing apiService.ts
+export async function createLicense(licenseData: CreateLicenseData): Promise<ApiResponse> {
+  const result = await makeAPICall('/licenses', licenseData, 'POST');
+
+  if (result.success) {
+    console.log('✅ License created successfully:', result);
+  }
+
+  return result;
 }
 
 // Helper function to make API calls
@@ -59,9 +71,6 @@ async function makeAPICall(endpoint: string, data: any, method: string = 'POST')
   };
 
   try {
-    console.log(`🚀 Making API call to: ${API_BASE_URL}${endpoint}`);
-    console.log('📤 Sending data:', data);
-
     const response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
 
     let result: any;
@@ -145,6 +154,21 @@ export async function getUserProfile(): Promise<ApiResponse> {
   return await makeAPICall('/user', {}, 'GET');
 }
 
+// Get editions
+export async function getEditions(): Promise<ApiResponse> {
+  return await makeAPICall('/editions', {}, 'GET');
+}
+
+// Get licenses
+export async function getLicenses(): Promise<ApiResponse> {
+  return await makeAPICall('/licenses', {}, 'GET');
+}
+
+// Get license products - NEW ADDITION
+export async function getLicenseProducts(): Promise<ApiResponse> {
+  return await makeAPICall('/license-products', {}, 'GET');
+}
+
 // Token management functions
 export function saveAuthToken(token: string) {
   if (typeof window !== 'undefined') {
@@ -164,12 +188,6 @@ export function removeAuthToken() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userData');
-    localStorage.removeItem('userFirstName');
-    localStorage.removeItem('userLastName');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userCompany');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userPhone');
     console.log('🗑️ Auth token and user data removed');
   }
 }
@@ -179,33 +197,48 @@ export function isAuthenticated(): boolean {
   return !!token;
 }
 
-// User data management
-export function saveUserData(user: any) {
+// User data management - Store exactly what backend sends
+export function saveUserData(backendData: any) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('userData', JSON.stringify(user));
-    localStorage.setItem('userFirstName', user.first_name || '');
-    localStorage.setItem('userLastName', user.last_name || '');
-    localStorage.setItem('userEmail', user.email || '');
-    localStorage.setItem('userCompany', user.customer_name || '');
-    localStorage.setItem('userRole', user.role || '');
-    localStorage.setItem('userPhone', user.phone || '');
-    console.log('👤 User data saved');
+    try {
+      // Check if we have valid data to save
+      if (!backendData || backendData === undefined || backendData === null) {
+        console.error('❌ Cannot save undefined or null user data');
+        return;
+      }
+
+      // Save the complete backend response exactly as received
+      localStorage.setItem('userData', JSON.stringify(backendData));
+      console.log('👤 User data saved successfully:', backendData);
+    } catch (error) {
+      console.error('❌ Error saving user data:', error);
+    }
   }
 }
 
 export function getUserData() {
   if (typeof window !== 'undefined') {
-    const userData = localStorage.getItem('userData');
-    return userData ? JSON.parse(userData) : null;
+    try {
+      const userData = localStorage.getItem('userData');
+
+      // Check if userData exists and is not null/undefined
+      if (!userData || userData === 'undefined' || userData === 'null') {
+        console.log('⚠️ No valid user data found in localStorage');
+        return null;
+      }
+
+      return JSON.parse(userData);
+    } catch (error) {
+      console.error('❌ Error parsing user data:', error);
+      // Clean up corrupted data
+      localStorage.removeItem('userData');
+      return null;
+    }
   }
   return null;
 }
 
-// License-related API calls (for future use)
-export async function getLicenses(): Promise<ApiResponse> {
-  return await makeAPICall('/licenses', {}, 'GET');
-}
-
+// Create license order
 export async function createLicenseOrder(orderData: any): Promise<ApiResponse> {
   return await makeAPICall('/orders', orderData);
 }
